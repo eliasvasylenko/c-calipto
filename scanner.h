@@ -1,17 +1,23 @@
-struct scanner_api {
-  long (*input_position)(void);
+typedef enum scanner_type {
+        FILE_SCANNER,
+        STRING_SCANNER,
+        STD_IO_SCANNER
+}
 
-  long (*buffer_position)(void);
+typedef struct scanner_handle {
+        scanner_type type;
+} scanner_handle;
 
-  long (*buffer_size)(void);
+int64_t input_position(scanner_handle* handle);
 
-  long (*advance_input_while)(bool (*condition)(character));
+int64_t buffer_position(scanner_handle* handle);
 
-  bool (*advance_input_if)(bool (*condition)(character));
+int64_t advance_input_while(scanner_handle* handle, bool (*condition)(char32_t));
 
-  int (*take_buffer_to)(character* string, int length, long position);
+bool advance_input_if(scanner_handle* handle, bool (*condition)(char32_t));
 
-  void (*discard_buffer_to)(long position);
+int64_t take_buffer_to(scanner_handle* handle, int64_t position, int64_t buffer_size, char32_t* string);
 
-  void (*discard_buffer)(void);
-};
+void discard_buffer_to(scanner_handle* handle, int64_t position);
+
+char32_t* utf8to32(char* text);

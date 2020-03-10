@@ -3,23 +3,17 @@ typedef enum sexpr_type {
         SYMBOL
 } sexpr_type;
 
-typedef struct cons cons;
-typedef void symbol;
-typedef struct sexpr sexpr;
-
-struct sexpr {
-        int ref_count;
+typedef struct sexpr {
         sexpr_type type;
-        union {
-                cons *cons_value;
-                symbol *symbol_value;
-        } value;
-};
+        _Atomic(int32_t) ref_count;
+} sexpr;
 
-struct cons {
+typedef struct cons {
         sexpr *car, *cdr;
-};
+} cons;
 
+sexpr *sexpr_symbol_len(char32_t *name, int32_t length);
+sexpr *sexpr_symbol(char32_t *name);
 sexpr *sexpr_cons(sexpr *car, sexpr *cdr);
 sexpr *sexpr_car(sexpr *expr);
 sexpr *sexpr_cdr(sexpr *expr);

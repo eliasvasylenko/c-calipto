@@ -1,28 +1,32 @@
+#include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-
 #include <uchar.h>
-typedef char32_t character;
 
 #include <scanner.h>
 #include <reader.h>
 #include <sexpr.h>
 
-#include <readline/readline.h>
-#include <readline/history.h>
-
 int main(int argc, char** argv) {
-        puts("Calipto Language Version 0");
-        puts("C-Calipto Interpreter Version 0.0.1");
-        puts("Call the `exit` function to exit\n");
+        sexpr* args = sexpr_symbol(U"system:nil");
+        for (int i = 0; i < argc; i++) {
+                sexpr* rest = args;
 
-        while (1) {
-                char* input = readline("calipto> ");
-                add_history(input);
-                printf("Did you say %s?\n", input);
-                free(input);
+                char32_t* arg32 = utf8to32(argv[i]);
+                sexpr* arg = sexpr_symbol(arg32);
+                free(arg32);
+
+                args = sexpr_cons(arg, rest);
+
+                sexpr_free(arg);
+                sexpr_free(rest);
         }
 
+        /*
+         * TODO read and eval bootstrap file
+         */
+
+        sexpr_free(args);
         return 0;
 }

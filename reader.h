@@ -1,7 +1,7 @@
 struct reader_api {
-  long (*cursor_position)(int inputDepth);
+  int64_t (*cursor_position)(int32_t inputDepth);
 
-  int (*cursor_depth)(void);
+  int32_t (*cursor_depth)(void);
 
   void* (*read)(void);
 
@@ -9,5 +9,5 @@ struct reader_api {
 
   bool (*read_step_in)(void);
 
-  int (*read_step_out)(void);
+  int32_t (*read_step_out)(void);
 };
