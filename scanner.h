@@ -1,7 +1,7 @@
 typedef enum scanner_type {
-        FILE_SCANNER,
-        STRING_SCANNER,
-        STD_IO_SCANNER
+	FILE_SCANNER,
+	STRING_SCANNER,
+	STD_IO_SCANNER
 } scanner_type;
 
 typedef struct scanner_handle {
@@ -21,3 +21,5 @@ int64_t take_buffer_to(scanner_handle* handle, int64_t position, int64_t buffer_
 void discard_buffer_to(scanner_handle* handle, int64_t position);
 
 char32_t* utf8to32(char* text);
+
+char32_t* utf8to32cs(char* text, int size);
