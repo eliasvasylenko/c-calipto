@@ -2,7 +2,7 @@ typedef enum scanner_type {
         FILE_SCANNER,
         STRING_SCANNER,
         STD_IO_SCANNER
-}
+} scanner_type;
 
 typedef struct scanner_handle {
         scanner_type type;
