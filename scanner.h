@@ -1,25 +1,36 @@
 typedef enum scanner_type {
 	FILE_SCANNER,
 	STRING_SCANNER,
-	STD_IO_SCANNER
+	STD_IO_SCANNER,
+	SEXPR_SCANNER
 } scanner_type;
 
 typedef struct scanner_handle {
         scanner_type type;
 } scanner_handle;
 
-int64_t input_position(scanner_handle* handle);
+scanner_handle* scan_file(FILE* f);
 
-int64_t buffer_position(scanner_handle* handle);
+scanner_handle* scan_string(char* s);
 
-int64_t advance_input_while(scanner_handle* handle, bool (*condition)(char32_t));
+scanner_handle* scan_stdin();
 
-bool advance_input_if(scanner_handle* handle, bool (*condition)(char32_t));
+scanner_handle* scan_sexpr(sexpr* e);
 
-int64_t take_buffer_to(scanner_handle* handle, int64_t position, int64_t buffer_size, char32_t* string);
+void close_scanner(scanner_handle* h);
 
-void discard_buffer_to(scanner_handle* handle, int64_t position);
+int64_t input_position(scanner_handle* h);
 
-char32_t* utf8to32(char* text);
+int64_t buffer_position(scanner_handle* h);
 
-char32_t* utf8to32cs(char* text, int size);
+int64_t advance_input_while(scanner_handle* h, bool (*condition)(char32_t));
+
+bool advance_input_if(scanner_handle* h, bool (*condition)(char32_t));
+
+int64_t take_buffer_to(scanner_handle* h, int64_t position, char32_t* s);
+
+int64_t take_buffer(scanner_handle* h, char32_t* s);
+
+void discard_buffer_to(scanner_handle* h, int64_t position);
+
+void discard_buffer(scanner_handle* h);
