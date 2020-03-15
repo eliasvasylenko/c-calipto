@@ -15,7 +15,7 @@ bool always(char32_t c) {
 int main(int argc, char** argv) {
 	sexpr* args = sexpr_symbol(U"system:nil");
 	for (int i = 0; i < argc; i++) {
-		scanner_handle* h = scan_string(argv[i]);
+		scanner_handle* h = open_string_scanner(argv[i]);
 		advance_input_while(h, always);
 		size_t size = sizeof(char32_t) * (input_position(h) - buffer_position(h) + 1);
 		char32_t* arg32 = malloc(size);
@@ -33,11 +33,13 @@ int main(int argc, char** argv) {
 	}
 
 	FILE* bsf = fopen("./bootstrap.cal", "r");
-	scanner_handle* bs = scan_file(bsf);
+	scanner_handle* bss = open_file_scanner(bsf);
+	reader_handle* bsr = open_reader(bss);
 
-	// TODO open reader, read data
+	;
 
-	close_scanner(bs);
+	close_reader(bsr);
+	close_scanner(bss);
 	fclose(bsf);
 
 	// TODO evaluate bootstrap file

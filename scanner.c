@@ -14,7 +14,7 @@ scanner_handle* scanner_init(scanner_type type, int32_t payload_size) {
 	return h;
 }
 
-scanner_handle* scan_file(FILE* f) {
+scanner_handle* open_file_scanner(FILE* f) {
 	scanner_handle* h = scanner_init(FILE_SCANNER, sizeof(FILE*));
 	FILE** p = (FILE**)(h + 1);
 	*p = f;
@@ -29,7 +29,7 @@ typedef struct string_handle {
 	int64_t buffer_pos;
 } string_handle;
 
-scanner_handle* scan_string(char* s) {
+scanner_handle* open_string_scanner(char* s) {
 	scanner_handle* h = scanner_init(STRING_SCANNER, sizeof(string_handle));
 	string_handle* sh = (string_handle*)(h + 1);
 	sh->input = s;

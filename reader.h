@@ -1,13 +1,25 @@
-typedef struct reader_api {
-	int64_t (*cursor_position)(int32_t inputDepth);
+typedef struct cursor_stack {
+	int64_t position;
+	struct cursor_stack* stack;
+} cursor_stack;
 
-	int32_t (*cursor_depth)(void);
+typedef struct reader_handle {
+	cursor_stack cursor;
+	scanner_handle* scanner;
+} reader_handle;
 
-	void* (*read)(void);
+reader_handle* open_reader(scanner_handle* h);
 
-	void* (*read_symbol)(void);
+void close_reader(reader_handle* h);
 
-	bool (*read_step_in)(void);
+int64_t cursor_position(int32_t inputDepth);
 
-	int32_t (*read_step_out)(void);
-} reader_api;
+int32_t cursor_depth(void);
+
+void* read(void);
+
+void* read_symbol(void);
+
+bool read_step_in(void);
+
+int32_t read_step_out(void);

@@ -9,13 +9,13 @@ typedef struct scanner_handle {
         scanner_type type;
 } scanner_handle;
 
-scanner_handle* scan_file(FILE* f);
+scanner_handle* open_file_scanner(FILE* f);
 
-scanner_handle* scan_string(char* s);
+scanner_handle* open_string_scanner(char* s);
 
-scanner_handle* scan_stdin();
+scanner_handle* open_stdin_scanner();
 
-scanner_handle* scan_sexpr(sexpr* e);
+scanner_handle* open_sexpr_scanner(sexpr* e);
 
 void close_scanner(scanner_handle* h);
 
