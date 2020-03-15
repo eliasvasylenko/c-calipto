@@ -13,8 +13,8 @@ typedef struct cons {
 	sexpr* cdr;
 } cons;
 
-sexpr *sexpr_symbol_len(char32_t* name, int32_t length);
-sexpr *sexpr_symbol(char32_t* name);
+sexpr *sexpr_symbol(char32_t* nspace, char32_t* name);
+sexpr *sexpr_empty_symbol(int32_t nslen, int32_t nlen);
 sexpr *sexpr_cons(sexpr* car, sexpr* cdr);
 sexpr *sexpr_car(sexpr* expr);
 sexpr *sexpr_cdr(sexpr* expr);

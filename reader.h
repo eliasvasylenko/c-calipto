@@ -8,18 +8,18 @@ typedef struct reader_handle {
 	scanner_handle* scanner;
 } reader_handle;
 
-reader_handle* open_reader(scanner_handle* h);
+reader_handle* open_reader(scanner_handle* s);
 
-void close_reader(reader_handle* h);
+void close_reader(reader_handle* r);
 
-int64_t cursor_position(int32_t inputDepth);
+int64_t cursor_position(reader_handle* r, int32_t inputDepth);
 
-int32_t cursor_depth(void);
+int32_t cursor_depth(reader_handle* r);
 
-void* read(void);
+sexpr* read(reader_handle* r);
 
-void* read_symbol(void);
+sexpr* read_symbol(reader_handle* r);
 
-bool read_step_in(void);
+bool read_step_in(reader_handle* r);
 
-int32_t read_step_out(void);
+sexpr* read_step_out(reader_handle* r);

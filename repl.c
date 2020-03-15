@@ -13,16 +13,13 @@ bool always(char32_t c) {
 }
 
 int main(int argc, char** argv) {
-	sexpr* args = sexpr_symbol(U"system:nil");
+	sexpr* args = sexpr_symbol(U"system", U"nil");
 	for (int i = 0; i < argc; i++) {
-		scanner_handle* h = open_string_scanner(argv[i]);
-		advance_input_while(h, always);
-		size_t size = sizeof(char32_t) * (input_position(h) - buffer_position(h) + 1);
-		char32_t* arg32 = malloc(size);
-		take_buffer(h, arg32);
-		sexpr* arg = sexpr_symbol(arg32);
-		free(arg32);
-		close_scanner(h);
+		scanner_handle* s = open_string_scanner(argv[i]);
+		reader_handle* r = open_reader(s);
+		sexpr* arg = read_symbol(r);
+		close_scanner(s);
+		close_reader(r);
 
 		sexpr* rest = args;
 

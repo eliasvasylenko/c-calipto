@@ -16,20 +16,28 @@ sexpr *sexpr_init(sexpr_type type, int32_t payload_size) {
 	return expr;
 }
 
-sexpr *sexpr_symbol(char32_t *name) {
+sexpr* sexpr_symbol(char32_t* nspace, char32_t* name) {
 	int i = 0;
-	while (name[i] != U'\0') {
-		i++;
-	}
-	return sexpr_symbol_len(name, i);
-}
+	while (nspace[i] != U'\0') i++;
 
-sexpr *sexpr_symbol_len(char32_t *name, int32_t length) {
-	sexpr *expr = sexpr_init(SYMBOL, sizeof(char32_t) * (length + 1));
+	int j = 0;
+	while (name[j] != U'\0') j++;
+
+	sexpr* expr = sexpr_empty_symbol(i, j);
 	char32_t *payload = (char32_t*)(expr + 1);
 
-	memcpy(payload, name, sizeof(char32_t) * length);
-	payload[length] = U'\0';
+	memcpy(payload, nspace, i);
+	memcpy(payload + i + 1, name, j);
+
+	return expr;
+}
+
+sexpr *sexpr_empty_symbol(int32_t nslen, int32_t nlen) {
+	sexpr *expr = sexpr_init(SYMBOL, sizeof(char32_t) * (nslen + nlen + 2));
+	char32_t *payload = (char32_t*)(expr + 1);
+
+	payload[nslen] = U'\0';
+	payload[nslen + 1 + nlen] = U'\0';
 
 	return expr;
 }
