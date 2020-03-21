@@ -2,6 +2,7 @@
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <uchar.h>
+#include <limits.h>
 #include <string.h>
 
 #include <sexpr.h>
@@ -26,13 +27,15 @@ sexpr* sexpr_symbol(char32_t* nspace, char32_t* name) {
 	sexpr* expr = sexpr_empty_symbol(i, j);
 	char32_t *payload = (char32_t*)(expr + 1);
 
-	memcpy(payload, nspace, i);
-	memcpy(payload + i + 1, name, j);
+	memcpy(payload, nspace, i * sizeof(char32_t));
+	memcpy(payload + i + 1, name, j * sizeof(char32_t));
 
 	return expr;
 }
 
 sexpr *sexpr_empty_symbol(int32_t nslen, int32_t nlen) {
+	printf("new symbol [%i, %i]\n", nslen, nlen);
+
 	sexpr *expr = sexpr_init(SYMBOL, sizeof(char32_t) * (nslen + nlen + 2));
 	char32_t *payload = (char32_t*)(expr + 1);
 
@@ -86,4 +89,44 @@ void sexpr_free(sexpr *expr) {
 		}
 		free(expr);
 	}
+}
+
+void sexpr_elem_dump(sexpr* s) {
+	switch (s->type) {
+	case CONS:;
+		printf("(");
+		sexpr* car = sexpr_car(s);
+		sexpr_elem_dump(car);
+		sexpr_free(car);
+		printf(" . ");
+		sexpr* cdr = sexpr_cdr(s);
+		sexpr_elem_dump(cdr);
+		sexpr_free(cdr);
+		printf(")");
+		break;
+	case SYMBOL:;
+		char32_t *payload = (char32_t*)(s + 1);
+		char* mbr = malloc(sizeof(char) * (MB_LEN_MAX + 1));
+		while (*payload != U'\0') {
+			int size = c32rtomb(mbr, *payload, NULL);
+			*(mbr + size) = '\0';
+			printf("%s", mbr);
+			payload++;
+		}
+		printf(":");
+		payload++;
+		while (*payload != U'\0') {
+			int size = c32rtomb(mbr, *payload, NULL);
+			*(mbr + size) = '\0';
+			printf("%s", mbr);
+			payload++;
+		}
+		free(mbr);
+		break;
+	}
+}
+
+void sexpr_dump(sexpr* s) {
+	sexpr_elem_dump(s);
+	printf("\n");
 }

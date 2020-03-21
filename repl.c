@@ -14,10 +14,10 @@ bool always(char32_t c) {
 
 int main(int argc, char** argv) {
 	sexpr* args = sexpr_symbol(U"system", U"nil");
-	for (int i = 0; i < argc; i++) {
+	for (int i = argc - 1; i >= 0; i--) {
 		scanner_handle* s = open_string_scanner(argv[i]);
 		reader_handle* r = open_reader(s);
-		sexpr* arg = read_symbol(r);
+		sexpr* arg = read(r);
 		close_scanner(s);
 		close_reader(r);
 
@@ -28,6 +28,8 @@ int main(int argc, char** argv) {
 		sexpr_free(arg);
 		sexpr_free(rest);
 	}
+
+	sexpr_dump(args);
 
 	FILE* bsf = fopen("./bootstrap.cal", "r");
 	scanner_handle* bss = open_file_scanner(bsf);

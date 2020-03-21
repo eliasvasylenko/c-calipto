@@ -27,14 +27,16 @@ int64_t advance_input_while(scanner_handle* h, bool (*condition)(char32_t));
 
 bool advance_input_if(scanner_handle* h, bool (*condition)(char32_t));
 
-int64_t take_buffer_to(scanner_handle* h, int64_t position, char32_t* s);
+bool advance_input_if_equal(scanner_handle* h, char32_t c);
+
+int64_t take_buffer_to(scanner_handle* h, int64_t p, char32_t* s);
 
 int64_t take_buffer_length(scanner_handle* h, int64_t l, char32_t* s);
 
 int64_t take_buffer(scanner_handle* h, char32_t* s);
 
-void discard_buffer_to(scanner_handle* h, int64_t position);
+int64_t discard_buffer_to(scanner_handle* h, int64_t p);
 
-void discard_buffer_length(scanner_handle* h, int64_t l);
+int64_t discard_buffer_length(scanner_handle* h, int64_t l);
 
-void discard_buffer(scanner_handle* h);
+int64_t discard_buffer(scanner_handle* h);
