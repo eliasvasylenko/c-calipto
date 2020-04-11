@@ -2,8 +2,8 @@ typedef enum sexpr_type {
 	CONS,
 	SYMBOL,
 	STRING,
-	CHAR,
-	INT
+	CHARACTER,
+	INTEGER
 } sexpr_type;
 
 typedef struct sexpr {

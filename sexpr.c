@@ -1,9 +1,11 @@
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <uchar.h>
 #include <limits.h>
 #include <string.h>
+#include <ustring.h>
 
 #include <sexpr.h>
 
@@ -17,12 +19,35 @@ sexpr *sexpr_init(sexpr_type type, int32_t payload_size) {
 	return expr;
 }
 
-sexpr* sexpr_symbol(char32_t* nspace, char32_t* name) {
-	int i = 0;
-	while (nspace[i] != U'\0') i++;
+const char32_t* unicode_nspace = U"unicode";
 
-	int j = 0;
-	while (name[j] != U'\0') j++;
+sexpr* sexpr_unicode_hex_symbol(const char32_t* name) {
+	unsigned int32_t cp;
+	if (sscanf(name, "%04x", &cp) == EOF) {
+		return sexpr_regular_symbol(unicode_nspace, name);
+	}
+	return sexpr_unicode_codepoint_symbol(cp);
+}
+
+sexpr* sexpr_unicode_codepoint_symbol(const char32_t cp) {
+	sexpr* s = sexpr_init(CHARACTER, sizeof(char32_t));
+	char32_t *payload = (char32_t*)(s + 1);
+
+	*payload = cp;
+
+	return s;
+}
+
+sexpr* sexpr_symbol(const char32_t* nspace, const char32_t* name) {
+	if (strcmp32(unicode_nspace, nspace)) {
+		return sexpr_unicode_hex_symbol(name);
+	}
+	return sexpr_regular_symbol(nspace, name);
+}
+
+sexpr* sexpr_regular_symbol(char32_t* nspace, char32_t* name) {
+	int i = strlen32(nspace);
+	int j = strlen32(name);
 
 	sexpr* expr = sexpr_empty_symbol(i, j);
 	char32_t *payload = (char32_t*)(expr + 1);
@@ -44,7 +69,7 @@ sexpr *sexpr_empty_symbol(int32_t nslen, int32_t nlen) {
 }
 
 sexpr *sexpr_cons(sexpr *car, sexpr *cdr) {
-	if (car->type == CHAR && cdr->type == STRING) {
+	if (car->type == CHARACTER && cdr->type == STRING) {
 		// prepend car to string repr.
 		return NULL;
 	}
@@ -88,6 +113,9 @@ void sexpr_free(sexpr *expr) {
 			sexpr_free(payload->cdr);
 			break;
 		case SYMBOL:
+		case STRING:
+		case CHARACTER:
+		case INTEGER:
 			break;
 		}
 		free(expr);
@@ -95,6 +123,9 @@ void sexpr_free(sexpr *expr) {
 }
 
 void sexpr_elem_dump(sexpr* s) {
+	char32_t *string_payload;
+	char* mbr;
+
 	switch (s->type) {
 	case CONS:;
 		printf("(");
@@ -107,25 +138,43 @@ void sexpr_elem_dump(sexpr* s) {
 		sexpr_free(cdr);
 		printf(")");
 		break;
-	case SYMBOL:;
-		char32_t *payload = (char32_t*)(s + 1);
-		char* mbr = malloc(sizeof(char) * (MB_LEN_MAX + 1));
-		while (*payload != U'\0') {
-			int size = c32rtomb(mbr, *payload, NULL);
+	case SYMBOL:
+		string_payload = (char32_t*)(s + 1);
+		mbr = malloc(sizeof(char) * (MB_LEN_MAX + 1));
+		while (*string_payload != U'\0') {
+			int size = c32rtomb(mbr, *string_payload, NULL);
 			*(mbr + size) = '\0';
 			printf("%s", mbr);
-			payload++;
+			string_payload++;
 		}
 		printf(":");
-		payload++;
-		while (*payload != U'\0') {
-			int size = c32rtomb(mbr, *payload, NULL);
+		string_payload++;
+		while (*string_payload != U'\0') {
+			int size = c32rtomb(mbr, *string_payload, NULL);
 			*(mbr + size) = '\0';
 			printf("%s", mbr);
-			payload++;
+			string_payload++;
 		}
 		free(mbr);
 		break;
+	case STRING:;
+		string_payload = (char32_t*)(s + 1);
+		mbr = malloc(sizeof(char) * (MB_LEN_MAX + 1));
+		printf("\"");
+		while (*string_payload != U'\0') {
+			int size = c32rtomb(mbr, *string_payload, NULL);
+			*(mbr + size) = '\0';
+			printf("%s", mbr);
+			string_payload++;
+		}
+		printf("\"");
+		free(mbr);
+		break;
+	case CHARACTER:
+		printf("<char>");
+		break;
+	case INTEGER:
+		printf("%li", (long)(s + 1));
 	}
 }
 
