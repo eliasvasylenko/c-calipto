@@ -34,8 +34,6 @@ sexpr* sexpr_symbol(char32_t* nspace, char32_t* name) {
 }
 
 sexpr *sexpr_empty_symbol(int32_t nslen, int32_t nlen) {
-	printf("new symbol [%i, %i]\n", nslen, nlen);
-
 	sexpr *expr = sexpr_init(SYMBOL, sizeof(char32_t) * (nslen + nlen + 2));
 	char32_t *payload = (char32_t*)(expr + 1);
 
@@ -46,6 +44,11 @@ sexpr *sexpr_empty_symbol(int32_t nslen, int32_t nlen) {
 }
 
 sexpr *sexpr_cons(sexpr *car, sexpr *cdr) {
+	if (car->type == CHAR && cdr->type == STRING) {
+		// prepend car to string repr.
+		return NULL;
+	}
+
 	sexpr *expr = sexpr_init(CONS, sizeof(cons));
 	cons *payload = (cons*)(expr + 1);
 
