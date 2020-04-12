@@ -5,9 +5,9 @@
 #include <uchar.h>
 #include <string.h>
 
-#include <sexpr.h>
-#include <scanner.h>
-#include <reader.h>
+#include <c-calipto/sexpr.h>
+#include <c-calipto/scanner.h>
+#include <c-calipto/reader.h>
 
 reader_handle* open_reader(scanner_handle* s) {
 	reader_handle* r = malloc(sizeof(reader_handle));

@@ -4,9 +4,13 @@
 #include <stdlib.h>
 #include <uchar.h>
 
-#include <sexpr.h>
-#include <scanner.h>
-#include <reader.h>
+#include <uchar.h>
+#include <unicode/utypes.h>
+#include <unicode/uchar.h>
+
+#include "c-calipto/sexpr.h"
+#include "c-calipto/scanner.h"
+#include "c-calipto/reader.h"
 
 bool always(char32_t c) {
 	return true;

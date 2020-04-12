@@ -5,8 +5,8 @@
 #include <uchar.h>
 #include <limits.h>
 
-#include <sexpr.h>
-#include <scanner.h>
+#include <c-calipto/sexpr.h>
+#include <c-calipto/scanner.h>
 
 scanner_handle* scanner_init(scanner_type type, int32_t payload_size) {
 	scanner_handle* h = malloc(sizeof(scanner_handle) + payload_size);
