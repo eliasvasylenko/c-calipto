@@ -1,8 +1,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <uchar.h>
 #include <unicode/utypes.h>

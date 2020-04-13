@@ -1,24 +1,24 @@
 typedef struct page {
 	UChar* start;
 	UChar* end;
-	page* next;
+	struct page* next;
 } page;
 
 typedef struct buffer {
-	page* (*fill_page)(buffer* b);
-	void (*clear_page)(buffer* b, page* p);
+	page* (*fill_page)(struct buffer* b);
+	void (*clear_page)(struct buffer* b, page* p);
 	void (*close)(struct buffer* b);
 } buffer;
 
 typedef struct {
-	page* input_page;
-	int64_t input_position;
-	UChar* input_pointer;
+	page* page;
+	int64_t position;
+	UChar* pointer;
+} cursor;
 
-	page* buffer_page;
-	int64_t buffer_position;
-	UChar* buffer_pointer;
-
+typedef struct {
+	cursor input_cursor;
+	cursor buffer_cursor
 	buffer* buffer;
 } scanner;
 
@@ -30,17 +30,17 @@ int64_t input_position(scanner* s);
 
 int64_t buffer_position(scanner* s);
 
-int64_t advance_input_while(scanner* s, bool (*condition)(char32_t));
+int64_t advance_input_while(scanner* s, bool (*condition)(UChar32));
 
-bool advance_input_if(scanner* s, bool (*condition)(char32_t));
+bool advance_input_if(scanner* s, bool (*condition)(UChar32));
 
-bool advance_input_if_equal(scanner* s, char32_t c);
+bool advance_input_if_equal(scanner* s, UChar32 c);
 
-int64_t take_buffer_to(scanner* s, int64_t p, char32_t* s);
+int64_t take_buffer_to(scanner* s, int64_t p, UChar* t);
 
-int64_t take_buffer_length(scanner* s, int64_t l, char32_t* s);
+int64_t take_buffer_length(scanner* s, int64_t l, UChar* t);
 
-int64_t take_buffer(scanner* s, char32_t* s);
+int64_t take_buffer(scanner* s, UChar* t);
 
 int64_t discard_buffer_to(scanner* s, int64_t p);
 

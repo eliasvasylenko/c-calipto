@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include <uchar.h>
+#include <unicode/utf.h>
 #include <unicode/utypes.h>
 #include <unicode/uchar.h>
 #include <unicode/umachine.h>
@@ -11,32 +12,48 @@
 #include "c-calipto/scanner.h"
 
 int64_t input_position(scanner* s) {
-	return s->input_position;
+	return s->input_cursor.position;
 }
 
 int64_t buffer_position(scanner* h) {
-	return s->buffer_position;
+	return s->buffer_cursor.position;
 }
 
 void next_input_page(scanner* s) {
-		page* p = s->input_page;
-		*s->input_page = s->buffer.fill_page(s->buffer, s->input_page);
-		*p->next = s->input_page;
+		page* p = s->input_cursor.page;
+		page* n = s->buffer.fill_page(s->buffer);
+		*s->input_cursor.page = n;
+		*p->next = n;
+		s->input_cursor.pointer = (n != NULL)
+			? n->start
+			: NULL;
 }
 
 void next_buffer_page(scanner* s) {
 		page* p = s->buffer_page;
-		*s->buffer_page = s->buffer_page->next;
+		page* n = p->next;
+		*s->buffer_cursor.page = n;
 		s->buffer.clear_page(s->buffer, p);
+		s->buffer_cursor.pointer = (n != NULL)
+			? n->start
+			: NULL;
 }
 
 int64_t advance_input_while(scanner* s, bool (*condition)(char32_t)) {
 	int64_t from = s->input_position;
 	while (s->input_page != NULL) {
-		while (s->input < s->input_page.end) {
-			if (condition(s->
-			char32_t c;
-			int s = mbrtoc32(&c, sh->input, MB_LEN_MAX, NULL);
+		while (s->input_pointer < s->input_page.end) {
+			UChar c = *(s->input_pointer++);
+			if (U16_IS_LEAD(c)) {
+				if (s->input_pointer == s->input_page.end) {
+					next_input_page(s);
+				}
+				UChar c2 = *(s->input_pointer++);
+				if (U16_IS_TRAIL(c2)) {
+					++i;
+					c = U16_GET_SUPPLEMENTARY(c, c2);
+				}
+    			}
 			if (condition(c)) {
 				sh->input_pos++;
 				sh->input += s;
