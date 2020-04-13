@@ -1,9 +1,9 @@
-typedef struct cursor_stack {
+typedef struct {
 	int64_t position;
 	struct cursor_stack* stack;
 } cursor_stack;
 
-typedef struct reader_handle {
+typedef struct {
 	cursor_stack cursor;
 	scanner_handle* scanner;
 } reader_handle;

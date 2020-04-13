@@ -1,42 +1,57 @@
-typedef enum scanner_type {
-	FILE_SCANNER,
-	STRING_SCANNER,
-	STD_IO_SCANNER,
-	SEXPR_SCANNER
-} scanner_type;
+typedef struct page {
+	UChar* start;
+	UChar* end;
+	page* next;
+} page;
 
-typedef struct scanner_handle {
-        scanner_type type;
-} scanner_handle;
+typedef struct buffer {
+	page* (*fill_page)(buffer* b);
+	void (*clear_page)(buffer* b, page* p);
+	void (*close)(struct buffer* b);
+} buffer;
 
-scanner_handle* open_file_scanner(FILE* f);
+typedef struct {
+	page* input_page;
+	int64_t input_position;
+	UChar* input_pointer;
 
-scanner_handle* open_string_scanner(char* s);
+	page* buffer_page;
+	int64_t buffer_position;
+	UChar* buffer_pointer;
 
-scanner_handle* open_stdin_scanner();
+	buffer* buffer;
+} scanner;
 
-scanner_handle* open_sexpr_scanner(sexpr* e);
+void open_scanner(buffer* b);
 
-void close_scanner(scanner_handle* h);
+void close_scanner(scanner* s);
 
-int64_t input_position(scanner_handle* h);
+int64_t input_position(scanner* s);
 
-int64_t buffer_position(scanner_handle* h);
+int64_t buffer_position(scanner* s);
 
-int64_t advance_input_while(scanner_handle* h, bool (*condition)(char32_t));
+int64_t advance_input_while(scanner* s, bool (*condition)(char32_t));
 
-bool advance_input_if(scanner_handle* h, bool (*condition)(char32_t));
+bool advance_input_if(scanner* s, bool (*condition)(char32_t));
 
-bool advance_input_if_equal(scanner_handle* h, char32_t c);
+bool advance_input_if_equal(scanner* s, char32_t c);
 
-int64_t take_buffer_to(scanner_handle* h, int64_t p, char32_t* s);
+int64_t take_buffer_to(scanner* s, int64_t p, char32_t* s);
 
-int64_t take_buffer_length(scanner_handle* h, int64_t l, char32_t* s);
+int64_t take_buffer_length(scanner* s, int64_t l, char32_t* s);
 
-int64_t take_buffer(scanner_handle* h, char32_t* s);
+int64_t take_buffer(scanner* s, char32_t* s);
 
-int64_t discard_buffer_to(scanner_handle* h, int64_t p);
+int64_t discard_buffer_to(scanner* s, int64_t p);
 
-int64_t discard_buffer_length(scanner_handle* h, int64_t l);
+int64_t discard_buffer_length(scanner* s, int64_t l);
 
-int64_t discard_buffer(scanner_handle* h);
+int64_t discard_buffer(scanner* s);
+
+buffer* open_file_buffer(FILE* f);
+buffer* open_string_buffer(char* s);
+buffer* open_nstring_buffer(char* s, int64_t l);
+buffer* open_ustring_buffer(UChar* s);
+buffer* open_nustring_buffer(UChar* s, int64_t l);
+buffer* open_stdin_buffer();
+

@@ -2,8 +2,11 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+
 #include <uchar.h>
-#include <string.h>
+#include <unicode/utypes.h>
+#include <unicode/uchar.h>
+#include <unicode/umachine.h>
 
 #include <c-calipto/sexpr.h>
 #include <c-calipto/scanner.h>

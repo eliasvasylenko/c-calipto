@@ -2,10 +2,12 @@
 #include <stdbool.h>
 #include <stdatomic.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include <uchar.h>
 #include <unicode/utypes.h>
 #include <unicode/uchar.h>
+#include <unicode/umachine.h>
 
 #include "c-calipto/sexpr.h"
 
@@ -17,48 +19,48 @@ sexpr *sexpr_init(sexpr_type type, int32_t payload_size) {
 	return expr;
 }
 
-const char16_t* unicode_nspace = u"unicode";
+const UChar* unicode_nspace = u"unicode";
 
-sexpr* sexpr_unicode_hex_symbol(const char16_t* name) {
+sexpr* sexpr_regular_symbol(const UChar* nspace, const UChar* name) {
+	int i = u_strlen(nspace);
+	int j = u_strlen(name);
+
+	sexpr* expr = sexpr_empty_symbol(i, j);
+	UChar *payload = (UChar*)(expr + 1);
+
+	u_strcpy(payload, nspace);
+	u_strcpy(payload + i + 1, name);
+
+	return expr;
+}
+
+sexpr* sexpr_unicode_hex_symbol(const UChar* name) {
 	int32_t cp;
-	if (sscanf(name, "%04x", &cp) == EOF) {
+	if (u_sscanf(name, "%04x", &cp) == EOF) {
 		return sexpr_regular_symbol(unicode_nspace, name);
 	}
 	return sexpr_unicode_codepoint_symbol(cp);
 }
 
-sexpr* sexpr_unicode_codepoint_symbol(const char16_t32 cp) {
-	sexpr* s = sexpr_init(CHARACTER, sizeof(char16_t));
-	char16_t *payload = (char16_t*)(s + 1);
+sexpr* sexpr_unicode_codepoint_symbol(const UChar32 cp) {
+	sexpr* s = sexpr_init(CHARACTER, sizeof(UChar));
+	UChar *payload = (UChar*)(s + 1);
 
 	*payload = cp;
 
 	return s;
 }
 
-sexpr* sexpr_symbol(const char16_t* nspace, const char16_t* name) {
+sexpr* sexpr_symbol(const UChar* nspace, const UChar* name) {
 	if (strcmp32(unicode_nspace, nspace)) {
 		return sexpr_unicode_hex_symbol(name);
 	}
 	return sexpr_regular_symbol(nspace, name);
 }
 
-sexpr* sexpr_regular_symbol(char16_t* nspace, char16_t* name) {
-	int i = strlen32(nspace);
-	int j = strlen32(name);
-
-	sexpr* expr = sexpr_empty_symbol(i, j);
-	char16_t *payload = (char16_t*)(expr + 1);
-
-	memcpy(payload, nspace, i * sizeof(char16_t));
-	memcpy(payload + i + 1, name, j * sizeof(char16_t));
-
-	return expr;
-}
-
 sexpr *sexpr_empty_symbol(int32_t nslen, int32_t nlen) {
-	sexpr *expr = sexpr_init(SYMBOL, sizeof(char16_t) * (nslen + nlen + 2));
-	char16_t *payload = (char16_t*)(expr + 1);
+	sexpr *expr = sexpr_init(SYMBOL, sizeof(UChar) * (nslen + nlen + 2));
+	UChar *payload = (UChar*)(expr + 1);
 
 	payload[nslen] = U'\0';
 	payload[nslen + 1 + nlen] = U'\0';
@@ -121,7 +123,7 @@ void sexpr_free(sexpr *expr) {
 }
 
 void sexpr_elem_dump(sexpr* s) {
-	char16_t *string_payload;
+	UChar *string_payload;
 	char* mbr;
 
 	switch (s->type) {
@@ -137,7 +139,7 @@ void sexpr_elem_dump(sexpr* s) {
 		printf(")");
 		break;
 	case SYMBOL:
-		string_payload = (char16_t*)(s + 1);
+		string_payload = (UChar*)(s + 1);
 		mbr = malloc(sizeof(char) * (MB_LEN_MAX + 1));
 		while (*string_payload != U'\0') {
 			int size = c32rtomb(mbr, *string_payload, NULL);
@@ -156,7 +158,7 @@ void sexpr_elem_dump(sexpr* s) {
 		free(mbr);
 		break;
 	case STRING:;
-		string_payload = (char16_t*)(s + 1);
+		string_payload = (UChar*)(s + 1);
 		mbr = malloc(sizeof(char) * (MB_LEN_MAX + 1));
 		printf("\"");
 		while (*string_payload != U'\0') {

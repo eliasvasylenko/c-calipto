@@ -7,6 +7,7 @@
 #include <uchar.h>
 #include <unicode/utypes.h>
 #include <unicode/uchar.h>
+#include <unicode/umachine.h>
 
 #include "c-calipto/sexpr.h"
 #include "c-calipto/scanner.h"
@@ -17,7 +18,7 @@ bool always(char32_t c) {
 }
 
 int main(int argc, char** argv) {
-	sexpr* args = sexpr_symbol(U"system", U"nil");
+	sexpr* args = sexpr_symbol(u"system", u"nil");
 	for (int i = argc - 1; i >= 0; i--) {
 		scanner_handle* s = open_string_scanner(argv[i]);
 		reader_handle* r = open_reader(s);
