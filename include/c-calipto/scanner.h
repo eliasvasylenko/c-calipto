@@ -1,26 +1,50 @@
-typedef struct page {
+/*
+ * Streams
+ */
+
+typedef struct block {
 	UChar* start;
 	UChar* end;
+} block;
+
+typedef struct stream {
+	block* (*next_block)(struct stream* b);
+	void (*free_block)(struct stream* b, block* p);
+	void (*close)(struct stream* b);
+} stream;
+
+stream* open_file_stream(FILE* f);
+stream* open_string_stream(char* s);
+stream* open_nstring_stream(char* s, int64_t l);
+stream* open_ustring_stream(UChar* s);
+stream* open_nustring_stream(UChar* s, int64_t l);
+stream* open_stdin_stream();
+
+/*
+ * Scanners
+ */
+
+typedef struct page {
+	block* block;
 	struct page* next;
 } page;
 
-typedef struct buffer {
-	page* (*fill_page)(struct buffer* b);
-	void (*clear_page)(struct buffer* b, page* p);
-	void (*close)(struct buffer* b);
-} buffer;
-
-typedef struct {
+typedef struct cursor {
 	page* page;
 	int64_t position;
 	UChar* pointer;
 } cursor;
 
-typedef struct {
-	cursor input_cursor;
-	cursor buffer_cursor
-	buffer* buffer;
+typedef struct scanner {
+	cursor input;
+	UChar32 input_character;
+	cursor buffer;
+	stream* stream;
 } scanner;
+
+const UChar32 MALFORMED = 0xE000;
+const UChar32 PENDING = 0xE001;
+const UChar32 EOS = 0xE002;
 
 void open_scanner(buffer* b);
 
@@ -30,11 +54,9 @@ int64_t input_position(scanner* s);
 
 int64_t buffer_position(scanner* s);
 
-int64_t advance_input_while(scanner* s, bool (*condition)(UChar32));
+int64_t advance_input_while(scanner* s, void* context, bool (*condition)(UChar32 c, void* context));
 
-bool advance_input_if(scanner* s, bool (*condition)(UChar32));
-
-bool advance_input_if_equal(scanner* s, UChar32 c);
+bool advance_input_if(scanner* s, void* context, bool (*condition)(UChar32 c, void* context));
 
 int64_t take_buffer_to(scanner* s, int64_t p, UChar* t);
 
@@ -47,11 +69,4 @@ int64_t discard_buffer_to(scanner* s, int64_t p);
 int64_t discard_buffer_length(scanner* s, int64_t l);
 
 int64_t discard_buffer(scanner* s);
-
-buffer* open_file_buffer(FILE* f);
-buffer* open_string_buffer(char* s);
-buffer* open_nstring_buffer(char* s, int64_t l);
-buffer* open_ustring_buffer(UChar* s);
-buffer* open_nustring_buffer(UChar* s, int64_t l);
-buffer* open_stdin_buffer();
 

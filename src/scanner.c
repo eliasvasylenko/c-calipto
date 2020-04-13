@@ -19,31 +19,53 @@ int64_t buffer_position(scanner* h) {
 	return s->buffer_cursor.position;
 }
 
-void next_input_page(scanner* s) {
-		page* p = s->input_cursor.page;
-		page* n = s->buffer.fill_page(s->buffer);
-		*s->input_cursor.page = n;
-		*p->next = n;
-		s->input_cursor.pointer = (n != NULL)
-			? n->start
-			: NULL;
+void next_page(scanner* s) {
+	page* p = s->input.page;
+	if (p->next == NULL) {
+		p->next = malloc(sizeof(page));
+		p->next->block = s->stream.next_block(s->stream);
+		p->next->next = NULL;
+	}
+}
+
+cursor peek_input(scanner* s) {
+	UChar c1 = *(s->input.pointer);
+	if (U16_IS_LEAD(c1)) {
+		UChar c2;
+		if (s->input.pointer + 1 < s->input.page->block->end) {
+	       		c2 = *(s->input.pointer + 1);
+		} else {
+			prepare_input(s);
+			c2 = s->input.page->next->block->start;
+		}
+		if (U16_IS_TRAIL(c2)) {
+			*c = U16_GET_SUPPLEMENTARY(c1, c2);
+			return 2;
+		} else {
+			*c = 0xFFFD;
+			return 0;
+		}
+    	} else {
+		*c = c1;
+		return 1;
+	}
 }
 
 void next_buffer_page(scanner* s) {
-		page* p = s->buffer_page;
-		page* n = p->next;
-		*s->buffer_cursor.page = n;
-		s->buffer.clear_page(s->buffer, p);
-		s->buffer_cursor.pointer = (n != NULL)
-			? n->start
-			: NULL;
+	page* p = s->buffer_page;
+	page* n = p->next;
+	*s->buffer_cursor.page = n;
+	s->buffer.clear_page(s->buffer, p);
+	s->buffer_cursor.pointer = (n != NULL)
+		? n->start
+		: NULL;
 }
 
-int64_t advance_input_while(scanner* s, bool (*condition)(char32_t)) {
+int64_t advance_input_while(scanner* s, bool (*condition)(Char32)) {
 	int64_t from = s->input_position;
 	while (s->input_page != NULL) {
 		while (s->input_pointer < s->input_page.end) {
-			UChar c = *(s->input_pointer++);
+			UChar c = *s->input_pointer;
 			if (U16_IS_LEAD(c)) {
 				if (s->input_pointer == s->input_page.end) {
 					next_input_page(s);
@@ -66,12 +88,12 @@ int64_t advance_input_while(scanner* s, bool (*condition)(char32_t)) {
 	return s->input_position - from;
 }
 
-bool advance_input_if(scanner* h, bool (*condition)(char32_t)) {
+bool advance_input_if(scanner* h, bool (*condition)(Char32)) {
 	string_handle* sh = (string_handle*)(h + 1);
 	if (*sh->input == U'\0') {
 		return false;
 	}
-	char32_t c;
+	Char32 c;
 	int s = mbrtoc32(&c, sh->input, MB_LEN_MAX, NULL);
 	if (condition(c)) {
 		sh->input_pos++;
@@ -82,12 +104,12 @@ bool advance_input_if(scanner* h, bool (*condition)(char32_t)) {
 	}
 }
 
-bool advance_input_if_equal(scanner* h, char32_t c) {
+bool advance_input_if_equal(scanner* h, Char32 c) {
 	string_handle* sh = (string_handle*)(h + 1);
 	if (*sh->input == U'\0') {
 		return false;
 	}
-	char32_t c2;
+	Char32 c2;
 	int s = mbrtoc32(&c2, sh->input, MB_LEN_MAX, NULL);
 	if (c == c2) {
 		sh->input_pos++;
@@ -98,7 +120,7 @@ bool advance_input_if_equal(scanner* h, char32_t c) {
 	}
 }
 
-int64_t take_buffer_to(scanner* h, int64_t p, char32_t* s) {
+int64_t take_buffer_to(scanner* h, int64_t p, Char32* s) {
 	string_handle* sh = (string_handle*)(h + 1);
 
 	if (p > sh->input_pos) {
@@ -112,11 +134,11 @@ int64_t take_buffer_to(scanner* h, int64_t p, char32_t* s) {
 	return size;
 }
 
-int64_t take_buffer_length(scanner* h, int64_t l, char32_t* s) {
+int64_t take_buffer_length(scanner* h, int64_t l, Char32* s) {
 	return take_buffer_to(h, buffer_position(h) + l, s);
 }
 
-int64_t take_buffer(scanner* h, char32_t* s) {
+int64_t take_buffer(scanner* h, Char32* s) {
 	return take_buffer_to(h, input_position(h), s);
 }
 
