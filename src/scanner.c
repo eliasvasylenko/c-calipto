@@ -19,36 +19,107 @@ int64_t buffer_position(scanner* h) {
 	return s->buffer_cursor.position;
 }
 
-void next_page(scanner* s) {
-	page* p = s->input.page;
-	if (p->next == NULL) {
-		p->next = malloc(sizeof(page));
-		p->next->block = s->stream.next_block(s->stream);
-		p->next->next = NULL;
+void prepare_input_pointer(scanner* s) {
+	if (s->input.pointer != NULL && s->input.pointer == s->input.page->block->end) {
+		if (s->input.page->next == NULL) {
+			page* p = malloc(sizeof(page));
+			p->block = s->stream.next_block(s->stream);
+			p->next = NULL;
+			s->input.page->next = p;
+		}
+		s->input.page = s->input.page->next;
+
+		if (s->input.page->block == NULL) {
+			s->input.pointer = NULL;
+		} else {
+			s->input.pointer = s->input.page->block.start;
+		}
 	}
 }
 
-cursor peek_input(scanner* s) {
-	UChar c1 = *(s->input.pointer);
-	if (U16_IS_LEAD(c1)) {
-		UChar c2;
-		if (s->input.pointer + 1 < s->input.page->block->end) {
-	       		c2 = *(s->input.pointer + 1);
-		} else {
-			prepare_input(s);
-			c2 = s->input.page->next->block->start;
-		}
-		if (U16_IS_TRAIL(c2)) {
-			*c = U16_GET_SUPPLEMENTARY(c1, c2);
-			return 2;
-		} else {
-			*c = 0xFFFD;
-			return 0;
-		}
-    	} else {
-		*c = c1;
-		return 1;
+page* next_page_empty(scanner* s) {
+	page* p = s->input.page;
+	if (p->next == NULL) {
+		p->next = malloc(sizeof(page));
+		p->next->block = NULL;
+		p->next->next = NULL;
 	}
+	return p->next;
+}
+
+void next_codepoint(scanner* s) {
+	if (s->next_character != PENDING) {
+		return;
+	}
+
+	prepare_input_pointer();
+	
+	if (s->input.pointer == NULL) {
+		s->next_character = EOS;
+		return;
+	}
+
+	UChar c1 = *s->input.pointer;
+
+	if (U16_IS_TRAIL(c1)) {
+		s->next_character = MALFORMED;
+		// allocate empty page?
+		return;
+	}
+
+	next_address++;
+
+	if (!U16_IS_LEAD(c1)) {
+		s->next_character = c1;
+		s->next_input = s->input;
+		s->next_input.pointer++;
+		return;
+	}
+
+	s->next_input.page = s->input.page;
+	s->next_input.pointer = s->input.pointer + 1;
+
+	if (s->next_input.pointer == s->next_input.page->block->end) {
+		page* p = next_page(s);
+		s->next_input.page = p;
+		s->next_input.pointer = (p.block != NULL)
+			? p.block.start
+			: NULL;
+	}
+
+		UChar c1 = *(s->input.pointer);
+		if (U16_IS_LEAD(c1)) {
+			s->next_input.pointer++;
+			if (s->next_input.pointer == s->next_input.pointer == s->next_input.page->block->end) {
+		       		c2 = *(s->input.pointer + 1);
+			} else {
+				prepare_input(s);
+				c2 = s->input.page->next->block->start;
+			}
+			UChar c2;
+
+			if (U16_IS_TRAIL(c2)) {
+				*c = U16_GET_SUPPLEMENTARY(c1, c2);
+				return 2;
+			} else {
+				*c = 0xFFFD;
+				return 0;
+			}
+    		} else {
+			*c = c1;
+			return 1;
+		}
+	}
+
+	return s->next_character;
+}
+
+UChar32 advance_input(scanner*s) {
+	UChar32 c = next_character(s);
+	s->input = s->next_input;
+	s->next_input.page = NULL;
+	s->next_input.position = s->input.position + 1;
+	return c;
 }
 
 void next_buffer_page(scanner* s) {
@@ -67,8 +138,9 @@ int64_t advance_input_while(scanner* s, bool (*condition)(Char32)) {
 		while (s->input_pointer < s->input_page.end) {
 			UChar c = *s->input_pointer;
 			if (U16_IS_LEAD(c)) {
-				if (s->input_pointer == s->input_page.end) {
-					next_input_page(s);
+				page* p = s->input.page;
+				if (s->input_pointer == p.end) {
+					next_page(s);
 				}
 				UChar c2 = *(s->input_pointer++);
 				if (U16_IS_TRAIL(c2)) {

@@ -7,6 +7,20 @@ typedef struct block {
 	UChar* end;
 } block;
 
+/**
+ * An interface to a stream of data. So long as there is data
+ * remaining, calls to next_block will return a non-empty block
+ * of data filled with the available content of the stream. When
+ * the stream is complete, next_block should return NULL.
+ *
+ * The caller should always call free_block when they are done
+ * with it, so that the stream knows it may clean up any
+ * resources associated with the block.
+ *
+ * The caller should always call close when they are done with a
+ * stream, this may occur before they have reached the end of
+ * the stream.
+ */
 typedef struct stream {
 	block* (*next_block)(struct stream* b);
 	void (*free_block)(struct stream* b, block* p);
@@ -37,8 +51,11 @@ typedef struct cursor {
 
 typedef struct scanner {
 	cursor input;
-	UChar32 input_character;
 	cursor buffer;
+
+	UChar32 next_character;
+	cursor next_input;
+
 	stream* stream;
 } scanner;
 
@@ -46,7 +63,7 @@ const UChar32 MALFORMED = 0xE000;
 const UChar32 PENDING = 0xE001;
 const UChar32 EOS = 0xE002;
 
-void open_scanner(buffer* b);
+void open_scanner(stream* b);
 
 void close_scanner(scanner* s);
 
