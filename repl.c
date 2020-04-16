@@ -20,11 +20,13 @@ bool always(char32_t c) {
 int main(int argc, char** argv) {
 	sexpr* args = sexpr_symbol(u"system", u"nil");
 	for (int i = argc - 1; i >= 0; i--) {
-		scanner_handle* s = open_string_scanner(argv[i]);
-		reader_handle* r = open_reader(s);
+		stream* st = open_string_stream(argv[i]);
+		scanner* sc = open_scanner(st);
+		reader* r = open_reader(sc);
 		sexpr* arg = read(r);
-		close_scanner(s);
 		close_reader(r);
+		close_scanner(sc);
+		close_stream(st);
 
 		sexpr* rest = args;
 
@@ -36,15 +38,17 @@ int main(int argc, char** argv) {
 
 	sexpr_dump(args);
 
-	FILE* bsf = fopen("./bootstrap.cal", "r");
-	scanner_handle* bss = open_file_scanner(bsf);
-	reader_handle* bsr = open_reader(bss);
+	FILE* f = fopen("./bootstrap.cal", "r");
+	stream* st = open_file_stream(f);
+	scanner* sc = open_scanner(st);
+	reader* r = open_reader(sc);
 
 	;
 
-	close_reader(bsr);
-	close_scanner(bss);
-	fclose(bsf);
+	close_reader(r);
+	close_scanner(sc);
+	close_stream(st);
+	fclose(f);
 
 	// TODO evaluate bootstrap file
 

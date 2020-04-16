@@ -12,15 +12,15 @@
 #include <c-calipto/scanner.h>
 #include <c-calipto/reader.h>
 
-reader_handle* open_reader(scanner_handle* s) {
-	reader_handle* r = malloc(sizeof(reader_handle));
+reader* open_reader(scanner* s) {
+	reader* r = malloc(sizeof(reader));
 	r->scanner = s;
 	r->cursor.position = 0;
 	r->cursor.stack = NULL;
 	return r;
 }
 
-void close_reader(reader_handle* r) {
+void close_reader(reader* r) {
 	cursor_stack* s = r->cursor.stack;
 	while (s != NULL) {
 		cursor_stack* p = s;
@@ -30,7 +30,7 @@ void close_reader(reader_handle* r) {
 	free(r);
 }
 
-int64_t cursor_position(reader_handle* r, int32_t depth) {
+int64_t cursor_position(reader* r, int32_t depth) {
 	cursor_stack s = r->cursor;
 	for (int32_t i = 0; i < depth; i++) {
 		s = *s.stack;
@@ -38,7 +38,7 @@ int64_t cursor_position(reader_handle* r, int32_t depth) {
 	return s.position;
 }
 
-int32_t cursor_depth(reader_handle* r) {
+int32_t cursor_depth(reader* r) {
 	int32_t d = 0;
 	cursor_stack s = r->cursor;
 	while (s.stack != NULL) {
@@ -52,11 +52,16 @@ int32_t cursor_depth(reader_handle* r) {
  * Character Tests
  */
 
-bool is_whitespace(char32_t c) {
+const UChar32 colon = U':';
+const UChar32 close_bracket = U'(';
+const UChar32 open_bracket = U')';
+const UChar32 dot = U'.';
+
+bool is_whitespace(char32_t c, void* v) {
 	return U' ' == c || U'\t' == c;
 }
 
-bool is_symbol_character(char32_t c) {
+bool is_symbol_character(char32_t c, void* v) {
 	if (c == U':' ||
 	    c == U'(' ||
 	    c == U')' ||
@@ -66,29 +71,33 @@ bool is_symbol_character(char32_t c) {
 	return true;
 }
 
-bool is_symbol_leading_character(char32_t c) {
-	return is_symbol_character(c);
+bool is_symbol_leading_character(char32_t c, void* v) {
+	return is_symbol_character(c, v);
+}
+
+bool is_equal(char32_t c, char32_t* to) {
+	return c == *to;
 }
 
 /*
  * Read Operations
  */
 
-void skip_whitespace(scanner_handle* s) {
-	advance_input_while(s, is_whitespace);
+void skip_whitespace(scanner* s) {
+	advance_input_while(s, is_whitespace, NULL);
 	discard_buffer(s);
 }
 
-int32_t scan_name(scanner_handle* s) {
+int32_t scan_name(scanner* s) {
 	int32_t start = input_position(s);
-	if (advance_input_if(s, is_symbol_leading_character)) {
-		advance_input_while(s, is_symbol_character);
+	if (advance_input_if(s, is_symbol_leading_character, NULL)) {
+		advance_input_while(s, is_symbol_character, NULL);
 		return input_position(s) - start;
 	}
 	return -1;
 }
 
-sexpr* read_list(reader_handle* r) {
+sexpr* read_list(reader* r) {
 	if (read_step_in(r)) {
 		skip_whitespace(r->scanner);
 
@@ -97,14 +106,14 @@ sexpr* read_list(reader_handle* r) {
 	return NULL;
 }
 
-sexpr* read_symbol(reader_handle* r) {
+sexpr* read_symbol(reader* r) {
 	skip_whitespace(r->scanner);
 	int32_t nslen = scan_name(r->scanner);
 	if (nslen <= 0) {
 		return NULL;
 	}
 
-	if (!advance_input_if_equal(r->scanner, U':')) {
+	if (!advance_input_if(r->scanner, is_equal, &colon)) {
 		int32_t nlen = nslen;
 		char32_t *ns  = U"system";
 		nslen = 0;
@@ -134,7 +143,7 @@ sexpr* read_symbol(reader_handle* r) {
 	return expr;
 }
 
-sexpr* read(reader_handle* r) {
+sexpr* read(reader* r) {
 	skip_whitespace(r->scanner);
 	sexpr* e = read_symbol(r);
 	if (e == NULL) {
@@ -143,12 +152,12 @@ sexpr* read(reader_handle* r) {
 	return e;
 }
 
-bool read_step_in(reader_handle* r) {
+bool read_step_in(reader* r) {
   skip_whitespace(r->scanner);
-  return advance_input_if_equal(r->scanner, U'(');
+  return advance_input_if(r->scanner, is_equal, &open_bracket);
 }
 
-sexpr* read_next(reader_handle* r) {
+sexpr* read_next(reader* r) {
 	skip_whitespace(r->scanner);
 	sexpr* e = read_symbol(r);
 	if (e == NULL) {
@@ -157,12 +166,12 @@ sexpr* read_next(reader_handle* r) {
 	return e;
 }
 
-sexpr* read_step_out(reader_handle* r) {
+sexpr* read_step_out(reader* r) {
 	if (cursor_depth(r) <= 0) {
 		return NULL;
 	}
 
-	if (advance_input_if_equal(r->scanner, U')')) {
+	if (advance_input_if(r->scanner, is_equal, &close_bracket)) {
 		discard_buffer(r->scanner);
 
 		return sexpr_symbol(U"system", U"nil");
@@ -172,7 +181,7 @@ sexpr* read_step_out(reader_handle* r) {
 	sexpr* tail;
 
 	skip_whitespace(r->scanner);
-	if (advance_input_if_equal(r->scanner, U'.')) {
+	if (advance_input_if(r->scanner, is_equal, &dot)) {
 		tail = read_next(r);
 
 	} else {

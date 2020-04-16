@@ -9,12 +9,14 @@ typedef struct block {
 
 /**
  * An interface to a stream of data. So long as there is data
- * remaining, calls to next_block will return a non-empty block
- * of data filled with the available content of the stream. When
- * the stream is complete, next_block should return NULL.
+ * remaining in the stream, calls to next_block should return a
+ * non-empty block filled with the next available bytes of the.
  *
- * The caller should always call free_block when they are done
- * with it, so that the stream knows it may clean up any
+ * When the stream is complete, next_block should return NULL.
+ *
+ * For every block obtained from next_block, the caller should
+ * call free_block when they are done with it and before
+ * calling close so that the stream knows it may clean up any
  * resources associated with the block.
  *
  * The caller should always call close when they are done with a
@@ -45,25 +47,25 @@ typedef struct page {
 
 typedef struct cursor {
 	page* page;
+	UChar* address;
+	int64_t size;
 	int64_t position;
-	UChar* pointer;
 } cursor;
 
 typedef struct scanner {
+	cursor next;
 	cursor input;
 	cursor buffer;
 
 	UChar32 next_character;
-	cursor next_input;
 
 	stream* stream;
 } scanner;
 
 const UChar32 MALFORMED = 0xE000;
-const UChar32 PENDING = 0xE001;
-const UChar32 EOS = 0xE002;
+const UChar32 EOS = 0xE001;
 
-void open_scanner(stream* b);
+scanner* open_scanner(stream* s);
 
 void close_scanner(scanner* s);
 
@@ -71,9 +73,9 @@ int64_t input_position(scanner* s);
 
 int64_t buffer_position(scanner* s);
 
-int64_t advance_input_while(scanner* s, void* context, bool (*condition)(UChar32 c, void* context));
+int64_t advance_input_while(scanner* s, bool (*condition)(UChar32 c, void* context), void* context);
 
-bool advance_input_if(scanner* s, void* context, bool (*condition)(UChar32 c, void* context));
+bool advance_input_if(scanner* s, bool (*condition)(UChar32 c, void* context), void* context);
 
 int64_t take_buffer_to(scanner* s, int64_t p, UChar* t);
 
