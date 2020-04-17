@@ -13,8 +13,8 @@
 
 sexpr *sexpr_init(sexpr_type type, int32_t payload_size) {
 	sexpr *expr = malloc(sizeof(sexpr) + payload_size);
-	expr->type=type;
-	expr->ref_count = ATOMIC_VAR_INIT(1);
+	*(sexpr_type*)&expr->type = (const sexpr_type)type;
+	*(_Atomic(int32_t)*)&expr->ref_count = ATOMIC_VAR_INIT(1);
 
 	return expr;
 }
@@ -25,21 +25,16 @@ sexpr* sexpr_regular_symbol(const UChar* nspace, const UChar* name) {
 	int i = u_strlen(nspace);
 	int j = u_strlen(name);
 
-	sexpr* expr = sexpr_empty_symbol(i, j);
+	sexpr *expr = sexpr_init(SYMBOL, sizeof(UChar) * (i + j + 2));
 	UChar *payload = (UChar*)(expr + 1);
+
+	payload[i] = U'\0';
+	payload[i + 1 + j] = U'\0';
 
 	u_strcpy(payload, nspace);
 	u_strcpy(payload + i + 1, name);
 
 	return expr;
-}
-
-sexpr* sexpr_unicode_hex_symbol(const UChar* name) {
-	int32_t cp;
-	if (u_sscanf(name, "%04x", &cp) == EOF) {
-		return sexpr_regular_symbol(unicode_nspace, name);
-	}
-	return sexpr_unicode_codepoint_symbol(cp);
 }
 
 sexpr* sexpr_unicode_codepoint_symbol(const UChar32 cp) {
@@ -51,24 +46,22 @@ sexpr* sexpr_unicode_codepoint_symbol(const UChar32 cp) {
 	return s;
 }
 
+sexpr* sexpr_unicode_hex_symbol(const UChar* name) {
+	UChar32 cp;
+	if (u_sscanf(name, "%04x", &cp) == EOF) {
+		return sexpr_regular_symbol(unicode_nspace, name);
+	}
+	return sexpr_unicode_codepoint_symbol(cp);
+}
+
 sexpr* sexpr_symbol(const UChar* nspace, const UChar* name) {
-	if (strcmp32(unicode_nspace, nspace)) {
+	if (u_strcmp(unicode_nspace, nspace)) {
 		return sexpr_unicode_hex_symbol(name);
 	}
 	return sexpr_regular_symbol(nspace, name);
 }
 
-sexpr *sexpr_empty_symbol(int32_t nslen, int32_t nlen) {
-	sexpr *expr = sexpr_init(SYMBOL, sizeof(UChar) * (nslen + nlen + 2));
-	UChar *payload = (UChar*)(expr + 1);
-
-	payload[nslen] = U'\0';
-	payload[nslen + 1 + nlen] = U'\0';
-
-	return expr;
-}
-
-sexpr *sexpr_cons(sexpr *car, sexpr *cdr) {
+sexpr *sexpr_cons(const sexpr *car, const sexpr *cdr) {
 	if (car->type == CHARACTER && cdr->type == STRING) {
 		// prepend car to string repr.
 		return NULL;
@@ -80,26 +73,26 @@ sexpr *sexpr_cons(sexpr *car, sexpr *cdr) {
 	payload->car = car;
 	payload->cdr = cdr;
 
-	car->ref_count++;
-	cdr->ref_count++;
+	((sexpr*)car)->ref_count++;
+	((sexpr*)cdr)->ref_count++;
 
 	return expr;
 }
 
-sexpr *sexpr_car(sexpr *expr) {
+sexpr *sexpr_car(const sexpr *expr) {
 	cons *payload = (cons*)(expr + 1);
 
-	sexpr *car = payload->car;
-	car->ref_count++;
+	sexpr *car = (sexpr*)payload->car;
+	(*(_Atomic(int32_t)*)&car->ref_count)++;
 
 	return car;
 }
 
-sexpr *sexpr_cdr(sexpr *expr) {
+sexpr *sexpr_cdr(const sexpr *expr) {
 	cons *payload = (cons*)(expr + 1);
 
-	sexpr *cdr = payload->cdr;
-	cdr->ref_count++;
+	sexpr *cdr = (sexpr*)payload->cdr;
+	(*(_Atomic(int32_t)*)&cdr->ref_count)++;
 
 	return cdr;
 }
@@ -109,8 +102,8 @@ void sexpr_free(sexpr *expr) {
 		switch (expr->type) {
 		case CONS:;
 			cons *payload = (cons*)(expr + 1);
-			sexpr_free(payload->car);
-			sexpr_free(payload->cdr);
+			sexpr_free((sexpr*)payload->car);
+			sexpr_free((sexpr*)payload->cdr);
 			break;
 		case SYMBOL:
 		case STRING:
@@ -171,10 +164,10 @@ void sexpr_elem_dump(sexpr* s) {
 		free(mbr);
 		break;
 	case CHARACTER:
-		printf("<char>");
+		u_printf("%04x", *(UChar32*)(s + 1));
 		break;
 	case INTEGER:
-		printf("%li", (long)(s + 1));
+		printf("%li", *(long*)(s + 1));
 	}
 }
 

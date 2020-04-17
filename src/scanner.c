@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <uchar.h>
 #include <unicode/utf.h>
@@ -21,10 +22,6 @@ scanner* open_scanner(stream* s) {
 	sc->next.address = NULL;
 	sc->input.address = NULL;
 	sc->buffer.address = NULL;
-
-	sc->next.size = 0;
-	sc->input.size = 0;
-	sc->buffer.size = 0;
 
 	sc->next.position = 0;
 	sc->input.position = 0;
@@ -53,31 +50,34 @@ void prepare_next_address(scanner* s) {
 		}
 		if (s->input.page != NULL) {
 			s->input.page->next = s->next.page;
+		} else {
+			s->input.page = s->next.page;
+			s->input.address = s->input.page->block->start;
+			s->buffer.page = s->next.page;
+			s->buffer.address = s->buffer.page->block->start;
 		}
 	}
 }
 
 UChar advance_next_address(scanner* s) {
-	if (s->next.address == NULL) {
-		return EOF;
-	}
 	UChar c = *s->next.address;
-	s->next.size++;
+	s->next.position++;
 	s->next.address++;
 	if (s->next.address == s->next.page->block->end) {
 		s->next.page = NULL;
 		s->next.address = NULL;
 	}
+	return c;
 }
 
 void prepare_next_character(scanner* s) {
 	if (s->next.position != s->input.position) {
 		return;
 	}
-	s->next.position++;
 
 	prepare_next_address(s);
 	if (s->next.address == NULL) {
+		s->next.position++;
 		s->next_character = EOS;
 		return;
 	}
@@ -94,6 +94,7 @@ void prepare_next_character(scanner* s) {
 
 	prepare_next_address(s);
 	if (s->next.address == NULL) {
+		s->next.position++;
 		s->next_character = MALFORMED;
 		return;
 	}
@@ -106,8 +107,8 @@ void advance_next_character(scanner* s) {
 	s->input = s->next;
 }
 
-int64_t advance_input_while(scanner* s, bool (*condition)(UChar32 c, void* v), void* context) {
-	int64_t from = s->input.size;
+int64_t advance_input_while(scanner* s, bool (*condition)(UChar32 c, const void* v), const void* context) {
+	int64_t from = s->input.position;
 	prepare_next_character(s);
 	while (s->next_character != EOS &&
 			s->next_character != MALFORMED &&
@@ -115,10 +116,10 @@ int64_t advance_input_while(scanner* s, bool (*condition)(UChar32 c, void* v), v
 		advance_next_character(s);
 		prepare_next_character(s);
 	}
-	return s->input.size - from;
+	return s->input.position - from;
 }
 
-bool advance_input_if(scanner* s, bool (*condition)(UChar32 c, void* v), void* context) {
+bool advance_input_if(scanner* s, bool (*condition)(UChar32 c, const void* v), const void* context) {
 	prepare_next_character(s);
 	if (s->next_character != EOS &&
 			s->next_character != MALFORMED &&
@@ -130,51 +131,81 @@ bool advance_input_if(scanner* s, bool (*condition)(UChar32 c, void* v), void* c
 	}
 }
 
-int64_t take_buffer_to(scanner* h, int64_t p, UChar* s) {
-	string_handle* sh = (string_handle*)(h + 1);
-
-	if (p > sh->input_pos) {
-		p = sh->input_pos;
+bool advance_buffer_page(scanner* s) {
+	if (s->buffer.page == s->input.page) {
+		return false;
 	}
-	int64_t size = p - sh->buffer_pos;
-	sh->buffer_pos = p;
-	for (int j = 0; j < size; j++) {
-		sh->buffer += mbrtoc32(s + j, sh->buffer, MB_CUR_MAX, NULL);
+	s->stream->free_block(s->stream, s->buffer.page->block);
+	page* next = s->buffer.page->next;
+	free(s->buffer.page);
+	s->buffer.page = next;
+	if (s->buffer.page->block != NULL) {
+		s->buffer.address = s->buffer.page->block->start;
+	} else {
+		s->buffer.address = NULL;
+	}
+	return true;
+}
+
+int64_t take_buffer_to(scanner* s, int64_t p, UChar* b) {
+	int64_t size = p - s->buffer.position;
+	if (p > s->input.position) {
+		p = s->input.position;
+	}
+	if (size < 0) {
+		return size;
+	}
+	int64_t remaining = size;
+	int64_t available = s->buffer.page->block->end - s->buffer.address;
+	while (available < remaining) {
+		memcpy(b, s->buffer.address, available * sizeof(UChar));
+		b += available;
+		remaining -= available;
+		
+		advance_buffer_page(s);
+		available = s->buffer.page->block->end - s->buffer.address;
+	}
+	memcpy(b, s->buffer.address, remaining * sizeof(UChar));
+	b += remaining;
+	s->buffer.address += remaining;
+	s->buffer.position = p;
+	return size;
+}
+
+int64_t take_buffer_length(scanner* s, int64_t l, UChar* b) {
+	return take_buffer_to(s, buffer_position(s) + l, b);
+}
+
+int64_t take_buffer(scanner* s, UChar* b) {
+	return take_buffer_to(s, input_position(s), b);
+}
+
+int64_t discard_buffer_to(scanner* s, int64_t p) {
+	int64_t size = p - s->buffer.position;
+	if (p > s->input.position) {
+		p = s->input.position;
+	}
+	if (size < 0) {
+		return size;
+	}
+	int64_t remaining = size;
+	int64_t available = s->buffer.page->block->end - s->buffer.address;
+	while (available < remaining) {
+		remaining -= available;
+		advance_buffer_page(s);
+		available = s->buffer.page->block->end - s->buffer.address;
 	}
 	return size;
 }
 
-int64_t take_buffer_length(scanner* h, int64_t l, UChar* s) {
-	return take_buffer_to(h, buffer_position(h) + l, s);
+int64_t discard_buffer_length(scanner* s, int64_t l) {
+	return discard_buffer_to(s, buffer_position(s) + l);
 }
 
-int64_t take_buffer(scanner* h, UChar* s) {
-	return take_buffer_to(h, input_position(h), s);
-}
-
-int64_t discard_buffer_to(scanner* h, int64_t p) {
-	string_handle* sh = (string_handle*)(h + 1);
-
-	if (p > sh->input_pos) {
-		p = sh->input_pos;
-	}
-	int64_t size = p - sh->buffer_pos;
-	sh->buffer_pos = p;
-	for (int j = 0; j < size; j++) {
-		sh->buffer += mbrtoc32(NULL, sh->buffer, MB_CUR_MAX, NULL);
-	}
-	return size;
-}
-
-int64_t discard_buffer_length(scanner* h, int64_t l) {
-	return discard_buffer_to(h, buffer_position(h) + l);
-}
-
-int64_t discard_buffer(scanner* h) {
-	string_handle* sh = (string_handle*)(h + 1);
-	int64_t size = sh->input_pos - sh->buffer_pos;
-	sh->buffer = sh->input;
-	sh->buffer_pos = sh->input_pos;
+int64_t discard_buffer(scanner* s) {
+	int64_t size = s->input.position - s->buffer.position;
+	while (advance_buffer_page(s));
+	s->buffer = s->input;
 	return size;
 }
 
@@ -182,15 +213,65 @@ void close_scanner(scanner* h) {
 	free(h);
 }
 
-buffer* open_string_buffer(char* s) {
-	scanner* h = malloc(sizeof(scanner) + sizeof(string_handle));
-	h->vtable = vtable;
-	string_handle* sh = (string_handle*)(h + 1);
-	sh->input = s;
-	sh->input_pos = 0;
-	sh->buffer = s;
-	sh->buffer_pos = 0;
-
-	return h;
+void close_stream(stream* s) {
+	s->close(s);
 }
 
+typedef struct ustring_stream {
+	UChar* start;
+	UChar* end;
+} ustring_stream;
+
+block* next_ustring_block(stream* ss) {
+	ustring_stream* uss = (ustring_stream*)(ss + 1);
+
+	if (uss->start == NULL) {
+		return NULL;
+	}
+
+	if (uss->end == NULL) {
+		uss->end = uss->start;
+		while (*uss->end != u'\0') {
+			uss->end++;
+		}
+	}
+
+	block* b = malloc(sizeof(block));
+	b->start = uss->start;
+	b->end = uss->end;
+
+	uss->start = NULL;
+
+	return b;
+}
+
+void free_ustring_block(stream* s, block* b) {
+	free(b);
+}
+
+void close_ustring_stream(stream* s) {
+	free(s);
+}
+
+stream* open_ustring_stream(UChar* s) {
+	stream* ss = malloc(sizeof(stream) + sizeof(ustring_stream));
+	ustring_stream* uss = (ustring_stream*)(ss + 1);
+
+	ss->next_block = next_ustring_block;
+	ss->free_block = free_ustring_block;
+	ss->close = close_ustring_stream;
+
+	uss->start = s;
+	uss->end = NULL;
+
+	return ss;
+}
+
+stream* open_nustring_stream(UChar* s, int64_t l) {
+	stream* ss = open_ustring_stream(s);
+	ustring_stream* uss = (ustring_stream*)(ss + 1);
+
+	uss->end = s + l;
+
+	return ss;
+}

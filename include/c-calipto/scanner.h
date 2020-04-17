@@ -36,6 +36,8 @@ stream* open_ustring_stream(UChar* s);
 stream* open_nustring_stream(UChar* s, int64_t l);
 stream* open_stdin_stream();
 
+void close_stream(stream* s);
+
 /*
  * Scanners
  */
@@ -48,7 +50,6 @@ typedef struct page {
 typedef struct cursor {
 	page* page;
 	UChar* address;
-	int64_t size;
 	int64_t position;
 } cursor;
 
@@ -73,9 +74,9 @@ int64_t input_position(scanner* s);
 
 int64_t buffer_position(scanner* s);
 
-int64_t advance_input_while(scanner* s, bool (*condition)(UChar32 c, void* context), void* context);
+int64_t advance_input_while(scanner* s, bool (*condition)(UChar32 c, const void* context), const void* context);
 
-bool advance_input_if(scanner* s, bool (*condition)(UChar32 c, void* context), void* context);
+bool advance_input_if(scanner* s, bool (*condition)(UChar32 c, const void* context), const void* context);
 
 int64_t take_buffer_to(scanner* s, int64_t p, UChar* t);
 

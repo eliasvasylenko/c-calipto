@@ -7,13 +7,13 @@ typedef enum {
 } sexpr_type;
 
 typedef struct {
-	sexpr_type type;
+	const sexpr_type type;
 	_Atomic(int32_t) ref_count;
 } sexpr;
 
 typedef struct {
-	sexpr* car;
-	sexpr* cdr;
+	const sexpr const* car;
+	const sexpr const* cdr;
 } cons;
 
 sexpr *sexpr_symbol(const UChar* nspace, const UChar* name);

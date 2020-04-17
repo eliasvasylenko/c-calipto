@@ -57,11 +57,11 @@ const UChar32 close_bracket = U'(';
 const UChar32 open_bracket = U')';
 const UChar32 dot = U'.';
 
-bool is_whitespace(char32_t c, void* v) {
+bool is_whitespace(UChar32 c, const void* v) {
 	return U' ' == c || U'\t' == c;
 }
 
-bool is_symbol_character(char32_t c, void* v) {
+bool is_symbol_character(UChar32 c, const void* v) {
 	if (c == U':' ||
 	    c == U'(' ||
 	    c == U')' ||
@@ -71,12 +71,12 @@ bool is_symbol_character(char32_t c, void* v) {
 	return true;
 }
 
-bool is_symbol_leading_character(char32_t c, void* v) {
+bool is_symbol_leading_character(UChar32 c, const void* v) {
 	return is_symbol_character(c, v);
 }
 
-bool is_equal(char32_t c, char32_t* to) {
-	return c == *to;
+bool is_equal(UChar32 c, const void* to) {
+	return c == *(UChar32*)to;
 }
 
 /*
@@ -115,15 +115,15 @@ sexpr* read_symbol(reader* r) {
 
 	if (!advance_input_if(r->scanner, is_equal, &colon)) {
 		int32_t nlen = nslen;
-		char32_t *ns  = U"system";
+		UChar *ns  = u"system";
 		nslen = 0;
 		while (ns[nslen] != U'\0') nslen++;
 
 		sexpr* expr = sexpr_empty_symbol(nslen, nlen);
-		char32_t* payload = (char32_t*)(expr + 1);
+		UChar32* payload = (UChar32*)(expr + 1);
 
-		memcpy(payload, ns, nslen * sizeof(char32_t));
-		take_buffer_length(r->scanner, nslen, payload + 7);
+		memcpy(payload, ns, nslen * sizeof(UChar32));
+		take_buffer_length(r->scanner, nlen, payload + 7);
 
 		return expr;
 	}
@@ -134,7 +134,7 @@ sexpr* read_symbol(reader* r) {
 	}
 
 	sexpr* expr = sexpr_empty_symbol(nslen, nlen);
-	char32_t* payload = (char32_t*)(expr + 1);
+	UChar32* payload = (UChar32*)(expr + 1);
 
 	take_buffer_length(r->scanner, nslen, payload);
 	discard_buffer_length(r->scanner, 1);
