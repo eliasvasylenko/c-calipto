@@ -7,8 +7,10 @@
 #include <unicode/utypes.h>
 #include <unicode/uchar.h>
 #include <unicode/umachine.h>
+#include <unicode/ucnv.h>
 
 #include <c-calipto/sexpr.h>
+#include <c-calipto/stream.h>
 #include <c-calipto/scanner.h>
 #include <c-calipto/reader.h>
 
@@ -116,14 +118,13 @@ sexpr* read_symbol(reader* r) {
 	if (!advance_input_if(r->scanner, is_equal, &colon)) {
 		int32_t nlen = nslen;
 		UChar *ns  = u"system";
-		nslen = 0;
-		while (ns[nslen] != U'\0') nslen++;
 
-		sexpr* expr = sexpr_empty_symbol(nslen, nlen);
-		UChar32* payload = (UChar32*)(expr + 1);
+		UChar* n = malloc(sizeof(UChar) * nlen);
+		take_buffer_length(r->scanner, nlen, n);
 
-		memcpy(payload, ns, nslen * sizeof(UChar32));
-		take_buffer_length(r->scanner, nlen, payload + 7);
+		sexpr* expr = sexpr_nusymbol(u_strlen(ns), ns, nlen, n);
+
+		free(n);
 
 		return expr;
 	}
@@ -133,12 +134,15 @@ sexpr* read_symbol(reader* r) {
 		nlen = 0;
 	}
 
-	sexpr* expr = sexpr_empty_symbol(nslen, nlen);
-	UChar32* payload = (UChar32*)(expr + 1);
+	UChar* ns = malloc(sizeof(UChar) * nslen);
+	take_buffer_length(r->scanner, nslen, ns);
 
-	take_buffer_length(r->scanner, nslen, payload);
 	discard_buffer_length(r->scanner, 1);
-	take_buffer_length(r->scanner, nlen, payload + nslen + 1);
+
+	UChar* n = malloc(sizeof(UChar) * nlen);
+	take_buffer_length(r->scanner, nlen, n);
+
+	sexpr* expr = sexpr_nusymbol(nslen, ns, nlen, n);
 
 	return expr;
 }
@@ -174,7 +178,7 @@ sexpr* read_step_out(reader* r) {
 	if (advance_input_if(r->scanner, is_equal, &close_bracket)) {
 		discard_buffer(r->scanner);
 
-		return sexpr_symbol(U"system", U"nil");
+		return sexpr_usymbol(u"system", u"nil");
 	}
 
 	sexpr* head = read_next(r);

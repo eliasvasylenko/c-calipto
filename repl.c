@@ -3,13 +3,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <uchar.h>
+#include <locale.h>
 
 #include <uchar.h>
 #include <unicode/utypes.h>
 #include <unicode/uchar.h>
 #include <unicode/umachine.h>
+#include <unicode/ucnv.h>
 
 #include "c-calipto/sexpr.h"
+#include "c-calipto/stream.h"
 #include "c-calipto/scanner.h"
 #include "c-calipto/reader.h"
 
@@ -18,16 +21,13 @@ bool always(char32_t c) {
 }
 
 int main(int argc, char** argv) {
-	sexpr* args = sexpr_symbol(u"system", u"nil");
-	for (int i = argc - 1; i >= 0; i--) {
-		stream* st = open_string_stream(argv[i]);
-		scanner* sc = open_scanner(st);
-		reader* r = open_reader(sc);
-		sexpr* arg = read(r);
-		close_reader(r);
-		close_scanner(sc);
-		close_stream(st);
+	setlocale(LC_ALL, "");
+	UErrorCode error = 0;
+	UConverter* char_conv = ucnv_open(NULL, &error);
 
+	sexpr* args = sexpr_nil();
+	for (int i = argc - 1; i >= 0; i--) {
+		sexpr* arg = sexpr_string(char_conv, argv[i]);
 		sexpr* rest = args;
 
 		args = sexpr_cons(arg, rest);
@@ -53,5 +53,7 @@ int main(int argc, char** argv) {
 	// TODO evaluate bootstrap file
 
 	sexpr_free(args);
+
+	ucnv_close(char_conv);
 	return 0;
 }
