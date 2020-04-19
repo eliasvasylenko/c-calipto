@@ -5,7 +5,7 @@ typedef struct page {
 
 typedef struct cursor {
 	page* page;
-	UChar* address;
+	const UChar* address;
 	int64_t position;
 } cursor;
 

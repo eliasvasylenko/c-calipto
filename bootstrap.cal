@@ -1,0 +1,2 @@
+(lang:lambda (args cont print exit) (print "Hello, world!" cont))
+

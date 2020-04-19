@@ -1,4 +1,4 @@
-typedef enum {
+typedef enum sexpr_type {
 	CONS,
 	SYMBOL,
 	STRING,
@@ -7,12 +7,12 @@ typedef enum {
 	NIL
 } sexpr_type;
 
-typedef struct {
+typedef struct sexpr {
 	const sexpr_type type;
 	_Atomic(int32_t) ref_count;
 } sexpr;
 
-typedef struct {
+typedef struct cons {
 	const sexpr const* car;
 	const sexpr const* cdr;
 } cons;

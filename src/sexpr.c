@@ -187,25 +187,44 @@ void sexpr_free(sexpr *expr) {
 	}
 }
 
+void sexpr_elem_dump(const sexpr* s);
+
+void sexpr_tail_dump(const sexpr* s) {
+	switch (s->type) {
+	case NIL:
+		printf(")");
+		break;
+	case CONS:
+		printf(" ");
+		cons c = *(cons*)(s + 1);
+		sexpr_elem_dump(c.car);
+		sexpr_tail_dump(c.cdr);
+		break;
+	default:
+		printf(" . ");
+		sexpr_elem_dump(s);
+		printf(")");
+		break;
+	}
+}
+
 void sexpr_elem_dump(const sexpr* s) {
 	UChar *string_payload;
 
 	switch (s->type) {
 	case CONS:;
-		printf("(");
 		sexpr* car = sexpr_car(s);
-		sexpr_elem_dump(car);
-		sexpr_free(car);
-		printf(" . ");
 		sexpr* cdr = sexpr_cdr(s);
-		sexpr_elem_dump(cdr);
+		printf("(");
+		sexpr_elem_dump(car);
+		sexpr_tail_dump(cdr);
+		sexpr_free(car);
 		sexpr_free(cdr);
-		printf(")");
 		break;
 	case SYMBOL:
 		string_payload = (UChar*)(s + 1);
-		string_payload += 1 + u_printf_u(u"|%s|:", string_payload);
-		u_printf_u(u"|%S|", string_payload);
+		string_payload += 1 + u_printf_u(u"%S", string_payload);
+		u_printf_u(u":%S", string_payload);
 		break;
 	case STRING:;
 		string_payload = (UChar*)(s + 1);
@@ -218,7 +237,7 @@ void sexpr_elem_dump(const sexpr* s) {
 		printf("%li", *(long*)(s + 1));
 		break;
 	case NIL:
-		printf("lang:nil");
+		printf("()");
 		break;
 	}
 }

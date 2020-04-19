@@ -10,6 +10,7 @@
 #include <unicode/uchar.h>
 #include <unicode/umachine.h>
 #include <unicode/ucnv.h>
+#include <unicode/ustdio.h>
 
 #include "c-calipto/sexpr.h"
 #include "c-calipto/stream.h"
@@ -38,17 +39,19 @@ int main(int argc, char** argv) {
 
 	sexpr_dump(args);
 
-	FILE* f = fopen("./bootstrap.cal", "r");
+	UFILE* f = u_fopen("./bootstrap.cal", "r", NULL, NULL);
 	stream* st = open_file_stream(f);
 	scanner* sc = open_scanner(st);
 	reader* r = open_reader(sc);
 
-	;
+	sexpr* e = read(r);
+	sexpr_dump(e);
+	sexpr_free(e);
 
 	close_reader(r);
 	close_scanner(sc);
 	close_stream(st);
-	fclose(f);
+	u_fclose(f);
 
 	// TODO evaluate bootstrap file
 

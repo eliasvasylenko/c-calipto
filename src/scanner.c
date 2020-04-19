@@ -9,6 +9,7 @@
 #include <unicode/utypes.h>
 #include <unicode/uchar.h>
 #include <unicode/umachine.h>
+#include <unicode/ustdio.h>
 
 #include "c-calipto/stream.h"
 #include "c-calipto/scanner.h"
@@ -18,6 +19,8 @@ const UChar32 EOS = 0xE001;
 
 scanner* open_scanner(stream* s) {
 	scanner* sc = malloc(sizeof(scanner));
+
+	sc->stream = s;
 	
 	sc->next.page = NULL;
 	sc->input.page = NULL;
@@ -55,10 +58,8 @@ void prepare_next_address(scanner* s) {
 		if (s->input.page != NULL) {
 			s->input.page->next = s->next.page;
 		} else {
-			s->input.page = s->next.page;
-			s->input.address = s->input.page->block->start;
-			s->buffer.page = s->next.page;
-			s->buffer.address = s->buffer.page->block->start;
+			s->input = s->next;
+			s->buffer = s->next;
 		}
 	}
 }
@@ -199,6 +200,8 @@ int64_t discard_buffer_to(scanner* s, int64_t p) {
 		advance_buffer_page(s);
 		available = s->buffer.page->block->end - s->buffer.address;
 	}
+	s->buffer.address += remaining;
+	s->buffer.position = p;
 	return size;
 }
 

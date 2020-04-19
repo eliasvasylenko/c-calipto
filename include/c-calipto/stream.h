@@ -1,6 +1,6 @@
 typedef struct block {
-	UChar* start;
-	UChar* end;
+	const UChar* start;
+	const UChar* end;
 } block;
 
 /**
@@ -25,11 +25,11 @@ typedef struct stream {
 	void (*close)(struct stream* b);
 } stream;
 
-stream* open_file_stream(FILE* f);
-stream* open_string_stream(char* s);
-stream* open_nstring_stream(char* s, int64_t l);
-stream* open_ustring_stream(UChar* s);
-stream* open_nustring_stream(UChar* s, int64_t l);
+stream* open_file_stream(UFILE* f);
+stream* open_string_stream(const char* s);
+stream* open_nstring_stream(const char* s, int64_t l);
+stream* open_ustring_stream(const UChar* s);
+stream* open_nustring_stream(const UChar* s, int64_t l);
 stream* open_stdin_stream();
 
 void close_stream(stream* s);
