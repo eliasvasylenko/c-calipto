@@ -1,2 +1,31 @@
 (lang:lambda (args cont print exit) (print "Hello, world!" cont))
 
+(define recur (lambda (f) (f f)))
+
+(lambda (read eval print exit)
+  (recur (lambda (loop)
+    (read (lambda (input)
+      (eval input (lambda (output)
+        (print output loop))
+       exit))
+     exit))))
+
+
+
+(define perform (lambda (effect args stack continue fail)
+  (des stack (lambda (top tail)
+    (des top (lambda (top-name top-effect)
+      (eq top-name effect
+        (lambda () (top-effect args continue))
+        (lambda ()
+          (perform
+            effect
+            args
+            tail
+            (lambda (x tail-post)
+              (cons top tail-post (lambda (stack-post)
+                (continue x stack-post))))
+            fail))))
+     fail))
+   fail)))
+
