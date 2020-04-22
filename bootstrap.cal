@@ -10,13 +10,11 @@
        exit))
      exit))))
 
-
-
 (define perform (lambda (effect args stack continue fail)
   (des stack (lambda (top tail)
-    (des top (lambda (top-name top-effect)
-      (eq top-name effect
-        (lambda () (top-effect args continue))
+    (des top (lambda (top-effect top-handler)
+      (eq top-effect effect
+        (lambda () (top-handler args continue))
         (lambda ()
           (perform
             effect
@@ -29,3 +27,35 @@
      fail))
    fail)))
 
+(define handle (lambda (effect handler stack cont)
+  (cons effect handler (lambda (top)
+    (cons top stack (lambda (stack-post)
+      (cont stack-post)))))))
+
+(define handle-exit (lambda (exit stack cont)
+  (handle 'exit (lambda (args cont) (exit)) stack cont)
+
+(define handle-eval (lambda (eval stack cont)
+  (handle
+    'eval
+    (lambda (args cont)
+      (des args (lambda (expression args)
+        (des args (lambda (fail args)
+          (eval args (lambda (result)
+            (handle-eval eval stack (lambda (stack-post)
+              (cont result stack-post))))
+            fail))
+          fail))
+        fail))
+    stack
+    cont)
+
+(lambda (read eval print exit)
+  (handle-exit exit () (lambda (stack)
+    (handle-eval eval stack (lambda (stack)
+      (handle-io read stack (lambda (stack)
+        (read (lambda (input)
+          (eval input (lambda (output)
+          (print output loop))
+            exit))
+          exit))))
