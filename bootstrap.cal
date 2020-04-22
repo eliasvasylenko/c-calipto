@@ -2,6 +2,8 @@
 
 (define recur (lambda (f) (f f)))
 
+(define id (lambda (x c) (c x)))
+
 (lambda (read eval print exit)
   (recur (lambda (loop)
     (read (lambda (input)
@@ -67,13 +69,27 @@
         cont)))))
 
 (define repl (lambda (stack)
-  (perform 'read () stack (lambda (input stack)
-    (cons exit () (lambda (args)
-      (cons input args (lambda (args)
-        (perform 'eval args (lambda (output)
-          (print output loop))
-      exit))
-    exit)))))))
+  (perform
+    'read
+    ()
+    stack
+    (lambda (input stack)
+      (id () (lambda (args)
+        (cons exit args (lambda (args)
+          (cons input args (lambda (args)
+            (perform
+                'eval
+                args
+                stack
+                (lambda (output stack)
+                  (perform
+                    'print
+                    output
+                    stack
+                    loop
+                    fail))
+                exit))))))))
+    exit)))
 
 (lambda (read eval print exit)
   (id () (lambda (stack)

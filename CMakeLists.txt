@@ -11,7 +11,7 @@ project(c-calipto VERSION 0.1
 configure_file(src/c-calipto.h.in c-calipto.h)
 
 # add the executable
-add_executable(calipto repl.c src/reader.c src/scanner.c src/stream.c src/sexpr.c)
+add_executable(calipto repl.c src/reader.c src/scanner.c src/stream.c src/sexpr.c src/interpreter.c)
 
 set_property(TARGET calipto PROPERTY C_STANDARD 11)
 
