@@ -33,7 +33,7 @@
       (cont stack-post)))))))
 
 (define handle-exit (lambda (exit stack cont)
-  (handle 'exit (lambda (args cont) (exit)) stack cont)
+  (handle 'exit (lambda (args cont) (exit)) stack cont)))
 
 (define handle-eval (lambda (eval stack cont)
   (handle
@@ -48,14 +48,35 @@
           fail))
         fail))
     stack
-    cont)
+    cont)))
+
+(define handle-io (lambda (read print stack cont)
+  (handle
+    'read
+    (lambda (args cont)
+      (read (lambda (input)
+        (cont input stack))))
+    stack
+    (lambda (stack)
+      (handle
+        'print
+        (lambda (args cont)
+          (write args (lambda ()
+            (cont stack))))
+        stack
+        cont)))))
+
+(define repl (lambda (stack)
+  (perform 'read () stack (lambda (input stack)
+    (cons exit () (lambda (args)
+      (cons input args (lambda (args)
+        (perform 'eval args (lambda (output)
+          (print output loop))
+      exit))
+    exit)))))))
 
 (lambda (read eval print exit)
-  (handle-exit exit () (lambda (stack)
-    (handle-eval eval stack (lambda (stack)
-      (handle-io read stack (lambda (stack)
-        (read (lambda (input)
-          (eval input (lambda (output)
-          (print output loop))
-            exit))
-          exit))))
+  (id () (lambda (stack)
+    (handle-exit exit stack (lambda (stack)
+      (handle-eval eval stack (lambda (stack)
+        (handle-io read print stack repl))))))))
