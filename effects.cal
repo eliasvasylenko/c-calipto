@@ -1,0 +1,85 @@
+(define perform (lambda (effect args stack continue fail)
+  (des stack (lambda (top tail)
+    (des top (lambda (top-effect top-handler)
+      (eq top-effect effect
+        (lambda () (top-handler args continue))
+        (lambda ()
+          (perform
+            effect
+            args
+            tail
+            (lambda (x tail-post)
+              (cons top tail-post (lambda (stack-post)
+                (continue x stack-post))))
+            fail))))
+     fail))
+   fail)))
+
+(define handle (lambda (effect handler stack cont)
+  (cons effect handler (lambda (top)
+    (cons top stack (lambda (stack-post)
+      (cont stack-post)))))))
+
+(define handle-exit (lambda (exit stack cont)
+  (handle 'exit (lambda (args cont) (exit)) stack cont)))
+
+(define handle-eval (lambda (eval stack cont)
+  (handle
+    'eval
+    (lambda (args cont)
+      (des args (lambda (expression args)
+        (des args (lambda (fail args)
+          (eval args (lambda (result)
+            (handle-eval eval stack (lambda (stack-post)
+              (cont result stack-post))))
+            fail))
+          fail))
+        fail))
+    stack
+    cont)))
+
+(define handle-io (lambda (read print stack cont)
+  (handle
+    'read
+    (lambda (args cont)
+      (read (lambda (input)
+        (cont input stack))))
+    stack
+    (lambda (stack)
+      (handle
+        'print
+        (lambda (args cont)
+          (write args (lambda ()
+            (cont stack))))
+        stack
+        cont)))))
+
+(define repl (lambda (stack)
+  (perform
+    'read
+    ()
+    stack
+    (lambda (input stack)
+      (id () (lambda (args)
+        (cons exit args (lambda (args)
+          (cons input args (lambda (args)
+            (perform
+                'eval
+                args
+                stack
+                (lambda (output stack)
+                  (perform
+                    'print
+                    output
+                    stack
+                    loop
+                    fail))
+                exit))))))))
+    exit)))
+
+(lambda (read eval print exit)
+  (id () (lambda (stack)
+    (handle-exit exit stack (lambda (stack)
+      (handle-eval eval stack (lambda (stack)
+        (handle-io read print stack repl))))))))
+

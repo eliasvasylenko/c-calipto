@@ -1,100 +1,22 @@
-(lang:lambda (args cont print exit) (print "Hello, world!" cont))
+((data:lambda (
 
-(cons des eq scan )
-
-(define recur (lambda (f) (f f)))
-
-(define id (lambda (x c) (c x)))
-
-(lambda (read eval print exit)
-  (recur (lambda (loop)
-    (read (lambda (input)
-      (eval input (lambda (output)
-        (print output loop))
-       exit))
-     exit))))
-
-(define perform (lambda (effect args stack continue fail)
-  (des stack (lambda (top tail)
-    (des top (lambda (top-effect top-handler)
-      (eq top-effect effect
-        (lambda () (top-handler args continue))
-        (lambda ()
-          (perform
-            effect
-            args
-            tail
-            (lambda (x tail-post)
-              (cons top tail-post (lambda (stack-post)
-                (continue x stack-post))))
-            fail))))
-     fail))
-   fail)))
-
-(define handle (lambda (effect handler stack cont)
-  (cons effect handler (lambda (top)
-    (cons top stack (lambda (stack-post)
-      (cont stack-post)))))))
-
-(define handle-exit (lambda (exit stack cont)
-  (handle 'exit (lambda (args cont) (exit)) stack cont)))
-
-(define handle-eval (lambda (eval stack cont)
-  (handle
-    'eval
-    (lambda (args cont)
-      (des args (lambda (expression args)
-        (des args (lambda (fail args)
-          (eval args (lambda (result)
-            (handle-eval eval stack (lambda (stack-post)
-              (cont result stack-post))))
-            fail))
-          fail))
-        fail))
-    stack
-    cont)))
-
-(define handle-io (lambda (read print stack cont)
-  (handle
-    'read
-    (lambda (args cont)
-      (read (lambda (input)
-        (cont input stack))))
-    stack
-    (lambda (stack)
-      (handle
-        'print
-        (lambda (args cont)
-          (write args (lambda ()
-            (cont stack))))
-        stack
-        cont)))))
-
-(define repl (lambda (stack)
-  (perform
-    'read
-    ()
-    stack
-    (lambda (input stack)
-      (id () (lambda (args)
-        (cons exit args (lambda (args)
-          (cons input args (lambda (args)
-            (perform
-                'eval
-                args
-                stack
-                (lambda (output stack)
-                  (perform
-                    'print
-                    output
-                    stack
-                    loop
-                    fail))
-                exit))))))))
-    exit)))
-
-(lambda (read eval print exit)
-  (id () (lambda (stack)
-    (handle-exit exit stack (lambda (stack)
-      (handle-eval eval stack (lambda (stack)
-        (handle-io read print stack repl))))))))
+; The bootstrap file is read and evaluated by the runtime before anything else happens.
+; This means that the platform must include some functionality, i.e. to read and evaluate
+; Calipto source files, before that functionality has actually been defined in Calipto.
+;
+; The responsibility of the bootstrap file is to reimplement all of that functionality
+; other than those parts which are given as primitives, and also provide a hook to load
+; and evaluate further source files. This makes the implementation almost completely
+; self-hosted.
+;
+; The bootstrap file is evaluated in a lexical context where symbols of primitive
+; functions and special forms are bound to themselves, and program:args is bound to a
+; list of program argument strings.
+;
+; Implementing a reader means also implementing string utilities, a scanner, etc.
+; Maybe the responsibility shouldn't solely be on this single bootstrap file. Maybe the
+; built-in reader should be used to read in a *set of* bootstrap files.
+;
+; We have no built-in module system, so how do we link together these bootstrap files?
+; How do we define a module system early? Including limiting the scanner to fail on
+; reading non-exported symbols of other packages. We need the macro system first.
