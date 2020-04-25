@@ -1,0 +1,27 @@
+(export
+  (quote perform)
+  (lambda (effect args stack continue fail)
+    (des stack (lambda (top tail)
+      (des top (lambda (top-effect top-handler)
+        (eq top-effect effect
+          (lambda () (top-handler args continue))
+          (lambda ()
+            (perform
+              effect
+              args
+              tail
+                (lambda (x tail-post)
+                (cons top tail-post (lambda (stack-post)
+                  (continue x stack-post))))
+              fail))))
+       fail))
+     fail))
+  continue)
+
+(export
+  (quote handle)
+  (lambda (effect handler stack cont)
+    (cons effect handler (lambda (top)
+      (cons top stack (lambda (stack-post)
+        (cont stack-post))))))
+  continue)

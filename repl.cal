@@ -1,9 +1,63 @@
-((lambda (recur)
-   (recur (lambda (loop)
-     (read (lambda (input)
-       (eval input (lambda (output)
-         (print output loop))
-        exit))
-      exit))))
- (lambda (f) (f f)))
+(define handle-exit (lambda (exit stack cont)
+  (handle (quote exit) (lambda (args cont) (exit)) stack cont)))
+
+(define handle-eval (lambda (eval stack cont)
+  (handle
+    (quote eval)
+    (lambda (args cont)
+      (des args (lambda (expression args)
+        (des args (lambda (fail args)
+          (eval args (lambda (result)
+            (handle-eval eval stack (lambda (stack-post)
+              (cont result stack-post))))
+            fail))
+          fail))
+        fail))
+    stack
+    cont)))
+
+(define handle-io (lambda (read print stack cont)
+  (handle
+    (quote read)
+    (lambda (args cont)
+      (read (lambda (input)
+        (cont input stack))))
+    stack
+    (lambda (stack)
+      (handle
+        (quote print)
+        (lambda (args cont)
+          (write args (lambda ()
+            (cont stack))))
+        stack
+        cont)))))
+
+(define repl (lambda (stack)
+  (perform
+    (quote read)
+    ()
+    stack
+    (lambda (input stack)
+      (id () (lambda (args)
+        (cons exit args (lambda (args)
+          (cons input args (lambda (args)
+            (perform
+                (quote eval)
+                args
+                stack
+                (lambda (output stack)
+                  (perform
+                    (quote print)
+                    output
+                    stack
+                    loop
+                    fail))
+                exit))))))))
+    exit)))
+
+(lambda (read eval print exit)
+  (id () (lambda (stack)
+    (handle-exit exit stack (lambda (stack)
+      (handle-eval eval stack (lambda (stack)
+        (handle-io read print stack repl))))))))
 
