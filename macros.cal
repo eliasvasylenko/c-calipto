@@ -1,0 +1,20 @@
+; macro to hide stack & effect system as hidden first parameter
+
+(define stack-transform (lambda (statement)
+  ())) ; define a macro to transform lambdas?
+
+
+
+
+; macro to perform cps transform
+
+(define cps-transform (lambda (statements)
+  (des statements
+    (lambda (statement rest)
+      ())
+    (lambda ()
+      (perform fail)))))
+
+(define test-macro (lambda (continue)
+  (perform 'read-step-out (lambda ()
+    ()))))
