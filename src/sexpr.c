@@ -169,6 +169,19 @@ sexpr *sexpr_cdr(const sexpr *expr) {
 	return cdr;
 }
 
+bool sexpr_atom(const sexpr* e) {
+	switch (e->type) {
+	case SYMBOL:
+	case CHARACTER:
+	case NIL:
+		return true;
+	case CONS:;
+	case STRING:
+	case INTEGER:
+		return false;
+	}
+}
+
 bool sexpr_eq(const sexpr* a, const sexpr* b) {
 	if (a->type != b->type) {
 		return false;
@@ -183,7 +196,13 @@ bool sexpr_eq(const sexpr* a, const sexpr* b) {
 	case CHARACTER:
 	case INTEGER:
 		break;
+	case NIL:
+		return true;
 	}
+}
+
+void sexpr_ref(const sexpr* e) {
+	(*(_Atomic(int32_t)*)&e->ref_count)++;
 }
 
 void sexpr_free(sexpr *expr) {
@@ -198,6 +217,7 @@ void sexpr_free(sexpr *expr) {
 		case STRING:
 		case CHARACTER:
 		case INTEGER:
+		case NIL:
 			break;
 		}
 		free(expr);

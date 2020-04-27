@@ -57,7 +57,11 @@ int main(int argc, char** argv) {
 
 	sexpr* e = read(r);
 	sexpr_dump(e);
-	sexpr* d = eval(e, default_bindings());
+	
+	bindings* b = default_bindings();
+	sexpr* d = eval(e, b);
+	free(b);
+
 	sexpr_dump(d);
 	sexpr_free(d);
 	sexpr_free(e);

@@ -216,7 +216,14 @@ int64_t discard_buffer(scanner* s) {
 	return size;
 }
 
-void close_scanner(scanner* h) {
-	free(h);
+void close_scanner(scanner* s) {
+	discard_buffer(s);
+	if (s->input.page != NULL) {
+		if (s->input.page->block != NULL) {
+			s->stream->free_block(s->stream, s->input.page->block);
+		}
+		free(s->input.page);
+	}
+	free(s);
 }
 

@@ -158,6 +158,9 @@ sexpr* read_symbol(reader* r) {
 
 	sexpr* expr = sexpr_nusymbol(nslen, ns, nlen, n);
 
+	free(ns);
+	free(n);
+
 	return expr;
 }
 
