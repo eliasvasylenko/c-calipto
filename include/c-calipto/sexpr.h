@@ -32,6 +32,7 @@ sexpr *sexpr_nustring(int32_t l, const UChar* s);
 sexpr *sexpr_cons(const sexpr* car, const sexpr* cdr);
 sexpr *sexpr_car(const sexpr* s);
 sexpr *sexpr_cdr(const sexpr* s);
+bool sexpr_eq(const sexpr* a, const sexpr* b);
 
 void sexpr_free(sexpr* s);
 void sexpr_dump(const sexpr* s);

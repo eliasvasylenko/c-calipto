@@ -169,6 +169,23 @@ sexpr *sexpr_cdr(const sexpr *expr) {
 	return cdr;
 }
 
+bool sexpr_eq(const sexpr* a, const sexpr* b) {
+	if (a->type != b->type) {
+		return false;
+	}
+	switch (a->type) {
+	case CONS:;
+		cons *payload_a = (cons*)(a + 1);
+		cons *payload_b = (cons*)(b + 1);
+		return sexpr_eq(payload_a->car, payload_b->car);
+	case SYMBOL:
+	case STRING:
+	case CHARACTER:
+	case INTEGER:
+		break;
+	}
+}
+
 void sexpr_free(sexpr *expr) {
 	if (atomic_fetch_add(&expr->ref_count, -1) == 1) {
 		switch (expr->type) {

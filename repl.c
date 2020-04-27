@@ -16,9 +16,20 @@
 #include "c-calipto/stream.h"
 #include "c-calipto/scanner.h"
 #include "c-calipto/reader.h"
+#include "c-calipto/interpreter.h"
 
-bool always(char32_t c) {
-	return true;
+bindings* default_bindings() {
+	sexpr* exit = sexpr_usymbol(u"system", u"exit");
+	sexpr* lambda = sexpr_usymbol(u"function", u"lambda");
+	binding bindings[] = {
+		{ exit, exit },
+		{ lambda, lambda }
+	};
+	sexpr_free(exit);
+	sexpr_free(lambda);
+
+	size_t c = sizeof(bindings)/sizeof(binding);
+	return collect_bindings(NULL, c, bindings);
 }
 
 int main(int argc, char** argv) {
@@ -46,14 +57,15 @@ int main(int argc, char** argv) {
 
 	sexpr* e = read(r);
 	sexpr_dump(e);
+	sexpr* d = eval(e, default_bindings());
+	sexpr_dump(d);
+	sexpr_free(d);
 	sexpr_free(e);
 
 	close_reader(r);
 	close_scanner(sc);
 	close_stream(st);
 	u_fclose(f);
-
-	// TODO evaluate bootstrap file
 
 	sexpr_free(args);
 
