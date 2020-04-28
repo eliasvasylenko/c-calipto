@@ -18,18 +18,39 @@
 #include "c-calipto/reader.h"
 #include "c-calipto/interpreter.h"
 
-bindings* default_bindings() {
-	sexpr* exit = sexpr_usymbol(u"system", u"exit");
-	sexpr* lambda = sexpr_usymbol(u"function", u"lambda");
+sexpr* system_exit(int32_t arg_count, term* args) {
+	return NULL;
+}
+
+sexpr* data_cons(int32_t arg_count, term* args) {
+	return NULL;
+}
+
+sexpr* data_des(int32_t arg_count, term* args) {
+	return NULL;
+}
+
+sexpr* data_eq(int32_t arg_count, term* args) {
+	return NULL;
+}
+
+binding builtin_binding(UChar* ns, UChar* n, sexpr* (*f)(int32_t arg_count, term* args)) {
+	builtin* b = malloc(sizeof(builtin));
+	b->symbol = sexpr_usymbol(u"builtin", n);
+	b->apply = f;
+	return (binding){ sexpr_usymbol(ns, n), { BUILTIN, b }};
+}
+
+bindings* builtin_bindings() {
 	binding bindings[] = {
-		{ exit, exit },
-		{ lambda, lambda }
+		builtin_binding(u"system", u"exit", *system_exit),
+		builtin_binding(u"data", u"cons", *data_cons),
+		builtin_binding(u"data", u"des", *data_des),
+		builtin_binding(u"data", u"eq", *data_eq),
 	};
-	sexpr_free(exit);
-	sexpr_free(lambda);
 
 	size_t c = sizeof(bindings)/sizeof(binding);
-	return collect_bindings(NULL, c, bindings);
+	return make_bindings(NULL, c, bindings);
 }
 
 int main(int argc, char** argv) {
@@ -58,12 +79,10 @@ int main(int argc, char** argv) {
 	sexpr* e = read(r);
 	sexpr_dump(e);
 	
-	bindings* b = default_bindings();
-	sexpr* d = eval(e, b);
+	bindings* b = builtin_bindings();
+	eval(e, b);
 	free(b);
 
-	sexpr_dump(d);
-	sexpr_free(d);
 	sexpr_free(e);
 
 	close_reader(r);

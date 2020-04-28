@@ -28,9 +28,6 @@ sexpr* sexpr_nil() {
 const UChar* unicode_ns = u"unicode";
 const int32_t unicode_nsl = 7;
 
-const UChar* lang_ns = u"lang";
-const int32_t lang_nsl = 4;
-
 sexpr* sexpr_regular_symbol(int32_t nsl, const UChar* ns, int32_t nl, const UChar* n) {
 	sexpr *expr = sexpr_init(SYMBOL, sizeof(UChar) * (nsl + nl + 2));
 	UChar *payload = (UChar*)(expr + 1);

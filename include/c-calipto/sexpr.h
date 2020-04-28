@@ -4,7 +4,9 @@ typedef enum sexpr_type {
 	STRING,
 	CHARACTER,
 	INTEGER,
-	NIL
+	NIL,
+	BUILTIN,
+	FUNCTION
 } sexpr_type;
 
 typedef struct sexpr {
@@ -17,12 +19,28 @@ typedef struct cons {
 	const sexpr const* cdr;
 } cons;
 
+typedef struct function {
+	bindings* capture;
+	sexpr* params;
+	sexpr* body;
+} function;
+
+typedef struct builtin {
+	sexpr* symbol;
+	sexpr* (*apply)(int32_t arg_count, term* args);
+} builtin;
+
 sexpr *sexpr_nil();
+
+sexpr* sexpr_register_builtin(UChar* ns, UChar* n, sexpr* (*f)(int32_t arg_count, term* args));
 
 sexpr *sexpr_symbol(UConverter* c, const char* ns, const char* n);
 sexpr *sexpr_nsymbol(UConverter* c, int32_t nsl, const char* ns, int32_t nl, const char* n);
 sexpr *sexpr_usymbol(const UChar* ns, const UChar* n);
 sexpr *sexpr_nusymbol(int32_t nsl, const UChar* ns, int32_t nl, const UChar* n);
+
+UChar* sexpr_name(sexpr* s);
+UChar* sexpr_namespace(sexpr* s);
 
 sexpr *sexpr_string(UConverter* c, const char* s);
 sexpr *sexpr_nstring(UConverter* c, int32_t l, const char* s);
