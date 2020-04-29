@@ -6,6 +6,7 @@ typedef enum sexpr_type {
 	INTEGER,
 	NIL,
 	BUILTIN,
+	LAMBDA,
 	FUNCTION
 } sexpr_type;
 
@@ -18,6 +19,19 @@ typedef struct cons {
 	const sexpr const* car;
 	const sexpr const* cdr;
 } cons;
+
+/*
+ * An expression can be promoted to a lambda when it
+ * appears as a term in a statement. This promotion
+ * does not modify the behaviour of the expression,
+ * but enumerates any free variables mentioned so that
+ * later evaluation to a function can be optimised
+ */
+typedef struct lambda {
+	sexpr* free_vars;
+	sexpr* params;
+	sexpr* body;
+} function;
 
 typedef struct function {
 	bindings* capture;
@@ -33,6 +47,8 @@ typedef struct builtin {
 sexpr *sexpr_nil();
 
 sexpr* sexpr_register_builtin(UChar* ns, UChar* n, sexpr* (*f)(int32_t arg_count, term* args));
+sexpr* sexpr_lambda(sexpr* e);
+sexpr* sexpr_function(lambda l, sexpr** args);
 
 sexpr *sexpr_symbol(UConverter* c, const char* ns, const char* n);
 sexpr *sexpr_nsymbol(UConverter* c, int32_t nsl, const char* ns, int32_t nl, const char* n);
