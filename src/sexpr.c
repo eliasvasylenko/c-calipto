@@ -13,46 +13,41 @@
 
 #include "c-calipto/sexpr.h"
 
-sexpr *sexpr_init(sexpr_type type, int32_t payload_size) {
-	sexpr *expr = malloc(sizeof(sexpr) + payload_size);
-	*(sexpr_type*)&expr->type = (const sexpr_type)type;
-	*(_Atomic(int32_t)*)&expr->ref_count = ATOMIC_VAR_INIT(1);
+s_expr sexpr_init(s_expr_type type, void* payload) {
+	s_expr expr = { type, malloc(sizeof(_Atomic(int32_t))), NULL };
+	*expr.ref_count = ATOMIC_VAR_INIT(1);
 
 	return expr;
 }
 
-sexpr* sexpr_nil() {
-	return sexpr_init(NIL, 0);
+s_expr sexpr_nil() {
+	return sexpr_init(NIL, NULL);
 }
 
 const UChar const* builtin_ns = u"primitive";
 int32_t builtin_nsl = 9;
 
-sexpr* sexpr_builtin(UChar* n, int32_t arg_count, sexpr* (*f)(sexpr** args)) {
-	sexpr* e = sexpr_init(BUILTIN, sizeof(builtin));
-	builtin* b = (builtin*)(e + 1);
-	b->name = n;
-	b->arg_count = arg_count;
-	b->apply = f;
-	return e;
+s_expr sexpr_builtin(UChar* n, int32_t arg_count, s_bound_expr (*f)(s_expr* args)) {
+	s_builtin bi = { s_u_strcpy(n), arg_count, f };
+	return sexpr_init(BUILTIN, bi);
 }
 
-sexpr* sexpr_lambda(
-		int32_t free_var_count, sexpr** free_vars,
-		int32_t param_count, sexpr** params,
-		sexpr* body) {
+s_expr sexpr_lambda(
+		int32_t free_var_count, s_expr* free_vars,
+		int32_t param_count, s_expr* params,
+		s_expr body) {
 	;
 }
 
-sexpr* sexpr_function(lambda l, sexpr** capture) {
+s_expr sexpr_function(lambda l, s_expr* capture) {
 	;
 }
 
 const UChar const* unicode_ns = u"unicode";
 const int32_t unicode_nsl = 7;
 
-sexpr* sexpr_regular_symbol(int32_t nsl, const UChar* ns, int32_t nl, const UChar* n) {
-	sexpr *expr = sexpr_init(SYMBOL, sizeof(UChar) * (nsl + nl + 2));
+s_expr sexpr_regular_symbol(int32_t nsl, const UChar* ns, int32_t nl, const UChar* n) {
+	s_expr expr = sexpr_init(SYMBOL, sizeof(UChar) * (nsl + nl + 2));
 	UChar *payload = (UChar*)(expr + 1);
 
 	payload[nsl] = u'\0';
@@ -64,8 +59,8 @@ sexpr* sexpr_regular_symbol(int32_t nsl, const UChar* ns, int32_t nl, const UCha
 	return expr;
 }
 
-sexpr* sexpr_unicode_codepoint_symbol(const UChar32 cp) {
-	sexpr* e = sexpr_init(CHARACTER, sizeof(UChar));
+s_expr sexpr_unicode_codepoint_symbol(const UChar32 cp) {
+	s_expr e = sexpr_init(CHARACTER, sizeof(UChar));
 	UChar *payload = (UChar*)(e + 1);
 
 	*payload = cp;
@@ -73,7 +68,7 @@ sexpr* sexpr_unicode_codepoint_symbol(const UChar32 cp) {
 	return e;
 }
 
-sexpr* sexpr_unicode_hex_symbol(const UChar* name) {
+s_expr sexpr_unicode_hex_symbol(const UChar* name) {
 	UChar32 cp;
 	if (u_sscanf(name, "%04x", &cp) == EOF) {
 		int nl = u_strlen(name);
@@ -82,11 +77,11 @@ sexpr* sexpr_unicode_hex_symbol(const UChar* name) {
 	return sexpr_unicode_codepoint_symbol(cp);
 }
 
-sexpr* sexpr_symbol(UConverter* c, const char* ns, const char* n) {
+s_expr sexpr_symbol(UConverter* c, const char* ns, const char* n) {
 	return sexpr_nsymbol(c, strlen(ns), ns, strlen(n), n);
 }
 
-sexpr* sexpr_nsymbol(UConverter* c, int32_t nsl, const char* ns, int32_t nl, const char* n) {
+s_expr sexpr_nsymbol(UConverter* c, int32_t nsl, const char* ns, int32_t nl, const char* n) {
 	int unsl = nsl * 2;
 	UChar* uns = malloc(sizeof(UChar) * unsl);
 	int unl = nl * 2;
@@ -102,7 +97,7 @@ sexpr* sexpr_nsymbol(UConverter* c, int32_t nsl, const char* ns, int32_t nl, con
 			n, nl,
 			&error);
 	
-	sexpr* e = sexpr_nusymbol(unsl, uns, unl, un);
+	s_expr e = sexpr_nusymbol(unsl, uns, unl, un);
 	
 	free(uns);
 	free(un);
@@ -110,22 +105,22 @@ sexpr* sexpr_nsymbol(UConverter* c, int32_t nsl, const char* ns, int32_t nl, con
 	return e;
 }
 
-sexpr* sexpr_usymbol(const UChar* ns, const UChar* n) {
+s_expr sexpr_usymbol(const UChar* ns, const UChar* n) {
 	return sexpr_nusymbol(u_strlen(ns), ns, u_strlen(n), n);
 }
 
-sexpr* sexpr_nusymbol(int32_t nsl, const UChar* ns, int32_t nl, const UChar* n) {
+s_expr sexpr_nusymbol(int32_t nsl, const UChar* ns, int32_t nl, const UChar* n) {
 	if (unicode_nsl == nsl && u_strcmp(unicode_ns, ns)) {
 		return sexpr_unicode_hex_symbol(n);
 	}
 	return sexpr_regular_symbol(nsl, ns, nl, n);
 }
 
-sexpr* sexpr_string(UConverter* c, const char* s) {
+s_expr sexpr_string(UConverter* c, const char* s) {
 	return sexpr_nstring(c, strlen(s), s);
 }
 
-sexpr* sexpr_nstring(UConverter* c, int32_t l, const char* s) {
+s_expr sexpr_nstring(UConverter* c, int32_t l, const char* s) {
 	int ul = l * 2;
 	UChar* us = malloc(sizeof(UChar) * ul);
 
@@ -135,61 +130,61 @@ sexpr* sexpr_nstring(UConverter* c, int32_t l, const char* s) {
 			s, l,
 			&error);
 	
-	sexpr* e = sexpr_nustring(ul, us);
+	s_expr e = sexpr_nustring(ul, us);
 	free(us);
 
 	return e;
 }
 
-sexpr* sexpr_ustring(const UChar* s) {
+s_expr sexpr_ustring(const UChar* s) {
 	return sexpr_nustring(u_strlen(s), s);
 }
 
-sexpr* sexpr_nustring(int32_t l, const UChar* s) {
-	sexpr* e = sexpr_init(STRING, sizeof(UChar) * (l + 1));
+s_expr sexpr_nustring(int32_t l, const UChar* s) {
+	s_expr e = sexpr_init(STRING, sizeof(UChar) * (l + 1));
 	UChar* p = (UChar*)(e + 1);
 	p[l] = u'\0';
 	u_strncpy(p, s, l);
 
 	return e;
 }
-sexpr *sexpr_cons(const sexpr *car, const sexpr *cdr) {
+s_expr sexpr_cons(const s_expr car, const s_expr cdr) {
 	if (car->type == CHARACTER && cdr->type == STRING) {
 		// prepend car to string repr.
 		return NULL;
 	}
 
-	sexpr *expr = sexpr_init(CONS, sizeof(cons));
+	s_expr expr = sexpr_init(CONS, sizeof(cons));
 	cons *payload = (cons*)(expr + 1);
 
 	payload->car = car;
 	payload->cdr = cdr;
 
-	((sexpr*)car)->ref_count++;
-	((sexpr*)cdr)->ref_count++;
+	((s_expr)car)->ref_count++;
+	((s_expr)cdr)->ref_count++;
 
 	return expr;
 }
 
-sexpr *sexpr_car(const sexpr *expr) {
+s_expr sexpr_car(const s_expr expr) {
 	cons *payload = (cons*)(expr + 1);
 
-	sexpr *car = (sexpr*)payload->car;
+	s_expr car = (s_expr)payload->car;
 	(*(_Atomic(int32_t)*)&car->ref_count)++;
 
 	return car;
 }
 
-sexpr *sexpr_cdr(const sexpr *expr) {
+s_expr sexpr_cdr(const s_expr expr) {
 	cons *payload = (cons*)(expr + 1);
 
-	sexpr *cdr = (sexpr*)payload->cdr;
+	s_expr cdr = (s_expr)payload->cdr;
 	(*(_Atomic(int32_t)*)&cdr->ref_count)++;
 
 	return cdr;
 }
 
-bool sexpr_atom(const sexpr* e) {
+bool sexpr_atom(const s_expr e) {
 	switch (e->type) {
 	case SYMBOL:
 	case CHARACTER:
@@ -202,7 +197,7 @@ bool sexpr_atom(const sexpr* e) {
 	}
 }
 
-bool sexpr_eq(const sexpr* a, const sexpr* b) {
+bool sexpr_eq(const s_expr a, const s_expr b) {
 	if (a->type != b->type) {
 		return false;
 	}
@@ -221,17 +216,17 @@ bool sexpr_eq(const sexpr* a, const sexpr* b) {
 	}
 }
 
-void sexpr_ref(const sexpr* e) {
+void sexpr_ref(const s_expr e) {
 	(*(_Atomic(int32_t)*)&e->ref_count)++;
 }
 
-void sexpr_free(sexpr *expr) {
+void sexpr_free(s_expr expr) {
 	if (atomic_fetch_add(&expr->ref_count, -1) == 1) {
 		switch (expr->type) {
 		case CONS:;
 			cons *payload = (cons*)(expr + 1);
-			sexpr_free((sexpr*)payload->car);
-			sexpr_free((sexpr*)payload->cdr);
+			sexpr_free((s_expr)payload->car);
+			sexpr_free((s_expr)payload->cdr);
 			break;
 		case SYMBOL:
 		case STRING:
@@ -244,9 +239,9 @@ void sexpr_free(sexpr *expr) {
 	}
 }
 
-void sexpr_elem_dump(const sexpr* s);
+void sexpr_elem_dump(const s_expr s);
 
-void sexpr_tail_dump(const sexpr* s) {
+void sexpr_tail_dump(const s_expr s) {
 	switch (s->type) {
 	case NIL:
 		printf(")");
@@ -265,13 +260,13 @@ void sexpr_tail_dump(const sexpr* s) {
 	}
 }
 
-void sexpr_elem_dump(const sexpr* s) {
+void sexpr_elem_dump(const s_expr s) {
 	UChar *string_payload;
 
 	switch (s->type) {
 	case CONS:;
-		sexpr* car = sexpr_car(s);
-		sexpr* cdr = sexpr_cdr(s);
+		s_expr car = sexpr_car(s);
+		s_expr cdr = sexpr_cdr(s);
 		printf("(");
 		sexpr_elem_dump(car);
 		sexpr_tail_dump(cdr);
@@ -299,7 +294,7 @@ void sexpr_elem_dump(const sexpr* s) {
 	}
 }
 
-void sexpr_dump(const sexpr* s) {
+void sexpr_dump(const s_expr s) {
 	sexpr_elem_dump(s);
 	printf("\n");
 }

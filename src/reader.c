@@ -113,20 +113,20 @@ int32_t scan_name(scanner* s) {
 	return -1;
 }
 
-sexpr* read_list(reader* r) {
+s_expr read_list(reader* r) {
 	if (read_step_in(r)) {
 		skip_whitespace(r->scanner);
 
 		return read_step_out(r);
 	}
-	return NULL;
+	return s_alloc_error("Failed to scan list open");
 }
 
-sexpr* read_symbol(reader* r) {
+s_expr read_symbol(reader* r) {
 	skip_whitespace(r->scanner);
 	int32_t nslen = scan_name(r->scanner);
 	if (nslen <= 0) {
-		return NULL;
+		return s_alloc_error("Failed to scan name");
 	}
 
 	if (!advance_input_if(r->scanner, is_equal, &colon)) {
@@ -136,7 +136,8 @@ sexpr* read_symbol(reader* r) {
 		UChar* n = malloc(sizeof(UChar) * nlen);
 		take_buffer_length(r->scanner, nlen, n);
 
-		sexpr* expr = sexpr_nusymbol(u_strlen(ns), ns, nlen, n);
+		s_symbol sym = { s_u_strcpy(ns), s_u_strncpy(nlen, n) };
+		s_expr expr = s_alloc_symbol(sym);
 
 		free(n);
 
@@ -156,7 +157,8 @@ sexpr* read_symbol(reader* r) {
 	UChar* n = malloc(sizeof(UChar) * nlen);
 	take_buffer_length(r->scanner, nlen, n);
 
-	sexpr* expr = sexpr_nusymbol(nslen, ns, nlen, n);
+	s_symbol sym = { s_u_strncpy(nslen, ns), s_u_strncpy(nlen, n) };
+	s_expr expr = s_alloc_symbol(sym);
 
 	free(ns);
 	free(n);
@@ -164,15 +166,15 @@ sexpr* read_symbol(reader* r) {
 	return expr;
 }
 
-sexpr* read_next(reader* r) {
-	sexpr* e = read_symbol(r);
-	if (e == NULL) {
+s_expr read_next(reader* r) {
+	s_expr e = read_symbol(r);
+	if (e.type == ERROR) {
 		e = read_list(r);
 	}
 	return e;
 }
 
-sexpr* read(reader* r) {
+s_expr read(reader* r) {
 	skip_whitespace(r->scanner);
 	return read_next(r);
 }
@@ -186,41 +188,42 @@ bool read_step_in(reader* r) {
   return success;
 }
 
-sexpr* read_step_out(reader* r) {
+s_expr read_step_out(reader* r) {
 	if (cursor_depth(r) <= 0) {
-		return NULL;
+		return s_alloc_error("Unexpected list terminator");
 	}
 
 	if (advance_input_if(r->scanner, is_equal, &close_bracket)) {
 		discard_buffer(r->scanner);
 
-		return sexpr_nil();
+		return s_alloc_nil();
 	}
 
-	sexpr* head = read_next(r);
-	sexpr* tail;
+	s_expr head = read_next(r);
+	s_expr tail;
 
 	skip_whitespace(r->scanner);
 	if (advance_input_if(r->scanner, is_equal, &dot)) {
 		tail = read_next(r);
 
 		skip_whitespace(r->scanner);
-		sexpr* nil = read_step_out(r);
-		sexpr_type t = nil->type;
-		free(nil);
+		s_expr nil = read_step_out(r);
+		s_expr_type t = nil.type;
+		s_free(nil);
 		if (t != NIL) {
-			sexpr_free(head);
+			s_expr_free(head);
 
-			return NULL;
+			return s_alloc_error("Illegal list terminator");
 		}
 	} else {
 		tail = read_step_out(r);
 	}
 
-	sexpr* cons = sexpr_cons(head, tail);
+	s_cons c = { head, tail };
+	s_expr cons = s_alloc_cons(c);
 
-	sexpr_free(head);
-	sexpr_free(tail);
+	s_free(head);
+	s_free(tail);
 
 	return cons;
 }

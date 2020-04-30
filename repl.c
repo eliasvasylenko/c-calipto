@@ -18,37 +18,39 @@
 #include "c-calipto/reader.h"
 #include "c-calipto/interpreter.h"
 
-sexpr* system_exit(sexpr** args) {
-	return NULL;
+s_bound_expr system_exit(s_expr* args) {
+	return (s_bound_expr){ s_alloc_nil(), NULL };
 }
 
-sexpr* data_cons(sexpr** args) {
-	return NULL;
+s_bound_expr data_cons(s_expr* args) {
+	return (s_bound_expr){ s_alloc_nil(), NULL };
 }
 
-sexpr* data_des(sexpr** args) {
-	return NULL;
+s_bound_expr data_des(s_expr* args) {
+	return (s_bound_expr){ s_alloc_nil(), NULL };
 }
 
-sexpr* data_eq(sexpr** args) {
-	return NULL;
+s_bound_expr data_eq(s_expr* args) {
+	return (s_bound_expr){ s_alloc_nil(), NULL };
 }
 
-binding builtin_binding(UChar* ns, UChar* n, int32_t c, sexpr* (*f)(sexpr** args)) {
-	binding b = { sexpr_usymbol(ns, n), sexpr_builtin(n, c, f) };
+s_binding builtin_binding(UChar* ns, UChar* n, int32_t c, s_bound_expr (*f)(s_expr* args)) {
+	s_symbol sym = { s_u_strcpy(ns), s_u_strcpy(n) };
+	s_builtin bi = { s_u_strcpy(n), c, f };
+	s_binding b = { s_alloc_symbol(sym), s_alloc_builtin(bi) };
 	return b;
 }
 
-bindings* builtin_bindings() {
-	binding bindings[] = {
+s_bindings* builtin_bindings() {
+	s_binding bindings[] = {
 		builtin_binding(u"system", u"exit", 0, *system_exit),
 		builtin_binding(u"data", u"cons", 3, *data_cons),
 		builtin_binding(u"data", u"des", 3, *data_des),
 		builtin_binding(u"data", u"eq", 4, *data_eq),
 	};
 
-	size_t c = sizeof(bindings)/sizeof(binding);
-	return make_bindings(NULL, c, bindings);
+	size_t c = sizeof(bindings)/sizeof(s_binding);
+	return s_bindings_alloc(NULL, c, bindings);
 }
 
 int main(int argc, char** argv) {
@@ -56,39 +58,40 @@ int main(int argc, char** argv) {
 	UErrorCode error = 0;
 	UConverter* char_conv = ucnv_open(NULL, &error);
 
-	sexpr* args = sexpr_nil();
+	s_expr args = s_alloc_nil();
 	for (int i = argc - 1; i >= 0; i--) {
-		sexpr* arg = sexpr_string(char_conv, argv[i]);
-		sexpr* rest = args;
+		s_expr arg = s_alloc_string(s_strcpy(char_conv, argv[i]));
+		s_expr rest = args;
 
-		args = sexpr_cons(arg, rest);
+		s_cons c = { arg, rest };
+		args = s_alloc_cons(c);
 
-		sexpr_free(arg);
-		sexpr_free(rest);
+		s_free(arg);
+		s_free(rest);
 	}
 
-	sexpr_dump(args);
+	s_dump(args);
 
 	UFILE* f = u_fopen("./bootstrap.cal", "r", NULL, NULL);
 	stream* st = open_file_stream(f);
 	scanner* sc = open_scanner(st);
 	reader* r = open_reader(sc);
 
-	sexpr* e = read(r);
-	sexpr_dump(e);
+	s_expr e = read(r);
+	s_dump(e);
 	
-	bindings* b = builtin_bindings();
+	s_bindings* b = builtin_bindings();
 	eval(e, b);
-	free(b);
+	s_bindings_free(b);
 
-	sexpr_free(e);
+	s_free(e);
 
 	close_reader(r);
 	close_scanner(sc);
 	close_stream(st);
 	u_fclose(f);
 
-	sexpr_free(args);
+	s_free(args);
 
 	ucnv_close(char_conv);
 	return 0;
