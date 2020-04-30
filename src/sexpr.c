@@ -25,7 +25,30 @@ sexpr* sexpr_nil() {
 	return sexpr_init(NIL, 0);
 }
 
-const UChar* unicode_ns = u"unicode";
+const UChar const* builtin_ns = u"primitive";
+int32_t builtin_nsl = 9;
+
+sexpr* sexpr_builtin(UChar* n, int32_t arg_count, sexpr* (*f)(sexpr** args)) {
+	sexpr* e = sexpr_init(BUILTIN, sizeof(builtin));
+	builtin* b = (builtin*)(e + 1);
+	b->name = n;
+	b->arg_count = arg_count;
+	b->apply = f;
+	return e;
+}
+
+sexpr* sexpr_lambda(
+		int32_t free_var_count, sexpr** free_vars,
+		int32_t param_count, sexpr** params,
+		sexpr* body) {
+	;
+}
+
+sexpr* sexpr_function(lambda l, sexpr** capture) {
+	;
+}
+
+const UChar const* unicode_ns = u"unicode";
 const int32_t unicode_nsl = 7;
 
 sexpr* sexpr_regular_symbol(int32_t nsl, const UChar* ns, int32_t nl, const UChar* n) {

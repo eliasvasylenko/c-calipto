@@ -18,35 +18,33 @@
 #include "c-calipto/reader.h"
 #include "c-calipto/interpreter.h"
 
-sexpr* system_exit(int32_t arg_count, term* args) {
+sexpr* system_exit(sexpr** args) {
 	return NULL;
 }
 
-sexpr* data_cons(int32_t arg_count, term* args) {
+sexpr* data_cons(sexpr** args) {
 	return NULL;
 }
 
-sexpr* data_des(int32_t arg_count, term* args) {
+sexpr* data_des(sexpr** args) {
 	return NULL;
 }
 
-sexpr* data_eq(int32_t arg_count, term* args) {
+sexpr* data_eq(sexpr** args) {
 	return NULL;
 }
 
-binding builtin_binding(UChar* ns, UChar* n, sexpr* (*f)(int32_t arg_count, term* args)) {
-	builtin* b = malloc(sizeof(builtin));
-	b->symbol = sexpr_usymbol(u"builtin", n);
-	b->apply = f;
-	return (binding){ sexpr_usymbol(ns, n), { BUILTIN, b }};
+binding builtin_binding(UChar* ns, UChar* n, int32_t c, sexpr* (*f)(sexpr** args)) {
+	binding b = { sexpr_usymbol(ns, n), sexpr_builtin(n, c, f) };
+	return b;
 }
 
 bindings* builtin_bindings() {
 	binding bindings[] = {
-		builtin_binding(u"system", u"exit", *system_exit),
-		builtin_binding(u"data", u"cons", *data_cons),
-		builtin_binding(u"data", u"des", *data_des),
-		builtin_binding(u"data", u"eq", *data_eq),
+		builtin_binding(u"system", u"exit", 0, *system_exit),
+		builtin_binding(u"data", u"cons", 3, *data_cons),
+		builtin_binding(u"data", u"des", 3, *data_des),
+		builtin_binding(u"data", u"eq", 4, *data_eq),
 	};
 
 	size_t c = sizeof(bindings)/sizeof(binding);
