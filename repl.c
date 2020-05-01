@@ -19,23 +19,58 @@
 #include "c-calipto/reader.h"
 #include "c-calipto/interpreter.h"
 
-s_bound_expr system_exit(s_expr* args) {
-	return (s_bound_expr){ s_nil(), NULL };
+void critical_error(UChar* message) {
+	u_printf("%S", message);
+	exit(0);
 }
 
-s_bound_expr data_cons(s_expr* args) {
-	return (s_bound_expr){ s_nil(), NULL };
+bool system_exit(s_expr* args, s_bound_expr* b) {
+	return false;
 }
 
-s_bound_expr data_des(s_expr* args) {
-	return (s_bound_expr){ s_nil(), NULL };
+bool system_stdin(s_expr* args, s_bound_expr* b) {
+	s_expr fail = args[0];
+	s_expr cont = args[1];
+	*b = (s_bound_expr){ s_nil(), NULL };
+	return true;
 }
 
-s_bound_expr data_eq(s_expr* args) {
-	return (s_bound_expr){ s_nil(), NULL };
+bool system_stdout(s_expr* args, s_bound_expr* b) {
+	s_expr string = args[0];
+	s_expr fail = args[1];
+	s_expr cont = args[2];
+	
+	if (fail.type != LAMBDA || cont.type != LAMBDA) {
+		critical_error(u"Cannot return");
+		return false;
+	}
+
+	if (string.type != STRING) {
+		*b = (s_bound_expr){ fail.lambda->body, s_alloc_bindings(NULL, 0, NULL) };
+
+	} else {
+		u_printf("%S", string.string);
+		*b = (s_bound_expr){ cont.lambda->body, s_alloc_bindings(NULL, 0, NULL) };
+	}
+	return true;
 }
 
-s_binding builtin_binding(UChar* ns, UChar* n, int32_t c, s_bound_expr (*f)(s_expr* args)) {
+bool data_cons(s_expr* args, s_bound_expr* b) {
+	*b = (s_bound_expr){ s_nil(), NULL };
+	return true;
+}
+
+bool data_des(s_expr* args, s_bound_expr* b) {
+	*b = (s_bound_expr){ s_nil(), NULL };
+	return true;
+}
+
+bool data_eq(s_expr* args, s_bound_expr* b) {
+	*b = (s_bound_expr){ s_nil(), NULL };
+	return true;
+}
+
+s_binding builtin_binding(UChar* ns, UChar* n, int32_t c, bool (*f)(s_expr* args, s_bound_expr* b)) {
 	s_expr sym = s_symbol(u_strref(ns), u_strref(n));
 	s_expr bi = s_builtin(u_strref(n), c, f);
 	return (s_binding){ sym, bi };
@@ -44,6 +79,9 @@ s_binding builtin_binding(UChar* ns, UChar* n, int32_t c, s_bound_expr (*f)(s_ex
 s_bindings builtin_bindings() {
 	s_binding bindings[] = {
 		builtin_binding(u"system", u"exit", 0, *system_exit),
+		builtin_binding(u"system", u"stdin", 2, *system_stdin),
+		builtin_binding(u"system", u"stdout", 3, *system_stdout),
+		builtin_binding(u"system", u"stderr", 3, *system_stdout),
 		builtin_binding(u"data", u"cons", 3, *data_cons),
 		builtin_binding(u"data", u"des", 3, *data_des),
 		builtin_binding(u"data", u"eq", 4, *data_eq),
@@ -76,14 +114,18 @@ int main(int argc, char** argv) {
 	scanner* sc = open_scanner(st);
 	reader* r = open_reader(sc);
 
-	s_expr e = read(r);
-	s_dump(e);
+	s_expr e;
+	if (read(r, &e)) {
+		s_dump(e);
 	
-	s_bindings b = builtin_bindings();
-	eval(e, b);
-	s_free_bindings(b);
+		s_bindings b = builtin_bindings();
+		eval(e, b);
+		s_free_bindings(b);
 
-	s_free(e);
+		s_free(e);
+	} else {
+		printf("Failed to read bootstrap file!");
+	}
 
 	close_reader(r);
 	close_scanner(sc);

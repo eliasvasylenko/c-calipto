@@ -16,10 +16,10 @@ int64_t cursor_position(reader* r, int32_t inputDepth);
 
 int32_t cursor_depth(reader* r);
 
-s_expr read(reader* r);
+bool read(reader* r, s_expr* e);
 
-s_expr read_symbol(reader* r);
+bool read_symbol(reader* r, s_expr* e);
 
 bool read_step_in(reader* r);
 
-s_expr read_step_out(reader* r);
+bool read_step_out(reader* r, s_expr* e);

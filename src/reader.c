@@ -114,20 +114,20 @@ int32_t scan_name(scanner* s) {
 	return -1;
 }
 
-s_expr read_list(reader* r) {
+bool read_list(reader* r, s_expr* e) {
 	if (read_step_in(r)) {
 		skip_whitespace(r->scanner);
 
-		return read_step_out(r);
+		return read_step_out(r, e);
 	}
-	return s_error("Failed to scan list open");
+	return false;
 }
 
-s_expr read_symbol(reader* r) {
+bool read_symbol(reader* r, s_expr* e) {
 	skip_whitespace(r->scanner);
 	int32_t nslen = scan_name(r->scanner);
 	if (nslen <= 0) {
-		return s_error("Failed to scan name");
+		return false;
 	}
 
 	if (!advance_input_if(r->scanner, is_equal, &colon)) {
@@ -137,11 +137,11 @@ s_expr read_symbol(reader* r) {
 		UChar* n = malloc(sizeof(UChar) * nlen);
 		take_buffer_length(r->scanner, nlen, n);
 
-		s_expr expr = s_symbol(u_strref(ns), u_strnref(nlen, n));
+		*e = s_symbol(u_strref(ns), u_strnref(nlen, n));
 
 		free(n);
 
-		return expr;
+		return true;
 	}
 
 	int32_t nlen = scan_name(r->scanner);
@@ -157,25 +157,21 @@ s_expr read_symbol(reader* r) {
 	UChar* n = malloc(sizeof(UChar) * nlen);
 	take_buffer_length(r->scanner, nlen, n);
 
-	s_expr expr = s_symbol(u_strnref(nslen, ns), u_strnref(nlen, n));
+	*e = s_symbol(u_strnref(nslen, ns), u_strnref(nlen, n));
 
 	free(ns);
 	free(n);
 
-	return expr;
+	return true;
 }
 
-s_expr read_next(reader* r) {
-	s_expr e = read_symbol(r);
-	if (e.type == ERROR) {
-		e = read_list(r);
-	}
-	return e;
+bool read_next(reader* r, s_expr* e) {
+	return read_symbol(r, e) || read_list(r, e);
 }
 
-s_expr read(reader* r) {
+bool read(reader* r, s_expr* e) {
 	skip_whitespace(r->scanner);
-	return read_next(r);
+	return read_next(r, e);
 }
 
 bool read_step_in(reader* r) {
@@ -187,35 +183,46 @@ bool read_step_in(reader* r) {
   return success;
 }
 
-s_expr read_step_out(reader* r) {
+bool read_step_out(reader* r, s_expr* e) {
 	if (cursor_depth(r) <= 0) {
-		return s_error("Unexpected list terminator");
+		return false;
 	}
 
 	if (advance_input_if(r->scanner, is_equal, &close_bracket)) {
 		discard_buffer(r->scanner);
 
-		return s_nil();
+		*e = s_nil();
+		return true;
 	}
 
-	s_expr head = read_next(r);
+	s_expr head;
 	s_expr tail;
+	if (!read_next(r, &head)) {
+		return false;
+	}
 
 	skip_whitespace(r->scanner);
 	if (advance_input_if(r->scanner, is_equal, &dot)) {
-		tail = read_next(r);
+		if (!read_next(r, &tail)) {
+			s_free(head);
+			return false;
+		}
 
 		skip_whitespace(r->scanner);
-		s_expr nil = read_step_out(r);
+		s_expr nil;
+		if (!read_step_out(r, &nil)) {
+			s_free(head);
+			return false;
+		}
 		s_expr_type t = nil.type;
 		s_free(nil);
 		if (t != NIL) {
 			s_free(head);
-
-			return s_error("Illegal list terminator");
+			return false;
 		}
-	} else {
-		tail = read_step_out(r);
+	} else if (!read_step_out(r, &tail)) {
+		s_free(head);
+		return false;
 	}
 
 	s_expr cons = s_cons(head, tail);
@@ -223,5 +230,6 @@ s_expr read_step_out(reader* r) {
 	s_free(head);
 	s_free(tail);
 
-	return cons;
+	*e = cons;
+	return true;
 }

@@ -23,7 +23,7 @@ typedef struct s_expr {
 	s_expr_type type;
 	_Atomic(int32_t)* ref_count;
 	union {
-		char* error;
+		UChar* error;
 		struct s_symbol_data* symbol;
 		struct s_cons_data* cons;
 		void* nil;
@@ -87,17 +87,18 @@ typedef struct s_lambda_data {
  * be rewritten with a proper table lookup
  */
 typedef struct s_function_data {
-	s_expr* capture;
-	s_lambda_data lambda;
+	s_bindings capture;
+	s_expr lambda;
 } s_function_data;
 
 typedef struct s_builtin_data {
 	UChar* name;
 	int32_t arg_count;
-	s_bound_expr (*apply)(s_expr* args);
+	bool (*apply)(s_expr* args, s_bound_expr* result);
 } s_builtin_data;
 
 s_bindings s_alloc_bindings(const s_bindings* parent, int32_t count, const s_binding* b);
+void s_ref_bindings(s_bindings p);
 void s_free_bindings(s_bindings p);
 s_expr s_resolve(const s_expr name, const s_bindings b);
 
@@ -106,11 +107,13 @@ s_expr s_symbol(strref ns, strref n);
 s_expr s_cons(s_expr car, s_expr cdr);
 s_expr s_character(UChar32 c);
 s_expr s_string(strref s);
-s_expr s_builtin(strref n, int32_t c, s_bound_expr (*f)(s_expr* a));
-s_expr s_promote_lambda(s_expr e);
-s_expr s_error(char* c);
-
-s_expr s_resolve_expression(s_bound_expr e);
+s_expr s_builtin(strref n, int32_t c, bool (*f)(s_expr* a, s_bound_expr* result));
+s_expr s_lambda(
+	int32_t free_var_count, s_expr* free_vars,
+	int32_t param_count, s_expr* params,
+	s_expr body);
+s_expr s_function(s_bindings capture, s_expr lambda);
+s_expr s_error(strref message);
 
 UChar* s_name(s_expr s);
 UChar* s_namespace(s_expr s);

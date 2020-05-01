@@ -6,7 +6,7 @@ typedef enum strref_type {
 typedef struct strref {
 	strref_type type;
 	int32_t size;
-	const UConverter* conv;
+	UConverter* conv;
 	union {
 		const char* c_chars;
 		const UChar* u_chars;
@@ -14,8 +14,8 @@ typedef struct strref {
 	int32_t len;
 } strref;
 
-strref c_strref(const UConverter* conv, const char* chars);
-strref c_strnref(const UConverter* conv, int32_t size, const char* chars);
+strref c_strref(UConverter* conv, const char* chars);
+strref c_strnref(UConverter* conv, int32_t size, const char* chars);
 strref u_strref(const UChar* chars);
 strref u_strnref(int32_t size, const UChar* chars);
 

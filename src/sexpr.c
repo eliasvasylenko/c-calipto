@@ -15,7 +15,9 @@
 #include "c-calipto/sexpr.h"
 
 _Atomic(int32_t)* counter() {
-	return malloc(sizeof(_Atomic(int32_t)));
+	_Atomic(int32_t)* c = malloc(sizeof(_Atomic(int32_t)));
+	*c = ATOMIC_VAR_INIT(1);
+	return c;
 }
 
 s_bindings s_alloc_bindings(const s_bindings* p, int32_t c, const s_binding* b) {
@@ -25,12 +27,18 @@ s_bindings s_alloc_bindings(const s_bindings* p, int32_t c, const s_binding* b) 
 	return (s_bindings){ counter(), (s_bindings*)p, c, (s_binding*)b };
 }
 
+void s_ref_bindings(const s_bindings b) {
+	s_bindings mb = (s_bindings) b;
+	*mb.ref_count++;
+}
+
 void s_free_bindings(s_bindings p) {
 	if (atomic_fetch_add(p.ref_count, -1) > 1) {
 		return;
 	}
 	if (p.parent != NULL) {
 		s_free_bindings(*p.parent);
+		free(p.parent);
 	}
 	free(p.ref_count);
 	free(p.bindings);
@@ -47,46 +55,27 @@ s_expr s_resolve(const s_expr name, const s_bindings b) {
 	if (b.parent != NULL) {
 		return s_resolve(name, *b.parent);
 	}
-	return s_error("Failed to resolve binding");
-}
-
-s_expr s_resolve_expression(s_bound_expr e) {
-	if (s_atom(e.form)) {
-		return s_resolve(e.form, e.bindings);
-	}
-
-	switch (e.form.type) {
-	case LAMBDA:
-		;
-		s_lambda_data l = *e.form.lambda;
-		s_expr* capture = malloc(sizeof(s_expr) * l.free_var_count);
-		for (int i = 0; i < l.free_var_count; i++) {
-			capture[i] = s_resolve(l.free_vars[i], e.bindings);
-		}
-		s_function_data* f = malloc(sizeof(s_function_data));
-		f->capture = capture;
-		f->lambda = l;
-		return (s_expr) { FUNCTION, counter(), .function=f };
-
-	case QUOTE:
-		;
-		s_expr data = *e.form.quote;
-		s_ref(data);
-		return data;
-
-	default:
-		return s_error("Unable to resolve expression");
-	}
+	return s_error(u_strref(u"Failed to resolve binding"));
 }
 
 s_expr s_nil() {
 	return (s_expr){ NIL, counter(), .nil=NULL };
 }
 
-const UChar const* builtin_ns = u"primitive";
-int32_t builtin_nsl = 9;
+s_expr s_error(strref message) {
+	return (s_expr){ ERROR, counter(), .error=malloc_strrefcpy(message, NULL) };
+}
 
-s_expr s_builtin(strref n, int32_t c, s_bound_expr (*f)(s_expr* a)) {
+s_expr s_function(s_bindings capture, s_expr lambda) {
+	s_ref_bindings(capture);
+	s_ref(lambda);
+	s_function_data* fd = malloc(sizeof(s_function_data));
+	fd->capture = capture;
+	fd->lambda = lambda;
+	return (s_expr){ FUNCTION, counter(), .function=fd };
+}
+
+s_expr s_builtin(strref n, int32_t c, bool (*f)(s_expr* a, s_bound_expr* result)) {
 	s_builtin_data* bp = malloc(sizeof(s_builtin_data));
 	bp->name = malloc_strrefcpy(n, NULL);
 	bp->arg_count = c;
@@ -129,16 +118,20 @@ s_expr s_symbol(strref ns, strref n) {
 	return (s_expr){ SYMBOL, counter(), .symbol=sp };
 }
 
+s_expr s_character(UChar32 cp) {
+	return (s_expr){ CHARACTER, counter(), .character=cp };
+}
+
 s_expr s_string(strref s) {
 	return (s_expr){ STRING, counter(), .string=malloc_strrefcpy(s, NULL) };
 }
 s_expr s_cons(const s_expr car, const s_expr cdr) {
 	if (car.type == CHARACTER && cdr.type == STRING) {
-		bool single = U16_IS_SINGLE(car.character);
+		bool single = !U_IS_SURROGATE(car.character);
 		int32_t head = single ? 1 : 2;
 		int32_t len = u_strlen(cdr.string);
-		UChar* s = malloc(sizeof(UChar) * (head + len));
-		u_strcpy(s + head, cdr.string, len);
+		UChar* s = malloc(sizeof(UChar) * (len + head));
+		u_strncpy(s + head, cdr.string, len);
 		if (single) {
 			*s = car.character;
 		} else {
@@ -156,20 +149,117 @@ s_expr s_cons(const s_expr car, const s_expr cdr) {
 	return (s_expr){ CONS, counter(), .cons=cons };
 }
 
-s_expr s_car(const s_expr e) {
-	if (s_atom(e)) {
-		s_error("Type error, cannot destructure atom");
+UChar* s_name(const s_expr e) {
+	switch (e.type) {
+		case ERROR:
+			return e.error;
+
+		case SYMBOL:
+			return e.symbol->name;
+
+		case NIL:
+			return u"nil";
+
+		case BUILTIN:
+			return e.builtin->name;
+
+		case FUNCTION:
+			return u"_";
+
+		case CHARACTER:
+			return u"_char_";
+		
+		default:
+			return NULL;
 	}
-	s_expr car = e.cons->car;
-	return car;
+}
+
+UChar* s_namespace(const s_expr e) {
+	switch (e.type) {
+		case ERROR:
+			return u"error";
+
+		case SYMBOL:
+			return e.symbol->namespace;
+
+		case NIL:
+			return u"data";
+
+		case BUILTIN:
+			return u"builtin";
+
+		case FUNCTION:
+			return u"function";
+
+		case CHARACTER:
+			return u"unicode";
+		
+		default:
+			return NULL;
+	}
+}
+
+s_expr s_car(const s_expr e) {
+	switch (e.type) {
+		case CONS:
+			s_ref(e.cons->car);
+			return e.cons->car;
+
+		case QUOTE:
+			return s_symbol(u_strref(u"data"), u_strref(u"quote"));
+
+		case LAMBDA:
+			return s_symbol(u_strref(u"data"), u_strref(u"lambda"));
+
+		case STRING:
+			;
+			bool single = U16_IS_SINGLE(e.string[0]);
+			UChar32 cp = single
+				? e.string[0]
+				: U16_GET_SUPPLEMENTARY(e.string[0], e.string[1]);
+			return s_character(cp);
+
+		default:
+			return s_error(u_strref(u"Type error, cannot destructure atom"));
+	}
 }
 
 s_expr s_cdr(const s_expr e) {
-	if (s_atom(e)) {
-		s_error("Type error, cannot destructure atom");
+	switch (e.type) {
+		case CONS:
+			s_ref(e.cons->cdr);
+			return e.cons->cdr;
+
+		case QUOTE:
+			s_ref(*e.quote);
+			return *e.quote;
+
+		case LAMBDA:
+			;
+			s_expr params = s_nil();
+			for (int i = e.lambda->param_count; i > 0; --i) {
+				s_expr old_params = params;
+				params = s_cons(e.lambda->params[i], old_params);
+				s_free(old_params);
+			}
+			return s_cons(params, s_cons(e.lambda->body, s_nil()));
+
+		case STRING:
+			;
+			bool single = U16_IS_SINGLE(e.string[0]);
+			int32_t head = single ? 1 : 2;
+			int32_t len = u_strlen(e.string);
+			if (len == 0) {
+				return s_nil();
+			}
+			UChar* s = malloc(sizeof(UChar) * (len - head));
+			u_strncpy(s, e.string, len - head);
+
+			return (s_expr){ STRING, counter(), .string=s };
+
+		default:
+			return s_error(u_strref(u"Type error, cannot destructure atom"));
 	}
-	s_expr cdr = e.cons->cdr;
-	return cdr;
 }
 
 bool s_atom(const s_expr e) {
@@ -225,15 +315,24 @@ void s_free(s_expr e) {
 			free(e.cons);
 			break;
 		case NIL:
+			break;
 		case BUILTIN:
 			free(e.builtin);
+			break;
 		case FUNCTION:
+			s_free_bindings(e.function->capture);
+			s_free(e.function->lambda);
 			free(e.function);
+			break;
 		case QUOTE:
 			s_free(*e.quote);
 			free(e.quote);
+			break;
 		case LAMBDA:
+			free(e.lambda->free_vars);
+			free(e.lambda->params);
 			free(e.lambda);
+			break;
 		case CHARACTER:
 			break;
 		case STRING:
@@ -283,7 +382,7 @@ void s_elem_dump(const s_expr s) {
 		break;
 	default:
 		if (s_atom(s)) {
-			u_printf_u(u"%S:%S", s_name(s), s_namespace(s));
+			u_printf_u(u"%S:%S", s_namespace(s), s_name(s));
 		} else {
 			s_expr car = s_car(s);
 			s_expr cdr = s_cdr(s);
