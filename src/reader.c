@@ -10,6 +10,7 @@
 #include <unicode/ucnv.h>
 #include <unicode/ustdio.h>
 
+#include "c-calipto/stringref.h"
 #include "c-calipto/sexpr.h"
 #include "c-calipto/stream.h"
 #include "c-calipto/scanner.h"
@@ -119,14 +120,14 @@ s_expr read_list(reader* r) {
 
 		return read_step_out(r);
 	}
-	return s_alloc_error("Failed to scan list open");
+	return s_error("Failed to scan list open");
 }
 
 s_expr read_symbol(reader* r) {
 	skip_whitespace(r->scanner);
 	int32_t nslen = scan_name(r->scanner);
 	if (nslen <= 0) {
-		return s_alloc_error("Failed to scan name");
+		return s_error("Failed to scan name");
 	}
 
 	if (!advance_input_if(r->scanner, is_equal, &colon)) {
@@ -136,8 +137,7 @@ s_expr read_symbol(reader* r) {
 		UChar* n = malloc(sizeof(UChar) * nlen);
 		take_buffer_length(r->scanner, nlen, n);
 
-		s_symbol sym = { s_u_strcpy(ns), s_u_strncpy(nlen, n) };
-		s_expr expr = s_alloc_symbol(sym);
+		s_expr expr = s_symbol(u_strref(ns), u_strnref(nlen, n));
 
 		free(n);
 
@@ -157,8 +157,7 @@ s_expr read_symbol(reader* r) {
 	UChar* n = malloc(sizeof(UChar) * nlen);
 	take_buffer_length(r->scanner, nlen, n);
 
-	s_symbol sym = { s_u_strncpy(nslen, ns), s_u_strncpy(nlen, n) };
-	s_expr expr = s_alloc_symbol(sym);
+	s_expr expr = s_symbol(u_strnref(nslen, ns), u_strnref(nlen, n));
 
 	free(ns);
 	free(n);
@@ -190,13 +189,13 @@ bool read_step_in(reader* r) {
 
 s_expr read_step_out(reader* r) {
 	if (cursor_depth(r) <= 0) {
-		return s_alloc_error("Unexpected list terminator");
+		return s_error("Unexpected list terminator");
 	}
 
 	if (advance_input_if(r->scanner, is_equal, &close_bracket)) {
 		discard_buffer(r->scanner);
 
-		return s_alloc_nil();
+		return s_nil();
 	}
 
 	s_expr head = read_next(r);
@@ -211,16 +210,15 @@ s_expr read_step_out(reader* r) {
 		s_expr_type t = nil.type;
 		s_free(nil);
 		if (t != NIL) {
-			s_expr_free(head);
+			s_free(head);
 
-			return s_alloc_error("Illegal list terminator");
+			return s_error("Illegal list terminator");
 		}
 	} else {
 		tail = read_step_out(r);
 	}
 
-	s_cons c = { head, tail };
-	s_expr cons = s_alloc_cons(c);
+	s_expr cons = s_cons(head, tail);
 
 	s_free(head);
 	s_free(tail);

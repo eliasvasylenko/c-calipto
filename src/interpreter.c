@@ -4,6 +4,7 @@
 #include <unicode/utypes.h>
 #include <unicode/ucnv.h>
 
+#include "c-calipto/stringref.h"
 #include "c-calipto/sexpr.h"
 #include "c-calipto/interpreter.h"
 
@@ -14,69 +15,14 @@ const UChar* system_namespace = u"system";
 const UChar* lambda_name = u"lambda";
 const UChar* quote_name = u"lambda";
 
-bindings* make_bindings(const bindings* p, int32_t c, const binding* b) {
-	bindings* bs = malloc(sizeof(bindings) + sizeof(binding) * c);
-	bs->parent = (bindings*)p;
-	bs->count = c;
-	binding* a = (binding*)(bs + 1);
-	for (int i = 0; i < c; i++) {
-		a[i] = b[i];
-	}
-	return bs;
-}
-
-void free_bindings(bindings* p) {
-
-}
-
-sexpr* resolve(const bindings* b, const sexpr* name) {
-	if (b == NULL) {
-		return NULL;
+s_bound_expr next_expression(s_bound_expr* tail) {
+	if (s_atom(tail->form)) {
+		*tail = (s_bound_expr){ NULL, NULL };
+		return (s_bound_expr){ NULL, NULL };
 	}
 
-	binding* a = (binding*)(b + 1);
-
-	for (int i = 0; i < b->count; i++) {
-		binding b = a[i];
-		if (sexpr_eq(name, b.name)) {
-			return b.value;
-		}
-	}
-
-	return resolve(b->parent, name);
-}
-
-sexpr* eval_expression(expression e) {
-	if (sexpr_atom(e.form)) {
-		return resolve(e.bindings, e.form);
-	}
-
-	switch (e.form->type) {
-	case LAMBDA:;
-		lambda l = *(lambda*)(e.form + 1);
-		sexpr** capture = malloc(sizeof(sexpr*) * l.free_var_count);
-		for (int i = 0; i < l.free_var_count; i++) {
-			capture[i] = resolve(e.bindings, l.free_vars[i]);
-		}
-		
-		return sexpr_function(l, capture);
-
-	case QUOTE:
-		return *(sexpr**)(e.form + 1);
-
-	default:
-		return NULL;
-	}
-}
-
-expression next_expression(statement* tail) {
-	if (sexpr_atom(tail->form)) {
-		*tail = (statement){ NULL, NULL };
-		return (expression){ NULL, NULL };
-	}
-
-	*tail = (statement){ sexpr_cdr_borrow(tail->form), tail->bindings };
-	return (expression){ sexpr_car_borrow(tail->form), tail->bindings };
+	tail = (s_bound_expr){ s_cdr(tail->form), tail->bindings };
+	return (s_bound_expr){ s_car(tail->form), tail->bindings };
 }
 
 statement eval_statement(const statement s) {

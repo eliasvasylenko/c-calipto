@@ -12,6 +12,7 @@
 #include <unicode/ucnv.h>
 #include <unicode/ustdio.h>
 
+#include "c-calipto/stringref.h"
 #include "c-calipto/sexpr.h"
 #include "c-calipto/stream.h"
 #include "c-calipto/scanner.h"
@@ -19,29 +20,28 @@
 #include "c-calipto/interpreter.h"
 
 s_bound_expr system_exit(s_expr* args) {
-	return (s_bound_expr){ s_alloc_nil(), NULL };
+	return (s_bound_expr){ s_nil(), NULL };
 }
 
 s_bound_expr data_cons(s_expr* args) {
-	return (s_bound_expr){ s_alloc_nil(), NULL };
+	return (s_bound_expr){ s_nil(), NULL };
 }
 
 s_bound_expr data_des(s_expr* args) {
-	return (s_bound_expr){ s_alloc_nil(), NULL };
+	return (s_bound_expr){ s_nil(), NULL };
 }
 
 s_bound_expr data_eq(s_expr* args) {
-	return (s_bound_expr){ s_alloc_nil(), NULL };
+	return (s_bound_expr){ s_nil(), NULL };
 }
 
 s_binding builtin_binding(UChar* ns, UChar* n, int32_t c, s_bound_expr (*f)(s_expr* args)) {
-	s_symbol sym = { s_u_strcpy(ns), s_u_strcpy(n) };
-	s_builtin bi = { s_u_strcpy(n), c, f };
-	s_binding b = { s_alloc_symbol(sym), s_alloc_builtin(bi) };
-	return b;
+	s_expr sym = s_symbol(u_strref(ns), u_strref(n));
+	s_expr bi = s_builtin(u_strref(n), c, f);
+	return (s_binding){ sym, bi };
 }
 
-s_bindings* builtin_bindings() {
+s_bindings builtin_bindings() {
 	s_binding bindings[] = {
 		builtin_binding(u"system", u"exit", 0, *system_exit),
 		builtin_binding(u"data", u"cons", 3, *data_cons),
@@ -50,7 +50,7 @@ s_bindings* builtin_bindings() {
 	};
 
 	size_t c = sizeof(bindings)/sizeof(s_binding);
-	return s_bindings_alloc(NULL, c, bindings);
+	return s_alloc_bindings(NULL, c, bindings);
 }
 
 int main(int argc, char** argv) {
@@ -58,13 +58,12 @@ int main(int argc, char** argv) {
 	UErrorCode error = 0;
 	UConverter* char_conv = ucnv_open(NULL, &error);
 
-	s_expr args = s_alloc_nil();
+	s_expr args = s_nil();
 	for (int i = argc - 1; i >= 0; i--) {
-		s_expr arg = s_alloc_string(s_strcpy(char_conv, argv[i]));
+		s_expr arg = s_string(c_strref(char_conv, argv[i]));
 		s_expr rest = args;
 
-		s_cons c = { arg, rest };
-		args = s_alloc_cons(c);
+		args = s_cons(arg, rest);
 
 		s_free(arg);
 		s_free(rest);
@@ -80,9 +79,9 @@ int main(int argc, char** argv) {
 	s_expr e = read(r);
 	s_dump(e);
 	
-	s_bindings* b = builtin_bindings();
+	s_bindings b = builtin_bindings();
 	eval(e, b);
-	s_bindings_free(b);
+	s_free_bindings(b);
 
 	s_free(e);
 

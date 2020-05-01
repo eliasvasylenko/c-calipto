@@ -1,30 +1,40 @@
+struct s_symbol_data;
+struct s_cons_data;
+struct s_builtin_data;
+struct s_function_data;
+struct s_lambda_data;
+
 typedef enum s_expr_type {
-	NIL,
-	CONS,
+	ERROR,
 	SYMBOL,
+	CONS,
+	NIL,
+	BUILTIN,
+	FUNCTION,
+	QUOTE,
+	LAMBDA,
 	CHARACTER,
 	STRING,
 	INTEGER,
-	BUILTIN,
-
-	/*
-	 * An expression can be promoted to a lambda when it
-	 * appears as a term in a statement. This promotion
-	 * does not modify the data, it is merely a
-	 * specialization for the purpose of performance.
-	 */
-	LAMBDA,
-	FUNCTION,
-
-	QUOTE,
-
-	ERROR
+	BIG_INTEGER
 } s_expr_type;
 
 typedef struct s_expr {
 	s_expr_type type;
 	_Atomic(int32_t)* ref_count;
-	void* payload;
+	union {
+		char* error;
+		struct s_symbol_data* symbol;
+		struct s_cons_data* cons;
+		void* nil;
+		struct s_builtin_data* builtin;
+		struct s_function_data* function;
+		struct s_expr* quote;
+		struct s_lambda_data* lambda;
+		UChar32 character;
+		UChar* string;
+		int64_t integer;
+	};
 } s_expr;
 
 typedef struct s_binding {
@@ -37,82 +47,70 @@ typedef struct s_binding {
  * be rewritten with a proper table lookup
  */
 typedef struct s_bindings {
-	_Atomic(int32_t) ref_count;
+	_Atomic(int32_t)* ref_count;
 	struct s_bindings* parent;
 	int32_t count;
+	s_binding* bindings;
 } s_bindings;
 
 typedef struct s_bound_expr {
 	s_expr form;
-	s_bindings* bindings;
+	s_bindings bindings;
 } s_bound_expr;
 
-typedef struct s_cons {
-	const s_expr car;
-	const s_expr cdr;
-} s_cons;
+typedef struct s_symbol_data {
+	UChar* namespace;
+	UChar* name;
+} s_symbol_data;
 
-typedef struct s_character {
-	UChar32 codepoint;
-} s_character;
+typedef struct s_cons_data {
+	s_expr car;
+	s_expr cdr;
+} s_cons_data;
 
-typedef struct s_string {
-	int32_t size;
-	UChar* chars;
-} s_string;
-
-typedef struct s_integer {
-	int64_t value;
-} s_integer;
-
-typedef struct s_symbol {
-	s_string namespace;
-	s_string name;
-} s_symbol;
-
-typedef struct s_lambda {
+/*
+ * An expression can be promoted to a lambda when it
+ * appears as a term in a statement. This promotion
+ * does not modify the data, it is merely a
+ * specialization for the purpose of performance.
+ */
+typedef struct s_lambda_data {
 	int32_t free_var_count;
 	s_expr* free_vars;
 	int32_t param_count;
 	s_expr* params;
 	s_expr body;
-} s_lambda;
+} s_lambda_data;
 
 /*
  * TODO This has linear lookup time for captures, this should
  * be rewritten with a proper table lookup
  */
-typedef struct s_function {
+typedef struct s_function_data {
 	s_expr* capture;
-	s_lambda lambda;
-} s_function;
+	s_lambda_data lambda;
+} s_function_data;
 
-typedef struct s_builtin {
-	s_string name;
+typedef struct s_builtin_data {
+	UChar* name;
 	int32_t arg_count;
 	s_bound_expr (*apply)(s_expr* args);
-} s_builtin;
+} s_builtin_data;
 
-s_bindings* s_bindings_alloc(const s_bindings* parent, int32_t count, const s_binding* b);
-void s_bindings_free(s_bindings* p);
-s_expr s_resolve(s_expr name, s_bindings* b);
-s_bound_expr s_bind(s_expr value, s_bindings* b);
+s_bindings s_alloc_bindings(const s_bindings* parent, int32_t count, const s_binding* b);
+void s_free_bindings(s_bindings p);
+s_expr s_resolve(const s_expr name, const s_bindings b);
 
-s_expr s_alloc_nil();
-s_expr s_alloc_symbol(s_symbol s);
-s_expr s_alloc_cons(s_cons c);
-s_expr s_alloc_character(s_character c);
-s_expr s_alloc_string(s_string s);
-s_expr s_alloc_builtin(s_builtin b);
-s_expr s_alloc_lambda(s_lambda l);
-s_expr s_alloc_function(s_function f);
+s_expr s_nil();
+s_expr s_symbol(strref ns, strref n);
+s_expr s_cons(s_expr car, s_expr cdr);
+s_expr s_character(UChar32 c);
+s_expr s_string(strref s);
+s_expr s_builtin(strref n, int32_t c, s_bound_expr (*f)(s_expr* a));
+s_expr s_promote_lambda(s_expr e);
+s_expr s_error(char* c);
 
-s_expr s_alloc_error(char* c);
-
-s_string s_strcpy(const UConverter* c, const char* s);
-s_string s_strncpy(const UConverter* c, int32_t l, const char* s);
-s_string s_u_strcpy(const UChar* s);
-s_string s_u_strncpy(int32_t l, const UChar* s);
+s_expr s_resolve_expression(s_bound_expr e);
 
 UChar* s_name(s_expr s);
 UChar* s_namespace(s_expr s);
