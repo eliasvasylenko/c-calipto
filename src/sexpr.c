@@ -21,15 +21,24 @@ _Atomic(int32_t)* counter() {
 }
 
 s_bindings s_alloc_bindings(const s_bindings* p, int32_t c, const s_binding* b) {
+	if (p != NULL) {
+		s_ref_bindings(*p);
+	}
 	int32_t memsize = sizeof(s_binding) * c;
 	s_binding* bc = malloc(memsize);
 	memcpy(bc, b, memsize);
-	return (s_bindings){ counter(), (s_bindings*)p, c, (s_binding*)b };
+
+	for (int i = 0; i < c; i++) {
+		s_ref(bc[i].name);
+		s_ref(bc[i].value);
+	}
+
+	return (s_bindings){ counter(), (s_bindings*)p, c, (s_binding*)bc };
 }
 
 void s_ref_bindings(const s_bindings b) {
 	s_bindings mb = (s_bindings) b;
-	*mb.ref_count++;
+	atomic_fetch_add(mb.ref_count, 1);
 }
 
 void s_free_bindings(s_bindings p) {
@@ -39,6 +48,10 @@ void s_free_bindings(s_bindings p) {
 	if (p.parent != NULL) {
 		s_free_bindings(*p.parent);
 		free(p.parent);
+	}
+	for (int i = 0; i < p.count; i++) {
+		s_free(p.bindings[i].name);
+		s_free(p.bindings[i].value);
 	}
 	free(p.ref_count);
 	free(p.bindings);
@@ -144,8 +157,8 @@ s_expr s_cons(const s_expr car, const s_expr cdr) {
 	s_cons_data *cons = malloc(sizeof(s_cons_data));
 	cons->car = car;
 	cons->cdr = cdr;
-	*cons->car.ref_count++;
-	*cons->cdr.ref_count++;
+	s_ref(cons->car);
+	s_ref(cons->cdr);
 	return (s_expr){ CONS, counter(), .cons=cons };
 }
 
@@ -295,7 +308,7 @@ bool s_eq(const s_expr a, const s_expr b) {
 
 void s_ref(const s_expr e) {
 	s_expr me = (s_expr) e;
-	*me.ref_count++;
+	atomic_fetch_add(me.ref_count, 1);
 }
 
 void s_free(s_expr e) {
@@ -307,6 +320,8 @@ void s_free(s_expr e) {
 			free(e.error);
 			break;
 		case SYMBOL:
+			free(e.symbol->name);
+			free(e.symbol->namespace);
 			free(e.symbol);
 			break;
 		case CONS:
@@ -317,6 +332,7 @@ void s_free(s_expr e) {
 		case NIL:
 			break;
 		case BUILTIN:
+			free(e.builtin->name);
 			free(e.builtin);
 			break;
 		case FUNCTION:
@@ -360,8 +376,12 @@ void s_tail_dump(const s_expr s) {
 		return;
 	}
 	printf(" ");
-	s_elem_dump(s_car(s));
-	s_tail_dump(s_cdr(s));
+	s_expr car = s_car(s);
+	s_expr cdr = s_cdr(s);
+	s_elem_dump(car);
+	s_tail_dump(cdr);
+	s_free(car);
+	s_free(cdr);
 }
 
 void s_elem_dump(const s_expr s) {

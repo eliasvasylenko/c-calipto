@@ -88,7 +88,12 @@ s_bindings builtin_bindings() {
 	};
 
 	size_t c = sizeof(bindings)/sizeof(s_binding);
-	return s_alloc_bindings(NULL, c, bindings);
+	s_bindings b = s_alloc_bindings(NULL, c, bindings);
+	for (int i = 0; i < c; i++) {
+		s_free(bindings[i].name);
+		s_free(bindings[i].value);
+	}
+	return b;
 }
 
 int main(int argc, char** argv) {

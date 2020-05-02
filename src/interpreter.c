@@ -22,26 +22,26 @@ s_expr eval_expression(s_bound_expr e) {
 	}
 
 	switch (e.form.type) {
-	case LAMBDA:
-		;
-		if (e.form.lambda->free_var_count > 0) {
-			/*
-			 * TODO only capture free vars not entire scope
-			 */
-			s_ref_bindings(e.bindings);
-			return s_function(e.bindings, e.form);
-		} else {
-			return s_function(s_alloc_bindings(NULL, 0, NULL), e.form);
-		}
+		case LAMBDA:
+			;
+			if (e.form.lambda->free_var_count > 0) {
+				/*
+				 * TODO only capture free vars not entire scope
+				 */
+				s_ref_bindings(e.bindings);
+				return s_function(e.bindings, e.form);
+			} else {
+				return s_function(s_alloc_bindings(NULL, 0, NULL), e.form);
+			}
 
-	case QUOTE:
-		;
-		s_expr data = *e.form.quote;
-		s_ref(data);
-		return data;
+		case QUOTE:
+			;
+			s_expr data = *e.form.quote;
+			s_ref(data);
+			return data;
 
-	default:
-		return s_error(u_strref(u"Unable to resolve expression"));
+		default:
+			return s_error(u_strref(u"Unable to resolve expression"));
 	}
 }
 
@@ -53,17 +53,30 @@ bool next_expression(s_expr* e, s_bound_expr* tail) {
 	s_bound_expr head = { s_car(tail->form), tail->bindings };
 	*e = eval_expression(head);
 	*tail = (s_bound_expr){ s_cdr(tail->form), tail->bindings };
+
+	s_free(head.form);
+	s_free(tail->form);
+
+	return true;
 }
 
 bool next_statement(s_bound_expr* s) {
+	if (s->form.type == ERROR) {
+		printf("Error: %s\n", s->form.error);
+		return false;
+	}
+
 	s_bound_expr tail = *s;
 
 	s_expr target;
 	if (!next_expression(&target, &tail)) {
+		printf("Syntax error: ");
+		s_dump(s->form);
 		return false;
 	}
 
 	bool success = true;
+	s_bound_expr previous = *s;
 	s_bound_expr result;
 	switch (target.type) {
 	case FUNCTION:
@@ -80,7 +93,6 @@ bool next_statement(s_bound_expr* s) {
 		if (f.capture.count > 0) {
 			c = malloc(sizeof(s_bindings));
 			*c = f.capture;
-			s_ref_bindings(*c);
 		} else {
 			c = NULL;
 		}
@@ -97,24 +109,37 @@ bool next_statement(s_bound_expr* s) {
 			next_expression(&args[i], &tail);
 		}
 		success = bi.apply(args, s);
+		free(args);
 		break;
 
 	default:
+		;
+		*s = (s_bound_expr){
+			s_error(u_strref(u"Invalid statement syntax")),
+			s_alloc_bindings(NULL, 0, NULL)
+		};
+		success = true;
 		break;
 	}
-	s_free(target);
+	if (success) {
+		s_free(previous.form);
+		s_free_bindings(previous.bindings);
+	}
 
 	return success;
 }
 
 void eval(const s_expr e, const s_bindings b) {
-	s_ref(e);
 	s_bound_expr s = { e, b };
-	do {
-		if (s.form.type = ERROR) {
-			printf("Error %s", s.form.error);
-			return;
-		}
-	} while (next_statement(&s));
+	s_ref(s.form);
+	s_ref_bindings(s.bindings);
+
+	while (next_statement(&s)) {
+		printf(" trace:");
+		s_dump(s.form);
+	}
+
+	s_free(s.form);
+	s_free_bindings(s.bindings);
 }
 

@@ -165,6 +165,11 @@ bool read_symbol(reader* r, s_expr* e) {
 	return true;
 }
 
+bool read_string(reader* r, s_expr* e) {
+
+	;
+}
+
 bool read_next(reader* r, s_expr* e) {
 	return read_symbol(r, e) || read_list(r, e);
 }

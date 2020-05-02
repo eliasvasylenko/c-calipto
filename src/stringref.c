@@ -46,7 +46,7 @@ int32_t maxlen(strref s) {
 
 UChar* malloc_strrefcpy(strref s, int32_t* l) {
 	int32_t max = maxlen(s);
-	UChar* us = malloc(sizeof(UChar) * max + 1);
+	UChar* us = malloc(sizeof(UChar) * (max + 1));
 	int32_t len;
 	switch (s.type) {
 		case CSTR:

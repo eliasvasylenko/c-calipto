@@ -1,4 +1,4 @@
-(system:stdout exit exit)
+(system:stdout "Lindsey is seriously the best!" system:exit system:exit)
 
 ; The bootstrap file is read and evaluated by the runtime before anything else happens.
 ; This means that the platform must include some functionality, i.e. to read and evaluate
@@ -71,3 +71,48 @@
 
 ; To resolve a value in the "hash" namespace we look up "resolve:hash"
 ; in the lexical scope and pass the symbol to it.
+
+"\Hello there!\"
+"String!"
+""""String!!!""""
+"""\Another string!\"""
+
+"\"String in quotes."\"
+\""String in quotes.""\
+
+"\\String surrounded by backslashes.\\"
+\\"\String surrounded by backslashes.\"\\
+
+
+"""\\"""
+"\\"
+""Hello""
+""\"Hello"\""
+\""Hello," he said, "I'm here.""\
+""\"Hello," he said, "I'm here."\""
+
+|\this is a namespace\|:|||\This is a name\|||
+\|this is a namespace|\:\\\|This is a name|\\\
+
+
+\\\\"String."\\\\
+
+""""String.""""
+""""\String\""""
+""""\\String with two slashes\\""""
+
+""""String with four slashes \\\\""""
+"\\" ; empty
+""\\"" ; empty
+"\\\" ; single slash
+
+
+"""\
+	String!
+\"""
+
+\\\"
+	String?
+"\\\
+
+
