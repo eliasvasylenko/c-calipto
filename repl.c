@@ -36,16 +36,19 @@ bool system_stdin(s_expr* args, s_bound_expr* b) {
 }
 
 bool system_stdout(s_expr* args, s_bound_expr* b) {
+	printf("stdout\n");
 	s_expr string = args[0];
 	s_expr fail = args[1];
 	s_expr cont = args[2];
 	
-	if (fail.type != LAMBDA || cont.type != LAMBDA) {
+	if ((fail.type != FUNCTION && fail.type != BUILTIN)
+			|| (cont.type != FUNCTION && cont.type != BUILTIN)) {
 		critical_error(u"Cannot return");
 		return false;
 	}
 
 	if (string.type != STRING) {
+		printf(" not string? %i\n", string.type);
 		*b = (s_bound_expr){ fail.lambda->body, s_alloc_bindings(NULL, 0, NULL) };
 
 	} else {

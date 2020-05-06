@@ -73,6 +73,7 @@ const UChar32 colon = U':';
 const UChar32 open_bracket = U'(';
 const UChar32 close_bracket = U')';
 const UChar32 dot = U'.';
+const UChar32 quote = U'"';
 
 bool is_whitespace(UChar32 c, const void* v) {
 	return U' ' == c || U'\t' == c;
@@ -94,6 +95,10 @@ bool is_symbol_leading_character(UChar32 c, const void* v) {
 
 bool is_equal(UChar32 c, const void* to) {
 	return c == *(UChar32*)to;
+}
+
+bool is_not_equal(UChar32 c, const void* to) {
+	return c != *(UChar32*)to;
 }
 
 /*
@@ -166,12 +171,42 @@ bool read_symbol(reader* r, s_expr* e) {
 }
 
 bool read_string(reader* r, s_expr* e) {
+	if (!advance_input_if(r->scanner, is_equal, &quote)) {
+		return false;
+	}
 
-	;
+	discard_buffer(r->scanner);
+	advance_input_while(r->scanner, is_not_equal, &quote);
+
+	int32_t len = input_position(r->scanner) - buffer_position(r->scanner);
+
+	if (!advance_input_if(r->scanner, is_equal, &quote)) {
+		// TODO error
+		return false;
+	}
+
+	UChar* c = malloc(sizeof(UChar) * len);
+	take_buffer_length(r->scanner, len, c);
+
+	s_expr quote = s_symbol(u_strref(u"data"), u_strref(u"quote"));
+	s_expr nil = s_nil();
+	s_expr string = s_string(u_strnref(len, c));
+	s_expr tail = s_cons(string, nil);
+
+	*e = s_cons(quote, tail);
+
+	s_free(quote);
+	s_free(nil);
+	s_free(string);
+	s_free(tail);
+
+	free(c);
+
+	return true;
 }
 
 bool read_next(reader* r, s_expr* e) {
-	return read_symbol(r, e) || read_list(r, e);
+	return read_string(r, e) || read_symbol(r, e) || read_list(r, e);
 }
 
 bool read(reader* r, s_expr* e) {
@@ -180,12 +215,12 @@ bool read(reader* r, s_expr* e) {
 }
 
 bool read_step_in(reader* r) {
-  skip_whitespace(r->scanner);
-  bool success = advance_input_if(r->scanner, is_equal, &open_bracket);
-  if (success) {
-	  push_cursor(r);
-  }
-  return success;
+	skip_whitespace(r->scanner);
+	bool success = advance_input_if(r->scanner, is_equal, &open_bracket);
+	if (success) {
+		push_cursor(r);
+	}
+	return success;
 }
 
 bool read_step_out(reader* r, s_expr* e) {

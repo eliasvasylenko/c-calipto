@@ -96,9 +96,10 @@ bool next_statement(s_bound_expr* s) {
 		} else {
 			c = NULL;
 		}
-		s_bindings b = s_alloc_bindings(c, l.param_count, bindings);
-
-		*s = (s_bound_expr){ l.body, b };
+		*s = (s_bound_expr){
+			l.body,
+			s_alloc_bindings(c, l.param_count, bindings)
+	       	};
 		break;
 
 	case BUILTIN:
@@ -118,7 +119,6 @@ bool next_statement(s_bound_expr* s) {
 			s_error(u_strref(u"Invalid statement syntax")),
 			s_alloc_bindings(NULL, 0, NULL)
 		};
-		success = true;
 		break;
 	}
 	if (success) {

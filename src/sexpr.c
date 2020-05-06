@@ -294,9 +294,11 @@ bool s_eq(const s_expr a, const s_expr b) {
 		return false;
 	}
 	switch (a.type) {
-		case CONS:;
+		case CONS:
 			return s_eq(a.cons->car, b.cons->car);
 		case SYMBOL:
+			return !u_strcmp(a.symbol->namespace, b.symbol->namespace)
+				&& !u_strcmp(a.symbol->name, b.symbol->name);
 		case STRING:
 		case CHARACTER:
 		case INTEGER:
