@@ -51,10 +51,15 @@ bool next_expression(s_expr* e, s_bound_expr* tail) {
 	}
 
 	s_bound_expr head = { s_car(tail->form), tail->bindings };
-	*e = eval_expression(head);
-	*tail = (s_bound_expr){ s_cdr(tail->form), tail->bindings };
-
 	s_free(head.form);
+
+	/*
+	 * TODO prepare the lambda or quote specialisation where appropriate
+	 */
+
+	*e = eval_expression(head);
+	
+	*tail = (s_bound_expr){ s_cdr(tail->form), tail->bindings };
 	s_free(tail->form);
 
 	return true;
@@ -67,6 +72,7 @@ bool next_statement(s_bound_expr* s) {
 	}
 
 	s_bound_expr tail = *s;
+	s_bound_expr previous = *s;
 
 	s_expr target;
 	if (!next_expression(&target, &tail)) {
@@ -76,7 +82,6 @@ bool next_statement(s_bound_expr* s) {
 	}
 
 	bool success = true;
-	s_bound_expr previous = *s;
 	s_bound_expr result;
 	switch (target.type) {
 	case FUNCTION:
@@ -134,10 +139,10 @@ void eval(const s_expr e, const s_bindings b) {
 	s_ref(s.form);
 	s_ref_bindings(s.bindings);
 
-	while (next_statement(&s)) {
-		printf(" trace:");
+	do {
+		printf("  trace: ");
 		s_dump(s.form);
-	}
+	} while (next_statement(&s));
 
 	s_free(s.form);
 	s_free_bindings(s.bindings);

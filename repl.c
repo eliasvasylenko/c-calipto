@@ -20,40 +20,51 @@
 #include "c-calipto/interpreter.h"
 
 void critical_error(UChar* message) {
-	u_printf("%S", message);
+	u_printf("critical_error %S", message);
 	exit(0);
 }
 
 bool system_exit(s_expr* args, s_bound_expr* b) {
+	printf("system_exit\n");
+
 	return false;
 }
 
-bool system_stdin(s_expr* args, s_bound_expr* b) {
+bool system_in(s_expr* args, s_bound_expr* b) {
+	printf("system_in\n");
+
 	s_expr fail = args[0];
 	s_expr cont = args[1];
-	*b = (s_bound_expr){ s_nil(), NULL };
+	*b = (s_bound_expr){ s_nil(), s_alloc_bindings(NULL, 0, NULL) };
 	return true;
 }
 
-bool system_stdout(s_expr* args, s_bound_expr* b) {
-	printf("stdout\n");
+bool system_out(s_expr* args, s_bound_expr* b) {
+	printf("system_out\n");
+
 	s_expr string = args[0];
 	s_expr fail = args[1];
 	s_expr cont = args[2];
 	
-	if ((fail.type != FUNCTION && fail.type != BUILTIN)
-			|| (cont.type != FUNCTION && cont.type != BUILTIN)) {
-		critical_error(u"Cannot return");
-		return false;
-	}
-
 	if (string.type != STRING) {
-		printf(" not string? %i\n", string.type);
-		*b = (s_bound_expr){ fail.lambda->body, s_alloc_bindings(NULL, 0, NULL) };
+		s_expr system_fail = s_symbol(u_strref(u"system"), u_strref(u"fail"));
+		s_binding bindings[] = { { system_fail, fail } };
+		*b = (s_bound_expr){
+			s_cons(system_fail, s_nil()),
+			s_alloc_bindings(NULL, 1, bindings)
+		};
+		s_free(system_fail);
 
 	} else {
 		u_printf("%S", string.string);
-		*b = (s_bound_expr){ cont.lambda->body, s_alloc_bindings(NULL, 0, NULL) };
+
+		s_expr system_cont = s_symbol(u_strref(u"system"), u_strref(u"cont"));
+		s_binding bindings[] = { { system_cont, cont } };
+		*b = (s_bound_expr){
+			s_cons(system_cont, s_nil()),
+			s_alloc_bindings(NULL, 1, bindings)
+		};
+		s_free(system_cont);
 	}
 	return true;
 }
@@ -69,7 +80,31 @@ bool data_des(s_expr* args, s_bound_expr* b) {
 }
 
 bool data_eq(s_expr* args, s_bound_expr* b) {
-	*b = (s_bound_expr){ s_nil(), NULL };
+	printf("data_eq\n");
+
+	s_expr e_a = args[0];
+	s_expr e_b = args[1];
+	s_expr f = args[2];
+	s_expr t = args[3];
+
+	if (s_eq(e_a, e_b)) {
+		s_expr data_true = s_symbol(u_strref(u"data"), u_strref(u"true"));
+		s_binding bindings[] = { { data_true, t } };
+		*b = (s_bound_expr){
+			s_cons(data_true, s_nil()),
+			s_alloc_bindings(NULL, 1, bindings)
+		};
+		s_free(data_true);
+	} else {
+		s_expr data_false = s_symbol(u_strref(u"data"), u_strref(u"false"));
+		s_binding bindings[] = { { data_false, f } };
+		*b = (s_bound_expr){
+			s_cons(data_false, s_nil()),
+			s_alloc_bindings(NULL, 1, bindings)
+		};
+		s_free(data_false);
+	}
+
 	return true;
 }
 
@@ -82,9 +117,9 @@ s_binding builtin_binding(UChar* ns, UChar* n, int32_t c, bool (*f)(s_expr* args
 s_bindings builtin_bindings() {
 	s_binding bindings[] = {
 		builtin_binding(u"system", u"exit", 0, *system_exit),
-		builtin_binding(u"system", u"stdin", 2, *system_stdin),
-		builtin_binding(u"system", u"stdout", 3, *system_stdout),
-		builtin_binding(u"system", u"stderr", 3, *system_stdout),
+		builtin_binding(u"system", u"in", 2, *system_in),
+		builtin_binding(u"system", u"out", 3, *system_out),
+		builtin_binding(u"system", u"err", 3, *system_out),
 		builtin_binding(u"data", u"cons", 3, *data_cons),
 		builtin_binding(u"data", u"des", 3, *data_des),
 		builtin_binding(u"data", u"eq", 4, *data_eq),
@@ -124,8 +159,6 @@ int main(int argc, char** argv) {
 
 	s_expr e;
 	if (read(r, &e)) {
-		s_dump(e);
-	
 		s_bindings b = builtin_bindings();
 		eval(e, b);
 		s_free_bindings(b);
