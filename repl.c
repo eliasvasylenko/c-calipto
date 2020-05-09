@@ -19,6 +19,11 @@
 #include "c-calipto/reader.h"
 #include "c-calipto/interpreter.h"
 
+static s_expr system_fail;
+static s_expr system_cont;
+static s_expr data_true;
+static s_expr data_false;
+
 void critical_error(UChar* message) {
 	u_printf("critical_error %S", message);
 	exit(0);
@@ -47,7 +52,6 @@ bool system_out(s_expr* args, s_bound_expr* b) {
 	s_expr cont = args[2];
 	
 	if (string.type != STRING) {
-		s_expr system_fail = s_symbol(u_strref(u"system"), u_strref(u"fail"));
 		s_binding bindings[] = { { system_fail, fail } };
 		*b = (s_bound_expr){
 			s_cons(system_fail, s_nil()),
@@ -58,7 +62,6 @@ bool system_out(s_expr* args, s_bound_expr* b) {
 	} else {
 		u_printf("%S", string.string);
 
-		s_expr system_cont = s_symbol(u_strref(u"system"), u_strref(u"cont"));
 		s_binding bindings[] = { { system_cont, cont } };
 		*b = (s_bound_expr){
 			s_cons(system_cont, s_nil()),
@@ -88,7 +91,6 @@ bool data_eq(s_expr* args, s_bound_expr* b) {
 	s_expr t = args[3];
 
 	if (s_eq(e_a, e_b)) {
-		s_expr data_true = s_symbol(u_strref(u"data"), u_strref(u"true"));
 		s_binding bindings[] = { { data_true, t } };
 		*b = (s_bound_expr){
 			s_cons(data_true, s_nil()),
@@ -96,7 +98,6 @@ bool data_eq(s_expr* args, s_bound_expr* b) {
 		};
 		s_free(data_true);
 	} else {
-		s_expr data_false = s_symbol(u_strref(u"data"), u_strref(u"false"));
 		s_binding bindings[] = { { data_false, f } };
 		*b = (s_bound_expr){
 			s_cons(data_false, s_nil()),
@@ -115,6 +116,11 @@ s_binding builtin_binding(UChar* ns, UChar* n, int32_t c, bool (*f)(s_expr* args
 }
 
 s_bindings builtin_bindings() {
+	system_fail = s_symbol(u_strref(u"system"), u_strref(u"fail"));
+	system_cont = s_symbol(u_strref(u"system"), u_strref(u"cont"));
+	data_true = s_symbol(u_strref(u"data"), u_strref(u"true"));
+	data_false = s_symbol(u_strref(u"data"), u_strref(u"false"));
+	
 	s_binding bindings[] = {
 		builtin_binding(u"system", u"exit", 0, *system_exit),
 		builtin_binding(u"system", u"in", 2, *system_in),

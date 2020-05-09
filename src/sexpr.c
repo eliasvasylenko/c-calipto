@@ -71,8 +71,10 @@ s_expr s_resolve(const s_expr name, const s_bindings b) {
 	return s_error(u_strref(u"Failed to resolve binding"));
 }
 
+s_expr data_nil = (s_expr){ NIL, NULL, .nil=NULL };
+
 s_expr s_nil() {
-	return (s_expr){ NIL, counter(), .nil=NULL };
+	return data_nil;
 }
 
 s_expr s_error(strref message) {
@@ -187,6 +189,10 @@ UChar* s_name(const s_expr e) {
 	}
 }
 
+/*
+ * TODO we want to not have to allocate new memory here when it's not necessary, but sometimes
+ *  it IS necessary... So how about reusing our existing ref counting api and returning them as STRINGs
+ */
 UChar* s_namespace(const s_expr e) {
 	switch (e.type) {
 		case ERROR:
@@ -212,6 +218,9 @@ UChar* s_namespace(const s_expr e) {
 	}
 }
 
+static s_expr data_quote = { ERROR, NULL, .error=NULL };
+static s_expr data_lambda = { ERROR, NULL, .error=NULL };
+
 s_expr s_car(const s_expr e) {
 	switch (e.type) {
 		case CONS:
@@ -219,10 +228,18 @@ s_expr s_car(const s_expr e) {
 			return e.cons->car;
 
 		case QUOTE:
-			return s_symbol(u_strref(u"data"), u_strref(u"quote"));
+			if (data_quote.type == ERROR) {
+				data_quote = s_symbol(u_strref(u"data"), u_strref(u"quote"));
+			}
+			s_ref(data_quote);
+			return data_quote;
 
 		case LAMBDA:
-			return s_symbol(u_strref(u"data"), u_strref(u"lambda"));
+			if (data_lambda.type == ERROR) {
+				data_lambda = s_symbol(u_strref(u"data"), u_strref(u"lambda"));
+			}
+			s_ref(data_lambda);
+			return data_lambda;
 
 		case STRING:
 			;
@@ -314,7 +331,7 @@ void s_ref(const s_expr e) {
 }
 
 void s_free(s_expr e) {
-	if (atomic_fetch_add(e.ref_count, -1) > 1) {
+	if (e.ref_count == NULL || atomic_fetch_add(e.ref_count, -1) > 1) {
 		return;
 	}
 	switch (e.type) {

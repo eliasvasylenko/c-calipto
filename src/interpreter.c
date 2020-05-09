@@ -9,13 +9,6 @@
 #include "c-calipto/sexpr.h"
 #include "c-calipto/interpreter.h"
 
-const UChar* data_namespace = u"data";
-const UChar* function_namespace = u"function";
-const UChar* system_namespace = u"system";
-
-const UChar* lambda_name = u"lambda";
-const UChar* quote_name = u"lambda";
-
 s_expr eval_expression(s_bound_expr e) {
 	if (s_atom(e.form)) {
 		return s_resolve(e.form, e.bindings);
@@ -45,22 +38,75 @@ s_expr eval_expression(s_bound_expr e) {
 	}
 }
 
+static s_expr data_quote = { ERROR, NULL, .error=NULL };
+static s_expr data_lambda = { ERROR, NULL, .error=NULL };
+
+bool prepare_expression(s_expr* e) {
+	if (s_atom(e)) {
+		return true;
+	}
+
+	s_expr car = s_car(e);
+	s_expr cdr = s_cdr(e);
+
+	if (data_quote.type == ERROR) {
+		data_quote = s_symbol(u_strref(u"data"), u_strref(u"quote"));
+	}
+	if (s_eq(car, data_quote)) {
+		s_expr old = *e;
+		*e = s_quote(cdr);
+		s_free(old);
+		return true;
+	}
+
+	if (data_lambda.type == ERROR) {
+		data_lambda = s_symbol(u_strref(u"data"), u_strref(u"lambda"));
+	}
+	if (s_eq(car, data_lambda)) {
+
+		/*
+		 *
+		 * TODO do all these based on s_atom, s_car etc not type == CONS
+		 *
+		 * TODO change params & vars to normal cons lists rather than arrays
+		 *
+		 */
+
+		if (cdr.type != CONS ||
+				cdr.cons->car.type != CONS ||
+				cdr.cons->cdr.type != CONS ||
+				cdr.cons->cdr.cons->car.type != CONS ||
+				cdr.cons->cdr.cons->cdr.type != NIL) {
+			return false;
+		}
+		s_expr params = cdr.cons->car;
+		s_expr body = cdr.cons->cdr.cons->car;
+
+		int32_t free_var_count = 0;
+		int32_t param_count = 0;
+
+		*e = s_lambda(free_var_count, NULL, param_count, NULL, body);
+		s_free(old);
+		return true;
+	}
+	
+	return true;
+}
+
 bool next_expression(s_expr* e, s_bound_expr* tail) {
 	if (s_atom(tail->form)) {
 		return false;
 	}
 
 	s_bound_expr head = { s_car(tail->form), tail->bindings };
-	s_free(head.form);
-
 	/*
 	 * TODO prepare the lambda or quote specialisation where appropriate
 	 */
-
+	prepare_expression(&head.form);
 	*e = eval_expression(head);
+	s_free(head.form);
 	
 	*tail = (s_bound_expr){ s_cdr(tail->form), tail->bindings };
-	s_free(tail->form);
 
 	return true;
 }
