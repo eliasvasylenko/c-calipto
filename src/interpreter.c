@@ -41,6 +41,40 @@ s_expr eval_expression(s_bound_expr e) {
 static s_expr data_quote = { ERROR, NULL, .error=NULL };
 static s_expr data_lambda = { ERROR, NULL, .error=NULL };
 
+bool make_quote(s_expr* e, s_expr s, s_expr data) {
+	if (data_quote.type == ERROR) {
+		data_quote = s_symbol(u_strref(u"data"), u_strref(u"quote"));
+	}
+	if (s_eq(s, data_quote)) {
+		*e = s_quote(data);
+		return true;
+	}
+	return false;
+}
+
+bool make_lambda(s_expr* e, s_expr s, s_expr lambda) {
+	/*
+	 *
+	 * TODO change params & vars to normal cons lists rather than arrays
+	 *
+	 */
+
+	if (data_lambda.type == ERROR) {
+		data_lambda = s_symbol(u_strref(u"data"), u_strref(u"lambda"));
+	}
+	if (s_eq(s, data_lambda) && !s_atom(lambda)) {
+		s_expr params = lambda->car;
+		s_expr body = cdr.cons->cdr.cons->car;
+
+		int32_t free_var_count = 0;
+		int32_t param_count = 0;
+
+		*e = s_lambda(free_var_count, NULL, param_count, NULL, body);
+		return true;
+	}
+	return false;
+}
+
 bool prepare_expression(s_expr* e) {
 	if (s_atom(e)) {
 		return true;
@@ -49,46 +83,13 @@ bool prepare_expression(s_expr* e) {
 	s_expr car = s_car(e);
 	s_expr cdr = s_cdr(e);
 
-	if (data_quote.type == ERROR) {
-		data_quote = s_symbol(u_strref(u"data"), u_strref(u"quote"));
-	}
-	if (s_eq(car, data_quote)) {
-		s_expr old = *e;
-		*e = s_quote(cdr);
+	s_expr old = *e;
+	if (make_quote(e, car, cdr) || make_lambda(e, car, cdr)) {
 		s_free(old);
-		return true;
 	}
 
-	if (data_lambda.type == ERROR) {
-		data_lambda = s_symbol(u_strref(u"data"), u_strref(u"lambda"));
-	}
-	if (s_eq(car, data_lambda)) {
-
-		/*
-		 *
-		 * TODO do all these based on s_atom, s_car etc not type == CONS
-		 *
-		 * TODO change params & vars to normal cons lists rather than arrays
-		 *
-		 */
-
-		if (cdr.type != CONS ||
-				cdr.cons->car.type != CONS ||
-				cdr.cons->cdr.type != CONS ||
-				cdr.cons->cdr.cons->car.type != CONS ||
-				cdr.cons->cdr.cons->cdr.type != NIL) {
-			return false;
-		}
-		s_expr params = cdr.cons->car;
-		s_expr body = cdr.cons->cdr.cons->car;
-
-		int32_t free_var_count = 0;
-		int32_t param_count = 0;
-
-		*e = s_lambda(free_var_count, NULL, param_count, NULL, body);
-		s_free(old);
-		return true;
-	}
+	s_free(car);
+	s_free(cdr);
 	
 	return true;
 }
