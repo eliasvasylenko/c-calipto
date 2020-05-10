@@ -23,6 +23,9 @@ _Atomic(int32_t)* counter() {
 s_bindings s_alloc_bindings(const s_bindings* p, int32_t c, const s_binding* b) {
 	if (p != NULL) {
 		s_ref_bindings(*p);
+		s_bindings* pp = malloc(sizeof(s_bindings));
+		*pp = *p;
+		p = pp;
 	}
 	int32_t memsize = sizeof(s_binding) * c;
 	s_binding* bc = malloc(memsize);
