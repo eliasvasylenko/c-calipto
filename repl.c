@@ -24,20 +24,11 @@ static s_expr system_cont;
 static s_expr data_true;
 static s_expr data_false;
 
-void critical_error(UChar* message) {
-	u_printf("critical_error %S", message);
-	exit(0);
-}
-
 bool system_exit(s_expr* args, s_bound_expr* b) {
-	printf("system_exit\n");
-
 	return false;
 }
 
 bool system_in(s_expr* args, s_bound_expr* b) {
-	printf("system_in\n");
-
 	s_expr fail = args[0];
 	s_expr cont = args[1];
 	*b = (s_bound_expr){ s_nil(), s_alloc_bindings(NULL, 0, NULL) };
@@ -45,8 +36,6 @@ bool system_in(s_expr* args, s_bound_expr* b) {
 }
 
 bool system_out(s_expr* args, s_bound_expr* b) {
-	printf("system_out\n");
-
 	s_expr string = args[0];
 	s_expr fail = args[1];
 	s_expr cont = args[2];
@@ -83,8 +72,6 @@ bool data_des(s_expr* args, s_bound_expr* b) {
 }
 
 bool data_eq(s_expr* args, s_bound_expr* b) {
-	printf("data_eq\n");
-
 	s_expr e_a = args[0];
 	s_expr e_b = args[1];
 	s_expr f = args[2];

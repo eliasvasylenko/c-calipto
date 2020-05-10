@@ -1,4 +1,5 @@
-(system:out "Lindsey is seriously the best!" system:exit system:exit)
+(system:out "Lindsey is seriously the best!
+" system:exit system:exit)
 
 ; The bootstrap file is read and evaluated by the runtime before anything else happens.
 ; This means that the platform must include some functionality, i.e. to read and evaluate

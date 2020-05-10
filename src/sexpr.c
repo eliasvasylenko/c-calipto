@@ -164,6 +164,19 @@ s_expr s_cons(const s_expr car, const s_expr cdr) {
 	return (s_expr){ CONS, counter(), .cons=cons };
 }
 
+s_expr s_quote(s_expr e) {
+	s_expr* quote = malloc(sizeof(s_expr));
+	*quote = e;
+	s_ref(*quote);
+	return (s_expr){ QUOTE, counter(), .quote=quote };
+}
+
+s_expr s_lambda(int32_t free_var_count, s_expr* free_vars,
+		int32_t param_count, s_expr* params,
+		s_expr body) {
+	;
+}
+
 UChar* s_name(const s_expr e) {
 	switch (e.type) {
 		case ERROR:
@@ -261,8 +274,7 @@ s_expr s_cdr(const s_expr e) {
 			return e.cons->cdr;
 
 		case QUOTE:
-			s_ref(*e.quote);
-			return *e.quote;
+			return s_cons(*e.quote, s_nil());
 
 		case LAMBDA:
 			;
@@ -327,7 +339,9 @@ bool s_eq(const s_expr a, const s_expr b) {
 
 void s_ref(const s_expr e) {
 	s_expr me = (s_expr) e;
-	atomic_fetch_add(me.ref_count, 1);
+	if (me.ref_count != NULL) {
+		atomic_fetch_add(me.ref_count, 1);
+	}
 }
 
 void s_free(s_expr e) {
@@ -364,7 +378,13 @@ void s_free(s_expr e) {
 			free(e.quote);
 			break;
 		case LAMBDA:
+			for (int i = 0; i < e.lambda->free_var_count; i++) {
+				s_free(e.lambda->free_vars[i]);
+			}
 			free(e.lambda->free_vars);
+			for (int j = 0; j < e.lambda->param_count; j++) {
+				s_free(e.lambda->params[j]);
+			}
 			free(e.lambda->params);
 			free(e.lambda);
 			break;

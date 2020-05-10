@@ -45,53 +45,81 @@ bool make_quote(s_expr* e, s_expr s, s_expr data) {
 	if (data_quote.type == ERROR) {
 		data_quote = s_symbol(u_strref(u"data"), u_strref(u"quote"));
 	}
-	if (s_eq(s, data_quote)) {
-		*e = s_quote(data);
-		return true;
+	if (!s_eq(s, data_quote) || s_atom(data)) {
+		return false;
 	}
-	return false;
+
+	s_expr terminal = s_cdr(data);
+	if (!s_eq(terminal, s_nil())) {
+		s_free(terminal);
+		return false;
+	}
+	s_free(terminal);
+
+	data = s_car(data);
+
+	s_expr old = *e;
+	*e = s_quote(data);
+	s_free(old);
+
+	s_free(data);
+
+	return true;
 }
 
 bool make_lambda(s_expr* e, s_expr s, s_expr lambda) {
-	/*
-	 *
-	 * TODO change params & vars to normal cons lists rather than arrays
-	 *
-	 */
-
 	if (data_lambda.type == ERROR) {
 		data_lambda = s_symbol(u_strref(u"data"), u_strref(u"lambda"));
 	}
-	if (s_eq(s, data_lambda) && !s_atom(lambda)) {
-		s_expr params = lambda->car;
-		s_expr body = cdr.cons->cdr.cons->car;
-
-		int32_t free_var_count = 0;
-		int32_t param_count = 0;
-
-		*e = s_lambda(free_var_count, NULL, param_count, NULL, body);
-		return true;
+	if (!s_eq(s, data_lambda) || s_atom(lambda)) {
+		return false;
 	}
-	return false;
+	
+	s_expr tail = s_cdr(lambda);
+	if (s_atom(tail)) {
+		s_free(tail);
+		return false;
+	}
+
+	s_expr terminal = s_cdr(tail);
+	if (!s_eq(terminal, s_nil())) {
+		s_free(tail);
+		s_free(terminal);
+		return false;
+	}
+	s_free(terminal);
+
+	s_expr params = s_car(lambda);
+	s_expr body = s_car(tail);
+	s_free(tail);
+
+	int32_t free_var_count = 0;
+	int32_t param_count = 0;
+
+	s_expr old = *e;
+	*e = s_lambda(free_var_count, NULL, param_count, NULL, body);
+	s_free(old);
+
+	s_free(params);
+	s_free(body);
+	
+	return true;
 }
 
 bool prepare_expression(s_expr* e) {
-	if (s_atom(e)) {
+	if (s_atom(*e)) {
 		return true;
 	}
 
-	s_expr car = s_car(e);
-	s_expr cdr = s_cdr(e);
+	s_expr car = s_car(*e);
+	s_expr cdr = s_cdr(*e);
 
-	s_expr old = *e;
-	if (make_quote(e, car, cdr) || make_lambda(e, car, cdr)) {
-		s_free(old);
-	}
+	bool success = make_quote(e, car, cdr) || make_lambda(e, car, cdr);
 
 	s_free(car);
 	s_free(cdr);
 	
-	return true;
+	return success;
 }
 
 bool next_expression(s_expr* e, s_bound_expr* tail) {
@@ -107,7 +135,9 @@ bool next_expression(s_expr* e, s_bound_expr* tail) {
 	*e = eval_expression(head);
 	s_free(head.form);
 	
+	s_expr last_tail = tail->form;
 	*tail = (s_bound_expr){ s_cdr(tail->form), tail->bindings };
+	s_free(last_tail);
 
 	return true;
 }
@@ -119,6 +149,7 @@ bool next_statement(s_bound_expr* s) {
 	}
 
 	s_bound_expr tail = *s;
+	s_ref(tail.form);
 	s_bound_expr previous = *s;
 
 	s_expr target;
@@ -141,6 +172,7 @@ bool next_statement(s_bound_expr* s) {
 			next_expression(&arg, &tail);
 			bindings[i] = (s_binding){ l.params[i], arg };
 		}
+		s_free(tail.form);
 		s_bindings* c;
 		if (f.capture.count > 0) {
 			c = malloc(sizeof(s_bindings));
@@ -152,6 +184,9 @@ bool next_statement(s_bound_expr* s) {
 			l.body,
 			s_alloc_bindings(c, l.param_count, bindings)
 	       	};
+		for (int i = 0; i < l.param_count; i++) {
+			s_free(bindings[i].value);
+		}
 		break;
 
 	case BUILTIN:
@@ -161,7 +196,11 @@ bool next_statement(s_bound_expr* s) {
 		for (int i = 0; i < bi.arg_count; i++) {
 			next_expression(&args[i], &tail);
 		}
+		s_free(tail.form);
 		success = bi.apply(args, s);
+		for (int i = 0; i < l.param_count; i++) {
+			s_free(args[i]);
+		}
 		free(args);
 		break;
 

@@ -107,12 +107,12 @@ s_expr s_symbol(strref ns, strref n);
 s_expr s_cons(s_expr car, s_expr cdr);
 s_expr s_character(UChar32 c);
 s_expr s_string(strref s);
-s_expr s_builtin(strref n, int32_t c, bool (*f)(s_expr* a, s_bound_expr* result));
+s_expr s_builtin(strref n, int32_t c,
+		bool (*f)(s_expr* a, s_bound_expr* result));
 s_expr s_quote(s_expr data);
-s_expr s_lambda(
-	int32_t free_var_count, s_expr* free_vars,
-	int32_t param_count, s_expr* params,
-	s_expr body);
+s_expr s_lambda(int32_t free_var_count, s_expr* free_vars,
+		int32_t param_count, s_expr* params,
+		s_expr body);
 s_expr s_function(s_bindings capture, s_expr lambda);
 s_expr s_error(strref message);
 
