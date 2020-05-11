@@ -76,7 +76,7 @@ const UChar32 dot = U'.';
 const UChar32 quote = U'"';
 
 bool is_whitespace(UChar32 c, const void* v) {
-	return U' ' == c || U'\t' == c;
+	return U' ' == c || U'\t' == c || U'\n' == c;
 }
 
 bool is_symbol_character(UChar32 c, const void* v) {

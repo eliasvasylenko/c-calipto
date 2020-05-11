@@ -22,10 +22,14 @@ _Atomic(int32_t)* counter() {
 
 s_bindings s_alloc_bindings(const s_bindings* p, int32_t c, const s_binding* b) {
 	if (p != NULL) {
-		s_ref_bindings(*p);
-		s_bindings* pp = malloc(sizeof(s_bindings));
-		*pp = *p;
-		p = pp;
+		if (p->count == NULL) {
+			p = NULL;
+		} else {
+			s_ref_bindings(*p);
+			s_bindings* pp = malloc(sizeof(s_bindings));
+			*pp = *p;
+			p = pp;
+		}
 	}
 	int32_t memsize = sizeof(s_binding) * c;
 	s_binding* bc = malloc(memsize);
@@ -60,18 +64,19 @@ void s_free_bindings(s_bindings p) {
 	free(p.bindings);
 }
 
-s_expr s_resolve(const s_expr name, const s_bindings b) {
+bool s_resolve(s_expr* result, const s_expr name, const s_bindings b) {
 	for (int i = 0; i < b.count; i++) {
 		s_binding x = b.bindings[i];
 		if (s_eq(name, x.name)) {
 			s_ref(x.value);
-			return x.value;
+			*result = x.value;
+			return true;
 		}
 	}
 	if (b.parent != NULL) {
-		return s_resolve(name, *b.parent);
+		return s_resolve(result, name, *b.parent);
 	}
-	return s_error(u_strref(u"Failed to resolve binding"));
+	return false;
 }
 
 s_expr data_nil = (s_expr){ NIL, NULL, .nil=NULL };
@@ -174,10 +179,50 @@ s_expr s_quote(s_expr e) {
 	return (s_expr){ QUOTE, counter(), .quote=quote };
 }
 
-s_expr s_lambda(int32_t free_var_count, s_expr* free_vars,
-		int32_t param_count, s_expr* params,
-		s_expr body) {
-	;
+s_expr s_lambda(int32_t param_count, s_expr* params, s_expr body) {
+	s_lambda_data* lp = malloc(sizeof(s_lambda_data));
+	lp->param_count = param_count;
+	if (param_count > 0) {
+		lp->params = malloc(sizeof(s_expr) * param_count);
+		for (int i = 0; i < param_count; i++) {
+			s_ref(params[i]);
+			lp->params[i] = params[i];
+		}
+	} else {
+		lp->params = NULL;
+	}
+	s_ref(body);
+	lp->body = body;
+	return (s_expr){ LAMBDA, counter(), .lambda=lp };
+}
+
+s_expr s_statement(int32_t free_var_count, s_expr* free_vars,
+		s_expr target,
+		int32_t arg_count, s_expr* args) {
+	s_statement_data* sp = malloc(sizeof(s_statement_data));
+	sp->free_var_count = free_var_count;
+	if (free_var_count > 0) {
+		sp->free_vars = malloc(sizeof(s_expr) * free_var_count);
+		for (int i = 0; i < free_var_count; i++) {
+			s_ref(free_vars[i]);
+			sp->free_vars[i] = free_vars[i];
+		}
+	} else {
+		sp->free_vars = NULL;
+	}
+	s_ref(target);
+	sp->target = target;
+	sp->arg_count = arg_count;
+	if (arg_count > 0) {
+		sp->args = malloc(sizeof(s_expr) * arg_count);
+		for (int i = 0; i < arg_count; i++) {
+			s_ref(args[i]);
+			sp->args[i] = args[i];
+		}
+	} else {
+		sp->args = NULL;
+	}
+	return (s_expr){ STATEMENT, counter(), .statement=sp };
 }
 
 UChar* s_name(const s_expr e) {
@@ -265,7 +310,15 @@ s_expr s_car(const s_expr e) {
 				: U16_GET_SUPPLEMENTARY(e.string[0], e.string[1]);
 			return s_character(cp);
 
+		case STATEMENT:
+			;
+			s_ref(e.statement->target);
+			return e.statement->target;
+
 		default:
+			;
+			int32_t* a = NULL;
+			*a = 0;
 			return s_error(u_strref(u"Type error, cannot destructure atom"));
 	}
 }
@@ -282,12 +335,16 @@ s_expr s_cdr(const s_expr e) {
 		case LAMBDA:
 			;
 			s_expr params = s_nil();
-			for (int i = e.lambda->param_count; i > 0; --i) {
-				s_expr old_params = params;
-				params = s_cons(e.lambda->params[i], old_params);
-				s_free(old_params);
+			for (int i = e.lambda->param_count - 1; i >= 0; i--) {
+				s_expr tail = params;
+				params = s_cons(e.lambda->params[i], tail);
+				s_free(tail);
 			}
-			return s_cons(params, s_cons(e.lambda->body, s_nil()));
+			s_expr tail = s_cons(e.lambda->body, s_nil());
+			s_expr cdr = s_cons(params, tail);
+			s_free(params);
+			s_free(tail);
+			return cdr;
 
 		case STRING:
 			;
@@ -301,6 +358,16 @@ s_expr s_cdr(const s_expr e) {
 			u_strncpy(s, e.string, len - head);
 
 			return (s_expr){ STRING, counter(), .string=s };
+		
+		case STATEMENT:
+			;
+			s_expr args = s_nil();
+			for (int i = e.statement->arg_count - 1; i >= 0; i--) {
+				s_expr tail = args;
+				args = s_cons(e.statement->args[i], tail);
+				s_free(tail);
+			}
+			return args;
 
 		default:
 			return s_error(u_strref(u"Type error, cannot destructure atom"));
@@ -381,15 +448,30 @@ void s_free(s_expr e) {
 			free(e.quote);
 			break;
 		case LAMBDA:
-			for (int i = 0; i < e.lambda->free_var_count; i++) {
-				s_free(e.lambda->free_vars[i]);
+			if (e.lambda->param_count > 0) {
+				for (int j = 0; j < e.lambda->param_count; j++) {
+					s_free(e.lambda->params[j]);
+				}
+				free(e.lambda->params);
 			}
-			free(e.lambda->free_vars);
-			for (int j = 0; j < e.lambda->param_count; j++) {
-				s_free(e.lambda->params[j]);
-			}
-			free(e.lambda->params);
+			s_free(e.lambda->body);
 			free(e.lambda);
+			break;
+		case STATEMENT:
+			if (e.statement->free_var_count > 0) {
+				for (int i = 0; i < e.statement->free_var_count; i++) {
+					s_free(e.statement->free_vars[i]);
+				}
+				free(e.statement->free_vars);
+			}
+			s_free(e.statement->target);
+			if (e.statement->arg_count > 0) {
+				for (int i = 0; i < e.statement->arg_count; i++) {
+					s_free(e.statement->args[i]);
+				}
+				free(e.statement->args);
+			}
+			free(e.statement);
 			break;
 		case CHARACTER:
 			break;

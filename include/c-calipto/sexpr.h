@@ -3,6 +3,7 @@ struct s_cons_data;
 struct s_builtin_data;
 struct s_function_data;
 struct s_lambda_data;
+struct s_statement_data;
 
 typedef enum s_expr_type {
 	ERROR,
@@ -13,6 +14,7 @@ typedef enum s_expr_type {
 	FUNCTION,
 	QUOTE,
 	LAMBDA,
+	STATEMENT,
 	CHARACTER,
 	STRING,
 	INTEGER,
@@ -31,6 +33,7 @@ typedef struct s_expr {
 		struct s_function_data* function;
 		struct s_expr* quote;
 		struct s_lambda_data* lambda;
+		struct s_statement_data* statement;
 		UChar32 character;
 		UChar* string;
 		int64_t integer;
@@ -75,17 +78,19 @@ typedef struct s_cons_data {
  * specialization for the purpose of performance.
  */
 typedef struct s_lambda_data {
-	int32_t free_var_count;
-	s_expr* free_vars;
 	int32_t param_count;
 	s_expr* params;
 	s_expr body;
 } s_lambda_data;
 
-/*
- * TODO This has linear lookup time for captures, this should
- * be rewritten with a proper table lookup
- */
+typedef struct s_statement_data {
+	int32_t free_var_count;
+	s_expr* free_vars;
+	s_expr target;
+	int32_t arg_count;
+	s_expr* args;
+} s_statement_data;
+
 typedef struct s_function_data {
 	s_bindings capture;
 	s_expr lambda;
@@ -100,7 +105,7 @@ typedef struct s_builtin_data {
 s_bindings s_alloc_bindings(const s_bindings* parent, int32_t count, const s_binding* b);
 void s_ref_bindings(s_bindings p);
 void s_free_bindings(s_bindings p);
-s_expr s_resolve(const s_expr name, const s_bindings b);
+bool s_resolve(s_expr* result, const s_expr name, const s_bindings b);
 
 s_expr s_nil();
 s_expr s_symbol(strref ns, strref n);
@@ -110,9 +115,12 @@ s_expr s_string(strref s);
 s_expr s_builtin(strref n, int32_t c,
 		bool (*f)(s_expr* a, s_bound_expr* result));
 s_expr s_quote(s_expr data);
-s_expr s_lambda(int32_t free_var_count, s_expr* free_vars,
-		int32_t param_count, s_expr* params,
+s_expr s_lambda(int32_t param_count, s_expr* params,
 		s_expr body);
+s_expr s_statement(int32_t free_var_count, s_expr* free_vars,
+		s_expr target,
+		int32_t arg_count, s_expr* args);
+
 s_expr s_function(s_bindings capture, s_expr lambda);
 s_expr s_error(strref message);
 

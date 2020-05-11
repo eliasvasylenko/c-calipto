@@ -46,7 +46,6 @@ bool system_out(s_expr* args, s_bound_expr* b) {
 			s_cons(system_fail, s_nil()),
 			s_alloc_bindings(NULL, 1, bindings)
 		};
-		s_free(system_fail);
 
 	} else {
 		u_printf("%S", string.string);
@@ -56,7 +55,6 @@ bool system_out(s_expr* args, s_bound_expr* b) {
 			s_cons(system_cont, s_nil()),
 			s_alloc_bindings(NULL, 1, bindings)
 		};
-		s_free(system_cont);
 	}
 	return true;
 }
