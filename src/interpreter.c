@@ -80,7 +80,7 @@ bool compile_lambda(s_expr* result, int32_t term_count, s_expr* terms) {
 		free(params);
 	}
 
-	return true;
+	return success;
 }
 
 bool compile_expression(s_expr* result, s_expr e) {
@@ -180,7 +180,7 @@ bool eval_expression(s_expr* result, s_bound_expr e) {
 	switch (e.form.type) {
 		case LAMBDA:
 			;
-			if (e.form.lambda->body.statement->free_var_count > 0) {
+			if (e.form.lambda->body.statement->free_var_count > 0 || 1) {
 				/*
 				 * TODO only capture free vars not entire scope
 				 */
@@ -211,24 +211,23 @@ bool eval_function(s_bound_expr* result, s_expr target, int32_t arg_count, s_exp
 		return false;
 	}
 	
-	s_binding* bindings;
+	s_bindings bindings;
 	if (arg_count == 0) {
-		bindings = NULL;
+		bindings = target.function->capture;
+		s_ref_bindings(bindings);
 	} else {
-		bindings = malloc(sizeof(s_binding) * arg_count);
+		s_binding* b = malloc(sizeof(s_binding) * arg_count);
 		for (int i = 0; i < arg_count; i++) {
-			bindings[i] = (s_binding){ l.params[i], args[i] };
+			b[i] = (s_binding){ l.params[i], args[i] };
 		}
+		bindings = s_alloc_bindings(&target.function->capture, arg_count, b);
+		free(b);
 	}
-	s_bindings* capture = &target.function->capture;
 	s_ref(l.body);
 	*result = (s_bound_expr){
 		l.body,
-		s_alloc_bindings(capture, arg_count, bindings)
+		bindings	
 	};
-	if (bindings != NULL) {
-		free(bindings);
-	}
 
 	return true;
 }
@@ -242,8 +241,8 @@ bool eval_builtin(s_bound_expr* result, s_expr target, int32_t arg_count, s_expr
 }
 
 bool eval_statement(s_bound_expr* result, s_bound_expr s) {
-	printf("  trace: ");
-	s_dump(s.form);
+	// printf("  trace: ");
+	// s_dump(s.form);
 
 	if (!s.form.type == STATEMENT) {
 		printf("Unable to resolve statement: ");

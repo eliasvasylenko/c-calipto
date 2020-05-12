@@ -1,12 +1,13 @@
-(system:out
-  "Lindsey is seriously the best!"
-  (data:lambda () (system:exit))
-  (data:lambda () (system:exit)))
+((data:lambda (fail succeed)
+   (system:out "Lindsey is incredible!" fail succeed))
+  (data:lambda () (system:exit 'error))
+  (data:lambda () (system:exit 'ok)))
 
 (system:out
   "Lindsey is seriously the best!"
-  system:exit
+  (data:lambda () (system:exit ()))
   (data:lambda ()
+    (
     (data:des system:arguments
       system:exit
       (data:lambda (arg1 tail)
@@ -19,6 +20,31 @@
                 (system:out arg2
                   system:exit
                   system:exit)))))))))
+
+(
+
+def (odd? x)
+  match x { #(gt 0) (even? .. inc x)
+            #(lt 0) (even? .. dec x)
+            _       false }
+
+def (even? x)
+  match x { #(gt 0) (odd? .. inc x)
+            #(lt 0) (odd? .. dec x)
+            _       true }
+
+def (even? x)
+  (match x #(gt 0) (odd? .. inc x)
+           #(lt 0) (odd? .. dec x)
+           _ true)
+
+def (even? x)
+  match x
+    #(greater? 0) (odd? .. inc x)
+    #(lesser? 0) (odd? .. dec x)
+    _ true
+
+
 
 ; The bootstrap file is read and evaluated by the runtime before anything else happens.
 ; This means that the platform must include some functionality, i.e. to read and evaluate

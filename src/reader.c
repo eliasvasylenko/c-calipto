@@ -73,7 +73,8 @@ const UChar32 colon = U':';
 const UChar32 open_bracket = U'(';
 const UChar32 close_bracket = U')';
 const UChar32 dot = U'.';
-const UChar32 quote = U'"';
+const UChar32 double_quote = U'"';
+const UChar32 single_quote = U'\'';
 
 bool is_whitespace(UChar32 c, const void* v) {
 	return U' ' == c || U'\t' == c || U'\n' == c;
@@ -171,16 +172,16 @@ bool read_symbol(reader* r, s_expr* e) {
 }
 
 bool read_string(reader* r, s_expr* e) {
-	if (!advance_input_if(r->scanner, is_equal, &quote)) {
+	if (!advance_input_if(r->scanner, is_equal, &double_quote)) {
 		return false;
 	}
 
 	discard_buffer(r->scanner);
-	advance_input_while(r->scanner, is_not_equal, &quote);
+	advance_input_while(r->scanner, is_not_equal, &double_quote);
 
 	int32_t len = input_position(r->scanner) - buffer_position(r->scanner);
 
-	if (!advance_input_if(r->scanner, is_equal, &quote)) {
+	if (!advance_input_if(r->scanner, is_equal, &double_quote)) {
 		// TODO error
 		return false;
 	}
@@ -189,14 +190,12 @@ bool read_string(reader* r, s_expr* e) {
 	take_buffer_length(r->scanner, len, c);
 
 	s_expr quote = s_symbol(u_strref(u"data"), u_strref(u"quote"));
-	s_expr nil = s_nil();
 	s_expr string = s_string(u_strnref(len, c));
-	s_expr tail = s_cons(string, nil);
+	s_expr tail = s_cons(string, s_nil());
 
 	*e = s_cons(quote, tail);
 
 	s_free(quote);
-	s_free(nil);
 	s_free(string);
 	s_free(tail);
 
@@ -205,8 +204,33 @@ bool read_string(reader* r, s_expr* e) {
 	return true;
 }
 
+bool read_quote(reader* r, s_expr* e) {
+	if (!advance_input_if(r->scanner, is_equal, &single_quote)) {
+		return false;
+	}
+
+	discard_buffer(r->scanner);
+
+	s_expr data;
+	if (!read(r, &data)) {
+		// TODO error
+		return false;
+	}
+
+	s_expr quote = s_symbol(u_strref(u"data"), u_strref(u"quote"));
+	s_expr tail = s_cons(data, s_nil());
+
+	*e = s_cons(quote, tail);
+
+	s_free(quote);
+	s_free(data);
+	s_free(tail);
+
+	return true;
+}
+
 bool read_next(reader* r, s_expr* e) {
-	return read_string(r, e) || read_symbol(r, e) || read_list(r, e);
+	return read_string(r, e) || read_quote(r, e) || read_symbol(r, e) || read_list(r, e);
 }
 
 bool read(reader* r, s_expr* e) {

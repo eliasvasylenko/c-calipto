@@ -21,10 +21,17 @@
 
 static s_expr system_fail;
 static s_expr system_cont;
+static s_expr data_fail;
+static s_expr data_cont;
 static s_expr data_true;
 static s_expr data_false;
+static s_expr data_car;
+static s_expr data_cdr;
+static s_expr system_args;
 
 bool system_exit(s_expr* args, s_bound_expr* b) {
+	printf("Exited with code: ");
+	s_dump(args[0]);
 	return false;
 }
 
@@ -65,7 +72,46 @@ bool data_cons(s_expr* args, s_bound_expr* b) {
 }
 
 bool data_des(s_expr* args, s_bound_expr* b) {
-	*b = (s_bound_expr){ s_nil(), NULL };
+	s_expr e = args[0];
+	s_expr fail = args[1];
+	s_expr cont = args[2];
+
+	if (s_atom(e)) {
+		s_binding bindings[] = { { data_fail, fail } };
+		*b = (s_bound_expr){
+			s_cons(data_fail, s_nil()),
+			s_alloc_bindings(NULL, 1, bindings)
+		};
+
+	} else {
+		s_expr tail = s_nil();
+		s_expr prev = tail;
+		
+		tail = s_cons(data_cdr, tail);
+		s_free(prev);
+		prev = tail;
+
+		tail = s_cons(data_car, tail);
+		s_free(prev);
+		prev = tail;
+
+		tail = s_cons(data_cont, tail);
+		s_free(prev);
+
+		s_expr cdr = s_cdr(e);
+		s_expr car = s_car(e);
+		s_binding bindings[] = {
+			{ data_cont, cont },
+			{ data_car, car },
+			{ data_cdr, cdr }
+		};
+		*b = (s_bound_expr){
+			tail,
+			s_alloc_bindings(NULL, 3, bindings)
+		};
+		s_free(car);
+		s_free(cdr);
+	}
 	return true;
 }
 
@@ -100,20 +146,28 @@ s_binding builtin_binding(UChar* ns, UChar* n, int32_t c, bool (*f)(s_expr* args
 	return (s_binding){ sym, bi };
 }
 
-s_bindings builtin_bindings() {
+s_bindings builtin_bindings(s_expr args) {
 	system_fail = s_symbol(u_strref(u"system"), u_strref(u"fail"));
 	system_cont = s_symbol(u_strref(u"system"), u_strref(u"cont"));
+	data_fail = s_symbol(u_strref(u"data"), u_strref(u"fail"));
+	data_cont = s_symbol(u_strref(u"data"), u_strref(u"cont"));
 	data_true = s_symbol(u_strref(u"data"), u_strref(u"true"));
 	data_false = s_symbol(u_strref(u"data"), u_strref(u"false"));
+	data_car = s_symbol(u_strref(u"data"), u_strref(u"car"));
+	data_cdr = s_symbol(u_strref(u"data"), u_strref(u"cdr"));
+	system_args = s_symbol(u_strref(u"system"), u_strref(u"arguments"));
+
+	s_ref(args);
 	
 	s_binding bindings[] = {
-		builtin_binding(u"system", u"exit", 0, *system_exit),
+		builtin_binding(u"system", u"exit", 1, *system_exit),
 		builtin_binding(u"system", u"in", 2, *system_in),
 		builtin_binding(u"system", u"out", 3, *system_out),
 		builtin_binding(u"system", u"err", 3, *system_out),
 		builtin_binding(u"data", u"cons", 3, *data_cons),
 		builtin_binding(u"data", u"des", 3, *data_des),
 		builtin_binding(u"data", u"eq", 4, *data_eq),
+		(s_binding){ system_args, args }
 	};
 
 	size_t c = sizeof(bindings)/sizeof(s_binding);
@@ -141,8 +195,6 @@ int main(int argc, char** argv) {
 		s_free(rest);
 	}
 
-	s_dump(args);
-
 	UFILE* f = u_fopen("./bootstrap.cal", "r", NULL, NULL);
 	stream* st = open_file_stream(f);
 	scanner* sc = open_scanner(st);
@@ -150,7 +202,7 @@ int main(int argc, char** argv) {
 
 	s_expr e;
 	if (read(r, &e)) {
-		s_bindings b = builtin_bindings();
+		s_bindings b = builtin_bindings(args);
 		eval(e, b);
 		s_free_bindings(b);
 
