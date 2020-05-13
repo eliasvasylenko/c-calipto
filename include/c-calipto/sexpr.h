@@ -99,7 +99,9 @@ typedef struct s_function_data {
 typedef struct s_builtin_data {
 	UChar* name;
 	int32_t arg_count;
-	bool (*apply)(s_expr* args, s_bound_expr* result);
+	bool (*apply)(s_bound_expr* result, s_expr* args, void* d);
+	void (*free) (void* data);
+	void* data;
 } s_builtin_data;
 
 s_bindings s_alloc_bindings(const s_bindings* parent, int32_t count, const s_binding* b);
@@ -113,7 +115,9 @@ s_expr s_cons(s_expr car, s_expr cdr);
 s_expr s_character(UChar32 c);
 s_expr s_string(strref s);
 s_expr s_builtin(strref n, int32_t c,
-		bool (*f)(s_expr* a, s_bound_expr* result));
+		bool (*a)(s_bound_expr* result, s_expr* a, void* d),
+		void (*f)(void* d),
+		void* data);
 s_expr s_quote(s_expr data);
 s_expr s_lambda(int32_t param_count, s_expr* params,
 		s_expr body);

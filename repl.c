@@ -29,24 +29,32 @@ static s_expr data_car;
 static s_expr data_cdr;
 static s_expr system_args;
 
-bool system_exit(s_expr* args, s_bound_expr* b) {
-	printf("Exited with code: ");
-	s_dump(args[0]);
+void no_op(void* d) {}
+
+bool system_exit(s_bound_expr* b, s_expr* args, void* d) {
 	return false;
 }
 
-bool system_in(s_expr* args, s_bound_expr* b) {
+bool system_in(s_bound_expr* b, s_expr* args, void* d) {
 	s_expr fail = args[0];
 	s_expr cont = args[1];
 	*b = (s_bound_expr){ s_nil(), s_alloc_bindings(NULL, 0, NULL) };
 	return true;
 }
 
-bool system_out(s_expr* args, s_bound_expr* b) {
+typedef struct system_out_data {
+	FILE* file;
+	s_expr* next;
+	UChar* text;
+} system_out_data;
+
+bool system_out(s_bound_expr* b, s_expr* args, void* d) {
 	s_expr string = args[0];
 	s_expr fail = args[1];
 	s_expr cont = args[2];
 	
+	system_out_data data = *(system_out_data*)d;
+
 	if (string.type != STRING) {
 		s_binding bindings[] = { { system_fail, fail } };
 		*b = (s_bound_expr){
@@ -54,24 +62,28 @@ bool system_out(s_expr* args, s_bound_expr* b) {
 			s_alloc_bindings(NULL, 1, bindings)
 		};
 
-	} else {
-		u_printf("%S", string.string);
+	} else if (data.next == NULL) {
+		u_fprintf(data.file, "%S", string.string);
 
 		s_binding bindings[] = { { system_cont, cont } };
 		*b = (s_bound_expr){
 			s_cons(system_cont, s_nil()),
 			s_alloc_bindings(NULL, 1, bindings)
 		};
+
+	} else {
+
+
 	}
 	return true;
 }
 
-bool data_cons(s_expr* args, s_bound_expr* b) {
+bool data_cons(s_bound_expr* b, s_expr* args, void* d) {
 	*b = (s_bound_expr){ s_nil(), NULL };
 	return true;
 }
 
-bool data_des(s_expr* args, s_bound_expr* b) {
+bool data_des(s_bound_expr* b, s_expr* args, void* d) {
 	s_expr e = args[0];
 	s_expr fail = args[1];
 	s_expr cont = args[2];
@@ -115,7 +127,7 @@ bool data_des(s_expr* args, s_bound_expr* b) {
 	return true;
 }
 
-bool data_eq(s_expr* args, s_bound_expr* b) {
+bool data_eq(s_bound_expr* b, s_expr* args, void* d) {
 	s_expr e_a = args[0];
 	s_expr e_b = args[1];
 	s_expr f = args[2];
@@ -140,9 +152,12 @@ bool data_eq(s_expr* args, s_bound_expr* b) {
 	return true;
 }
 
-s_binding builtin_binding(UChar* ns, UChar* n, int32_t c, bool (*f)(s_expr* args, s_bound_expr* b)) {
+s_binding builtin_binding(UChar* ns, UChar* n, int32_t c,
+		bool (*a)(s_bound_expr* b, s_expr* args, void* d),
+		void (*f)(void* d),
+		void* data) {
 	s_expr sym = s_symbol(u_strref(ns), u_strref(n));
-	s_expr bi = s_builtin(u_strref(n), c, f);
+	s_expr bi = s_builtin(u_strref(n), c, a, f, data);
 	return (s_binding){ sym, bi };
 }
 
@@ -158,15 +173,21 @@ s_bindings builtin_bindings(s_expr args) {
 	system_args = s_symbol(u_strref(u"system"), u_strref(u"arguments"));
 
 	s_ref(args);
-	
+
+	system_out_data* s_o = malloc(sizeof(system_out_data));
+	*s_o = (system_out_data){ stdout, NULL, NULL };
+
+	system_out_data* s_e = malloc(sizeof(system_out_data));
+	*s_e = (system_out_data){ stderr, NULL, NULL };
+
 	s_binding bindings[] = {
-		builtin_binding(u"system", u"exit", 1, *system_exit),
-		builtin_binding(u"system", u"in", 2, *system_in),
-		builtin_binding(u"system", u"out", 3, *system_out),
-		builtin_binding(u"system", u"err", 3, *system_out),
-		builtin_binding(u"data", u"cons", 3, *data_cons),
-		builtin_binding(u"data", u"des", 3, *data_des),
-		builtin_binding(u"data", u"eq", 4, *data_eq),
+		builtin_binding(u"system", u"exit", 0, *system_exit, *no_op, NULL),
+		builtin_binding(u"system", u"in", 2, *system_in, *system_in_free s_i),
+		builtin_binding(u"system", u"out", 3, *system_out, *system_out_free, s_o),
+		builtin_binding(u"system", u"err", 3, *system_out, *system_out_free, s_e),
+		builtin_binding(u"data", u"cons", 3, *data_cons, *no_op, NULL),
+		builtin_binding(u"data", u"des", 3, *data_des, *no_op, NULL),
+		builtin_binding(u"data", u"eq", 4, *data_eq, *no_op, NULL),
 		(s_binding){ system_args, args }
 	};
 

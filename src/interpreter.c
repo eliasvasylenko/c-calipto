@@ -237,7 +237,7 @@ bool eval_builtin(s_bound_expr* result, s_expr target, int32_t arg_count, s_expr
 		return false;
 	}
 
-	return target.builtin->apply(args, result);
+	return target.builtin->apply(result, args, &target.builtin->data);
 }
 
 bool eval_statement(s_bound_expr* result, s_bound_expr s) {

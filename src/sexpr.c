@@ -22,7 +22,7 @@ _Atomic(int32_t)* counter() {
 
 s_bindings s_alloc_bindings(const s_bindings* p, int32_t c, const s_binding* b) {
 	if (p != NULL) {
-		if (p->count == NULL) {
+		if (p->count == 0) {
 			p = NULL;
 		} else {
 			s_ref_bindings(*p);
@@ -98,11 +98,14 @@ s_expr s_function(s_bindings capture, s_expr lambda) {
 	return (s_expr){ FUNCTION, counter(), .function=fd };
 }
 
-s_expr s_builtin(strref n, int32_t c, bool (*f)(s_expr* a, s_bound_expr* result)) {
+s_expr s_builtin(strref n, int32_t c,
+		bool (*f)(s_bound_expr* result, s_expr* a, void** d),
+		void* d) {
 	s_builtin_data* bp = malloc(sizeof(s_builtin_data));
 	bp->name = malloc_strrefcpy(n, NULL);
 	bp->arg_count = c;
 	bp->apply = f;
+	bp->data = d;
 	return (s_expr){ BUILTIN, counter(), .builtin=bp };
 }
 

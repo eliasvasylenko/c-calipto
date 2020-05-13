@@ -1,27 +1,7 @@
 ((data:lambda (fail succeed)
    (system:out "Lindsey is incredible!" fail succeed))
-  (data:lambda () (system:exit 'error))
-  (data:lambda () (system:exit 'ok)))
-
-(system:out
-  "Lindsey is seriously the best!"
-  (data:lambda () (system:exit ()))
-  (data:lambda ()
-    (
-    (data:des system:arguments
-      system:exit
-      (data:lambda (arg1 tail)
-        (data:des tail
-          system:exit
-          (data:lambda (arg2 tail)
-            (system:out arg1
-              system:exit
-              (data:lambda ()
-                (system:out arg2
-                  system:exit
-                  system:exit)))))))))
-
-(
+  (data:lambda () (system:err "Error!" system:exit system:exit))
+  system:exit)
 
 def (odd? x)
   match x { #(gt 0) (even? .. inc x)
