@@ -29,11 +29,19 @@ static s_expr data_car;
 static s_expr data_cdr;
 static s_expr system_args;
 
+static UConverter* char_conv;
+
 void no_op(void* d) {}
 
 bool system_exit(s_bound_expr* b, s_expr* args, void* d) {
 	return false;
 }
+
+typedef struct system_in_data {
+	UFILE* file;
+	s_expr* next;
+	UChar* text;
+} system_in_data;
 
 bool system_in(s_bound_expr* b, s_expr* args, void* d) {
 	s_expr fail = args[0];
@@ -42,8 +50,25 @@ bool system_in(s_bound_expr* b, s_expr* args, void* d) {
 	return true;
 }
 
+void system_in_free(void* d) {
+	system_in_data data = *(system_in_data*)d;
+
+	if (data.next) {
+		s_free(*data.next);
+		free(data.next);
+
+		if (data.text) {
+			free(data.text);
+		}
+	} else if (data.file) {
+		u_fclose(data.file);
+	}
+
+	free(d);
+}
+
 typedef struct system_out_data {
-	FILE* file;
+	UFILE* file;
 	s_expr* next;
 	UChar* text;
 } system_out_data;
@@ -76,6 +101,23 @@ bool system_out(s_bound_expr* b, s_expr* args, void* d) {
 
 	}
 	return true;
+}
+
+void system_out_free(void* d) {
+	system_out_data data = *(system_out_data*)d;
+
+	if (data.next) {
+		s_free(*data.next);
+		free(data.next);
+
+		if (data.text) {
+			free(data.text);
+		}
+	} else if (data.file) {
+		u_fclose(data.file);
+	}
+
+	free(d);
 }
 
 bool data_cons(s_bound_expr* b, s_expr* args, void* d) {
@@ -174,15 +216,18 @@ s_bindings builtin_bindings(s_expr args) {
 
 	s_ref(args);
 
+	system_in_data* s_i = malloc(sizeof(system_in_data));
+	*s_i = (system_in_data){ u_finit(stdin, NULL, NULL), NULL, NULL };
+
 	system_out_data* s_o = malloc(sizeof(system_out_data));
-	*s_o = (system_out_data){ stdout, NULL, NULL };
+	*s_o = (system_out_data){ u_finit(stdout, NULL, NULL), NULL, NULL };
 
 	system_out_data* s_e = malloc(sizeof(system_out_data));
-	*s_e = (system_out_data){ stderr, NULL, NULL };
+	*s_e = (system_out_data){ u_finit(stderr, NULL, NULL), NULL, NULL };
 
 	s_binding bindings[] = {
 		builtin_binding(u"system", u"exit", 0, *system_exit, *no_op, NULL),
-		builtin_binding(u"system", u"in", 2, *system_in, *system_in_free s_i),
+		builtin_binding(u"system", u"in", 2, *system_in, *system_in_free, s_i),
 		builtin_binding(u"system", u"out", 3, *system_out, *system_out_free, s_o),
 		builtin_binding(u"system", u"err", 3, *system_out, *system_out_free, s_e),
 		builtin_binding(u"data", u"cons", 3, *data_cons, *no_op, NULL),
@@ -203,7 +248,7 @@ s_bindings builtin_bindings(s_expr args) {
 int main(int argc, char** argv) {
 	setlocale(LC_ALL, "");
 	UErrorCode error = 0;
-	UConverter* char_conv = ucnv_open(NULL, &error);
+	char_conv = ucnv_open(NULL, &error);
 
 	s_expr args = s_nil();
 	for (int i = argc - 1; i >= 0; i--) {

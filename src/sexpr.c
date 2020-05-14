@@ -99,12 +99,14 @@ s_expr s_function(s_bindings capture, s_expr lambda) {
 }
 
 s_expr s_builtin(strref n, int32_t c,
-		bool (*f)(s_bound_expr* result, s_expr* a, void** d),
+		bool (*a)(s_bound_expr* result, s_expr* a, void* d),
+		void (*f)(void* d),
 		void* d) {
 	s_builtin_data* bp = malloc(sizeof(s_builtin_data));
 	bp->name = malloc_strrefcpy(n, NULL);
 	bp->arg_count = c;
-	bp->apply = f;
+	bp->apply = a;
+	bp->free = f;
 	bp->data = d;
 	return (s_expr){ BUILTIN, counter(), .builtin=bp };
 }
@@ -439,6 +441,7 @@ void s_free(s_expr e) {
 			break;
 		case BUILTIN:
 			free(e.builtin->name);
+			e.builtin->free(e.builtin->data);
 			free(e.builtin);
 			break;
 		case FUNCTION:
