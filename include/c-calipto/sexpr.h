@@ -40,36 +40,31 @@ typedef struct s_expr {
 	};
 } s_expr;
 
-typedef struct s_binding {
-	s_expr name;
-	s_expr value;
-} s_binding;
-
-/*
- * TODO This has linear lookup time for bindings, this should
- * be rewritten with a proper table lookup
- */
-typedef struct s_bindings {
-	_Atomic(int32_t)* ref_count;
-	struct s_bindings* parent;
-	int32_t count;
-	s_binding* bindings;
-} s_bindings;
-
-typedef struct s_bound_expr {
-	s_expr form;
-	s_bindings bindings;
-} s_bound_expr;
-
 typedef struct s_symbol_data {
-	UChar* namespace;
 	UChar* name;
+	s_expr* qualifier;
 } s_symbol_data;
 
 typedef struct s_cons_data {
 	s_expr car;
 	s_expr cdr;
 } s_cons_data;
+
+typedef struct s_tree {
+	/*
+	 * Tree from symbol to expression.
+	 *
+	 * Since symbols are interned, we can distinguish them uniquely by pointer.
+	 *
+	 * This means we have a unique 32/64 bit key ready to go, so perhaps a clever trie
+	 * implementation can have good results and be simple.
+	 *
+	 * For some tables (e.g. captured bindings) we have a small, fixed set of keys
+	 * and want to make many copies of the table with different values. To achieve
+	 * this perhaps we can find a perfect hash for a set of keys?
+	 */
+	;
+}
 
 /*
  * An expression can be promoted to a lambda when it
@@ -92,7 +87,7 @@ typedef struct s_statement_data {
 } s_statement_data;
 
 typedef struct s_function_data {
-	s_bindings capture;
+	s_tree capture;
 	s_expr lambda;
 } s_function_data;
 
@@ -103,11 +98,6 @@ typedef struct s_builtin_data {
 	void (*free) (void* data);
 	void* data;
 } s_builtin_data;
-
-s_bindings s_alloc_bindings(const s_bindings* parent, int32_t count, const s_binding* b);
-void s_ref_bindings(s_bindings p);
-void s_free_bindings(s_bindings p);
-bool s_resolve(s_expr* result, const s_expr name, const s_bindings b);
 
 s_expr s_nil();
 s_expr s_symbol(strref ns, strref n);
