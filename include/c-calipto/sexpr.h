@@ -50,11 +50,14 @@ typedef struct s_cons_data {
 	s_expr cdr;
 } s_cons_data;
 
-typedef struct s_trie {
+/*
+ * Symbol table trie for interning.
+ */
+typedef struct s_table {
 	s_expr key;
-	int64_t offset;
-	uint64_t[4] population;
-	s_trie[] children;
+	uint64_t offset;
+	uint64_t population[4];
+	struct s_table* children;
 
 	/*
 	 * This is a trie mapping symbol names & qualifiers to symbols, used
@@ -78,17 +81,24 @@ typedef struct s_trie {
 	 * TODO common prefix length, reshuffle to try find unique position?
 	 *
 	 * TODO optimise for retrieval of existing keys not insertion!
+	 *
+	 * TODO must synchronize for inserts & removals ... but can probably
+	 * avoid this for lookup.
 	 */
-	
+} s_table;
 
-}
-
-typedef struct s_tree {
-	s_expr* key;
-	s_expr value;
-	int8_t offset;
-	int16_t population;
-	s_tree[] children;
+/*
+ * Associative trie for binding symbols to values. All keys are known before-hand,
+ * so we can allocate every node into one flat block of memory. We only need to
+ * support update and retrieval of keys which are present. Keys are pointers to
+ * interned symbols.
+ *
+ * Node arrays use popcnt compression, and the structure uses prefix compression.
+ *
+ * We never need to synchronize access.
+ */
+typedef struct s_bindings {
+	uint32_t node_count; // only needed for fast copying
 
 	/*
 	 * Tree from symbols to expression.
@@ -107,8 +117,23 @@ typedef struct s_tree {
 	 *
 	 * Can also try popcount compression on resulting array.
 	 */
-	;
-}
+	struct s_bindings_node {
+		bool leaf;
+		union {
+			struct {
+				uint8_t offset;
+				uint16_t population;
+				struct s_bindings_node* children;
+			};
+			s_expr value;
+		};
+	}* nodes;
+} s_bindings;
+
+typedef struct s_bound_expr {
+	s_expr expr;
+	s_bindings bindings;
+} s_bound_expr;
 
 /*
  * An expression can be promoted to a lambda when it
@@ -131,14 +156,14 @@ typedef struct s_statement_data {
 } s_statement_data;
 
 typedef struct s_function_data {
-	s_tree capture;
+	s_bindings capture;
 	s_expr lambda;
 } s_function_data;
 
 typedef struct s_builtin_data {
 	UChar* name;
 	int32_t arg_count;
-	bool (*apply)(s_tree* scope, s_expr* result, s_expr* args, void* d);
+	bool (*apply)(s_bindings* scope, s_expr* result, s_expr* args, void* d);
 	void (*free) (void* data);
 	void* data;
 } s_builtin_data;
@@ -149,7 +174,7 @@ s_expr s_cons(s_expr car, s_expr cdr);
 s_expr s_character(UChar32 c);
 s_expr s_string(strref s);
 s_expr s_builtin(strref n, int32_t c,
-		bool (*a)(s_tree* scope, s_expr* result, s_expr* a, void* d),
+		bool (*a)(s_bindings* scope, s_expr* result, s_expr* a, void* d),
 		void (*f)(void* d),
 		void* data);
 s_expr s_quote(s_expr data);
@@ -159,7 +184,7 @@ s_expr s_statement(int32_t free_var_count, s_expr* free_vars,
 		s_expr target,
 		int32_t arg_count, s_expr* args);
 
-s_expr s_function(s_tree capture, s_expr lambda);
+s_expr s_function(s_bindings capture, s_expr lambda);
 s_expr s_error(strref message);
 
 UChar* s_name(s_expr s);
