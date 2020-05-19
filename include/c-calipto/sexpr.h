@@ -50,18 +50,48 @@ typedef struct s_cons_data {
 	s_expr cdr;
 } s_cons_data;
 
+typedef struct s_trie {
+	/*
+	 * This is a trie mapping symbol names & qualifiers to symbols, used
+	 * for interning. Keys are composed of a fixed-length pointer and a
+	 * variable-length string, which can be viewed as a variable-length
+	 * sequence of bytes. Pretty well understood any easy to optimise.
+	 *
+	 * The fixed-length qualifiers will make for many common prefixes, so
+	 * we should optimise for this. Perhaps a two-level data structure
+	 * where we map by qualifier first then switch to a different strategy
+	 * for subtrees?
+	 *
+	 * Since symbols are reference counted, they should remove themselves
+	 * from this trie once they're free.
+	 */
+
+	/*
+	 * First attempt should by 256-way prefix-compressed trie with
+	 * popcount compression on arrays.
+	 *
+	 * TODO common prefix length, reshuffle to try find unique position?
+	 *
+	 * TODO optimise for retrieval of existing keys not insertion!
+	 */
+}
+
 typedef struct s_tree {
 	/*
-	 * Tree from symbol to expression.
+	 * Tree from symbols to expression.
 	 *
 	 * Since symbols are interned, we can distinguish them uniquely by pointer.
 	 *
-	 * This means we have a unique 32/64 bit key ready to go, so perhaps a clever trie
-	 * implementation can have good results and be simple.
+	 * This means we have a unique 32/64 bit key ready to go, so perhaps a clever
+	 * trie implementation can have good results and be simple.
 	 *
 	 * For some tables (e.g. captured bindings) we have a small, fixed set of keys
 	 * and want to make many copies of the table with different values. To achieve
-	 * this perhaps we can find a perfect hash for a set of keys?
+	 * this perhaps we can find a perfect hash for a set of keys? Or just make a
+	 * best-effort to find an offset into the pointer data which already produces
+	 * a unique byte/nibble for the pointer data.
+	 *
+	 * Can also try popcount compression on resulting array.
 	 */
 	;
 }
@@ -94,7 +124,7 @@ typedef struct s_function_data {
 typedef struct s_builtin_data {
 	UChar* name;
 	int32_t arg_count;
-	bool (*apply)(s_bound_expr* result, s_expr* args, void* d);
+	bool (*apply)(s_tree* scope, s_expr* result, s_expr* args, void* d);
 	void (*free) (void* data);
 	void* data;
 } s_builtin_data;
@@ -105,7 +135,7 @@ s_expr s_cons(s_expr car, s_expr cdr);
 s_expr s_character(UChar32 c);
 s_expr s_string(strref s);
 s_expr s_builtin(strref n, int32_t c,
-		bool (*a)(s_bound_expr* result, s_expr* a, void* d),
+		bool (*a)(s_tree* scope, s_expr* result, s_expr* a, void* d),
 		void (*f)(void* d),
 		void* data);
 s_expr s_quote(s_expr data);
@@ -115,7 +145,7 @@ s_expr s_statement(int32_t free_var_count, s_expr* free_vars,
 		s_expr target,
 		int32_t arg_count, s_expr* args);
 
-s_expr s_function(s_bindings capture, s_expr lambda);
+s_expr s_function(s_tree capture, s_expr lambda);
 s_expr s_error(strref message);
 
 UChar* s_name(s_expr s);
