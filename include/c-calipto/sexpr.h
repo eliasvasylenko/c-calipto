@@ -51,6 +51,11 @@ typedef struct s_cons_data {
 } s_cons_data;
 
 typedef struct s_trie {
+	s_expr key;
+	int64_t offset;
+	uint64_t[4] population;
+	s_trie[] children;
+
 	/*
 	 * This is a trie mapping symbol names & qualifiers to symbols, used
 	 * for interning. Keys are composed of a fixed-length pointer and a
@@ -74,9 +79,17 @@ typedef struct s_trie {
 	 *
 	 * TODO optimise for retrieval of existing keys not insertion!
 	 */
+	
+
 }
 
 typedef struct s_tree {
+	s_expr* key;
+	s_expr value;
+	int8_t offset;
+	int16_t population;
+	s_tree[] children;
+
 	/*
 	 * Tree from symbols to expression.
 	 *
@@ -89,7 +102,8 @@ typedef struct s_tree {
 	 * and want to make many copies of the table with different values. To achieve
 	 * this perhaps we can find a perfect hash for a set of keys? Or just make a
 	 * best-effort to find an offset into the pointer data which already produces
-	 * a unique byte/nibble for the pointer data.
+	 * a unique byte/nibble for the pointer data. In those cases we might also be
+	 * able to assume that all lookups will succeed in which case can omit key.
 	 *
 	 * Can also try popcount compression on resulting array.
 	 */
