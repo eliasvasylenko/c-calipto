@@ -111,6 +111,57 @@ s_expr s_builtin(strref n, int32_t c,
 	return (s_expr){ BUILTIN, counter(), .builtin=bp };
 }
 
+/*
+ * This is a trie mapping symbol names & qualifiers to symbols, used
+ * for interning. Keys are composed of a fixed-length pointer and a
+ * variable-length string, which can be viewed as a variable-length
+ * sequence of bytes. Pretty well understood any easy to optimise.
+ *
+ * The fixed-length qualifiers will make for many common prefixes, so
+ * we should optimise for this. Perhaps a two-level data structure
+ * where we map by qualifier first then switch to a different strategy
+ * for subtrees?
+ *
+ * Since symbols are reference counted, they should remove themselves
+ * from this trie once they're free.
+ */
+static struct {
+	// mutex?
+	union s_table_node {
+		struct {
+			int64_t offset; // for common prefix compression, negated
+			uint64_t population[4]; // for popcount compression
+			union s_table_node[1] children;
+		}* internal;
+		s_symbol_data* leaf;
+	} root;
+} s_table;
+
+*s_expr s_interned(strref name, s_expr qualifier) {
+	return s_interned(name, qualifier, s_table.root);
+}
+
+*s_expr s_interned(strref name, s_expr qualifier, s_table_node node) {
+	if (node.internal->offset <= 0) {
+		int8_t index = popcnt(node.internal->population, 32);
+		return s_interned(name, qualifier, node.internal->children[index]);
+
+	} else {
+		s_expr leaf_qualifier = *node.leaf->key_qualifier;
+		strref leaf_name = u_strnref(
+				node.leaf->key_name_length,
+				node.leaf->key_name);
+
+		if (s_eq(leaf_qualifier == qualifier)
+			&& !strrefcmp(leaf_name, name)) {
+			return *node.leaf->value;
+
+		} else {
+			return NULL;
+		}
+	}
+}
+
 const UChar const* unicode_ns = u"unicode";
 const int32_t unicode_nsl = 7;
 
@@ -230,6 +281,13 @@ s_expr s_statement(int32_t free_var_count, s_expr* free_vars,
 	return (s_expr){ STATEMENT, counter(), .statement=sp };
 }
 
+/*
+ * We don't want to have to allocate memory here when the string already exists, but
+ * then when we have to materialize a string there will be nobody to free it.
+ *
+ * TODO We must allocate strings upon request and put them into the interning table,
+ * then we can free them when the refcount hits 0.
+ */
 UChar* s_name(const s_expr e) {
 	switch (e.type) {
 		case ERROR:
@@ -255,10 +313,6 @@ UChar* s_name(const s_expr e) {
 	}
 }
 
-/*
- * TODO we want to not have to allocate new memory here when it's not necessary, but sometimes
- *  it IS necessary... So how about reusing our existing ref counting api and returning them as STRINGs
- */
 UChar* s_namespace(const s_expr e) {
 	switch (e.type) {
 		case ERROR:

@@ -5,12 +5,12 @@ struct s_function_data;
 struct s_builtin_data;
 struct s_statement_data;
 struct s_instruction_data;
+struct s_string_data;
 
 typedef enum s_expr_type {
 	ERROR,
 	SYMBOL,
 	CONS,
-	NIL,
 	QUOTE,
 	LAMBDA,
 	FUNCTION,
@@ -25,34 +25,34 @@ typedef enum s_expr_type {
 
 typedef struct s_expr {
 	s_expr_type type;
-	_Atomic(int32_t)* ref_count;
 	union {
-		UChar* error;
+		UChar32 character;
+		int64_t integer;
+
 		struct s_symbol_data* symbol;
 		struct s_cons_data* cons;
-		void* nil;
 		struct s_expr* quote;
 		struct s_lambda_data* lambda;
 		struct s_function_data* function;
 		struct s_builtin_data* builtin;
 		struct s_statement_data* statement;
 		struct s_instruction_data* instruction;
-		UChar32 character;
-		UChar* string;
-		int64_t integer;
+		struct s_string_data* string;
 	};
 } s_expr;
 
 typedef struct s_symbol_data {
-	UChar* name;
-	s_expr* qualifier;
+	_Atomic(int32_t) ref_count;
+	s_expr qualifier;
+	uint32_t name_length;
+	UChar name[1]; // variable length
 } s_symbol_data;
 
 typedef struct s_cons_data {
+	_Atomic(int32_t) ref_count;
 	s_expr car;
 	s_expr cdr;
 } s_cons_data;
-
 
 /*
  * An expression can be promoted to a lambda when it
@@ -61,12 +61,14 @@ typedef struct s_cons_data {
  * specialization for the purpose of performance.
  */
 typedef struct s_lambda_data {
+	_Atomic(int32_t) ref_count;
 	int32_t param_count;
 	s_expr* params;
 	s_expr body;
 } s_lambda_data;
 
 typedef struct s_statement_data {
+	_Atomic(int32_t) ref_count;
 	int32_t free_var_count;
 	s_expr* free_vars;
 	s_expr target;
@@ -75,11 +77,13 @@ typedef struct s_statement_data {
 } s_statement_data;
 
 typedef struct s_function_data {
+	_Atomic(int32_t) ref_count;
 	s_expr lambda;
 	s_expr* capture;
 } s_function_data;
 
 typedef struct s_builtin_data {
+	_Atomic(int32_t) ref_count;
 	UChar* name;
 	int32_t arg_count;
 	bool (*apply)(s_expr* result, s_expr* args, void* d);
@@ -88,12 +92,18 @@ typedef struct s_builtin_data {
 } s_builtin_data;
 
 typedef struct s_instruction_data {
+	_Atomic(int32_t) ref_count;
 	s_expr statement;
 	s_expr* bindings;
 } s_instruction_data;
 
+typedef struct s_string_data {
+	_Atomic(int32_t) ref_count;
+	UChar string[1]; // variable length
+} s_string_data;
+
 s_expr s_nil();
-s_expr s_symbol(strref ns, strref n);
+s_expr s_symbol(strref name, s_expr qualifier);
 s_expr s_cons(s_expr car, s_expr cdr);
 s_expr s_character(UChar32 c);
 s_expr s_string(strref s);
@@ -124,40 +134,12 @@ void s_free(s_expr s);
 void s_dump(s_expr s);
 
 /*
- * This is a trie mapping symbol names & qualifiers to symbols, used
- * for interning. Keys are composed of a fixed-length pointer and a
- * variable-length string, which can be viewed as a variable-length
- * sequence of bytes. Pretty well understood any easy to optimise.
+ * Associative trie for binding symbols to indices. This is how the array of
+ * variables captured by a lambda is populated from the enclosing scope.
  *
- * The fixed-length qualifiers will make for many common prefixes, so
- * we should optimise for this. Perhaps a two-level data structure
- * where we map by qualifier first then switch to a different strategy
- * for subtrees?
- *
- * Since symbols are reference counted, they should remove themselves
- * from this trie once they're free.
- */
-typedef struct s_table {
-	// mutex?
-	union s_table_node {
-		struct {
-			int64_t offset; // for common prefix compression, negated
-			uint64_t population[4]; // for popcount compression
-			union s_table_node* children;
-		}* internal;
-		struct {
-			s_expr value;
-			s_expr* key_qualifier;
-			UChar key_name[1]; // variable length, null terminated
-		}* leaf;
-	} root;
-} s_table;
-
-/*
- * Associative trie for binding symbols to values. All keys are known before-hand,
- * so we can allocate every node into one flat block of memory. We only need to
- * support update and retrieval of keys which are present. Keys are pointers to
- * interned symbols.
+ * All keys are known before-hand, so we can allocate every node into one flat
+ * block of memory. We only need to support update and retrieval of keys which
+ * are present. Keys are pointers to interned symbols.
  *
  * Node arrays use popcnt compression, and the structure uses prefix compression.
  *

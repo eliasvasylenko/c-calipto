@@ -20,3 +20,4 @@ strref u_strref(const UChar* chars);
 strref u_strnref(int32_t size, const UChar* chars);
 
 UChar* malloc_strrefcpy(strref s, int32_t* l);
+uint32_t strrefcmp(strref a, strref b);
