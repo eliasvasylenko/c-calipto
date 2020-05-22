@@ -68,7 +68,7 @@ typedef struct s_builtin_data {
 	s_expr_ref* name; // always SYMBOL
 	s_expr (*represent)(void* data);
 	int32_t arg_count;
-	bool (*apply)(s_expr_ref** result, s_expr* args, void* d);
+	bool (*apply)(s_statement* result, s_expr* args, void* d);
 	void (*free) (void* data);
 	void* data;
 } s_builtin_data;
@@ -93,6 +93,9 @@ struct s_expr_ref {
 s_expr s_nil();
 s_expr s_symbol(s_expr_ref* qualifier, strref name);
 s_expr s_cons(s_expr car, s_expr cdr);
+
+s_expr s_list(int32_t count, s_expr* e);
+
 s_expr s_character(UChar32 c);
 s_expr s_string(strref s);
 s_expr s_builtin(s_expr_ref* n,

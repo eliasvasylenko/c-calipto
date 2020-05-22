@@ -132,13 +132,12 @@ bool read_list(reader* r, s_expr* e) {
 bool read_symbol(reader* r, s_expr* e) {
 	skip_whitespace(r->scanner);
        
-	s_expr symbol = s_nil();
-	bool first = true;
+	s_expr symbol = { SYMBOL, .p=NULL };
 
 	do {
 		int32_t len = scan_name(r->scanner);
 		if (len <= 0) {
-			if (!first) {
+			if (symbol.p) {
 				// TODO error
 			}
 			return false;
@@ -149,15 +148,22 @@ bool read_symbol(reader* r, s_expr* e) {
 		symbol = s_symbol(symbol.p, u_strnref(len, n));
 
 		free(n);
-
-		first = false;
 	} while (advance_input_if(r->scanner, is_equal, &colon));
-
-	s_free(s_nil());
 
 	*e = symbol;
 
 	return true;
+}
+
+static s_expr data_quote = { ERROR, .p=NULL };
+
+s_expr init_data_quote() {
+	if (data_quote.p == NULL) {
+		s_expr data = s_symbol(NULL, u_strref(u"data"));
+		data_quote = s_symbol(data.p, u_strref(u"quote"));
+		s_free(data);
+	}
+	return data_quote;
 }
 
 bool read_string(reader* r, s_expr* e) {
@@ -177,17 +183,12 @@ bool read_string(reader* r, s_expr* e) {
 
 	UChar* c = malloc(sizeof(UChar) * len);
 	take_buffer_length(r->scanner, len, c);
-
-	s_expr quote = s_symbol(u_strref(u"data"), u_strref(u"quote"));
 	s_expr string = s_string(u_strnref(len, c));
-	s_expr tail = s_cons(string, s_nil());
 
-	*e = s_cons(quote, tail);
+	s_expr list[] = { init_data_quote(), string };
+	*e = s_list(2, list);
 
-	s_free(quote);
 	s_free(string);
-	s_free(tail);
-
 	free(c);
 
 	return true;
@@ -206,14 +207,10 @@ bool read_quote(reader* r, s_expr* e) {
 		return false;
 	}
 
-	s_expr quote = s_symbol(u_strref(u"data"), u_strref(u"quote"));
-	s_expr tail = s_cons(data, s_nil());
+	s_expr list[] = { init_data_quote(), data };
+	*e = s_list(2, list);
 
-	*e = s_cons(quote, tail);
-
-	s_free(quote);
 	s_free(data);
-	s_free(tail);
 
 	return true;
 }
@@ -267,12 +264,12 @@ bool read_step_out(reader* r, s_expr* e) {
 			s_free(head);
 			return false;
 		}
-		s_expr_type t = nil.type;
-		s_free(nil);
-		if (t != NIL) {
+		if (nil.type == SYMBOL && NULL == nil.p->symbol.qualifier) {
+			s_free(nil);
 			s_free(head);
 			return false;
 		}
+		s_free(nil);
 	} else if (!read_step_out(r, &tail)) {
 		s_free(head);
 		return false;

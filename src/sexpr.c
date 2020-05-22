@@ -15,73 +15,19 @@
 #include "c-calipto/sexpr.h"
 
 s_expr_ref* ref(int32_t payload_size) {
-	s_expr_ref* ref = malloc(sizeof(_Atomic(int32_t)) + payload_size);
-	ref->ref_count = ATOMIC_VAR_INIT(1);
-	return ref;
+	s_expr_ref* r = malloc(sizeof(_Atomic(int32_t)) + payload_size);
+	r->ref_count = ATOMIC_VAR_INIT(1);
+	return r;
 }
 
-s_bindings s_alloc_bindings(const s_bindings* p, int32_t c, const s_binding* b) {
-	if (p != NULL) {
-		if (p->count == 0) {
-			p = NULL;
-		} else {
-			s_ref_bindings(*p);
-			s_bindings* pp = malloc(sizeof(s_bindings));
-			*pp = *p;
-			p = pp;
-		}
-	}
-	int32_t memsize = sizeof(s_binding) * c;
-	s_binding* bc = malloc(memsize);
-	memcpy(bc, b, memsize);
-
-	for (int i = 0; i < c; i++) {
-		s_ref(bc[i].name);
-		s_ref(bc[i].value);
-	}
-
-	return (s_bindings){ counter(), (s_bindings*)p, c, (s_binding*)bc };
-}
-
-void s_ref_bindings(const s_bindings b) {
-	s_bindings mb = (s_bindings) b;
-	atomic_fetch_add(mb.ref_count, 1);
-}
-
-void s_free_bindings(s_bindings p) {
-	if (atomic_fetch_add(p.ref_count, -1) > 1) {
-		return;
-	}
-	if (p.parent != NULL) {
-		s_free_bindings(*p.parent);
-		free(p.parent);
-	}
-	for (int i = 0; i < p.count; i++) {
-		s_free(p.bindings[i].name);
-		s_free(p.bindings[i].value);
-	}
-	free(p.ref_count);
-	free(p.bindings);
-}
-
-bool s_resolve(s_expr* result, const s_expr name, const s_bindings b) {
-	for (int i = 0; i < b.count; i++) {
-		s_binding x = b.bindings[i];
-		if (s_eq(name, x.name)) {
-			s_ref(x.value);
-			*result = x.value;
-			return true;
-		}
-	}
-	if (b.parent != NULL) {
-		return s_resolve(result, name, *b.parent);
-	}
-	return false;
-}
-
-s_expr data_nil = (s_expr){ NIL, NULL, .nil=NULL };
+s_expr data_nil = (s_expr){ SYMBOL, .p=NULL };
 
 s_expr s_nil() {
+	if (!data_nil.p) {
+		s_expr data = s_symbol(NULL, u_strref(u"data"));
+		data_nil = s_symbol(data.p, u_strref(u"nil"));
+		s_free(data);
+	}
 	return data_nil;
 }
 
@@ -90,31 +36,33 @@ s_expr s_error() {
 }
 
 s_expr s_function(s_expr_ref* lambda, s_expr* capture) {
-	s_expr_ref* ref = ref(sizeof(s_function_data));
-	ref->lambda = lambda;
-	ref->capture = capture;
+	s_expr_ref* r = ref(sizeof(s_function_data));
+	r->function.lambda = lambda;
+	r->function.capture = capture;
 
 	s_ref_ref(lambda);
-	for (int i = 0; i < lambda->free_var_count; i++) {
+
+	int32_t capture_count = lambda->lambda.var_count - lambda->lambda.param_count;
+	for (int i = 0; i < capture_count; i++) {
 		s_ref(capture[i]);
 	}
-	return (s_expr){ FUNCTION, .p=ref };
+	return (s_expr){ FUNCTION, .p=r };
 }
 
 s_expr s_builtin(s_expr_ref* n,
-		void (*r)(void* d),
+		s_expr (*rp)(void* d),
 		int32_t c,
-		bool (*a)(s_bound_expr* result, s_expr* a, void* d),
+		bool (*a)(s_statement* result, s_expr* a, void* d),
 		void (*f)(void* d),
 		void* d) {
-	s_expr_ref* ref = ref(sizeof(s_builtin_data));
-	ref->builtin.name = n;
-	ref->builtin.represent = r;
-	ref->builtin.arg_count = c;
-	ref->builtin.apply = a;
-	ref->builtin.free = f;
-	ref->builtin.data = d;
-	return (s_expr){ BUILTIN, .p=ref };
+	s_expr_ref* r = ref(sizeof(s_builtin_data));
+	r->builtin.name = n;
+	r->builtin.represent = rp;
+	r->builtin.arg_count = c;
+	r->builtin.apply = a;
+	r->builtin.free = f;
+	r->builtin.data = d;
+	return (s_expr){ BUILTIN, .p=r };
 }
 
 /*
@@ -131,20 +79,30 @@ s_expr s_builtin(s_expr_ref* n,
  * Since symbols are reference counted, they should remove themselves
  * from this trie once they're free.
  */
+
+struct s_table_node_inner;
+struct s_table_node_outer;
+
+typedef union s_table_node {
+	struct s_table_node_inner* inner;
+	struct s_table_node_outer* outer;
+} s_table_node;
+
 static struct {
 	// mutex?
-	union s_table_node {
-		struct {
-			int64_t offset; // for common prefix compression, negated
-			uint64_t population[4]; // for popcount compression
-			union s_table_node[1] children;
-		}* internal;
-		struct {
-			_Atomic(int32_t) ref_count;
-			s_symbol_data symbol;
-		}* leaf;
-	} root;
+	s_table_node root;
 } s_table;
+
+struct s_table_inner_node {
+	int64_t offset; // for common prefix compression, negated
+	uint64_t population[4]; // for popcount compression
+	union s_table_node children[1];
+};
+
+struct s_table_outer_node {
+	_Atomic(int32_t) ref_count;
+	s_symbol_data symbol;
+};
 
 *s_expr s_interned(strref name, s_expr qualifier) {
 	return s_interned(name, qualifier, s_table.root);
