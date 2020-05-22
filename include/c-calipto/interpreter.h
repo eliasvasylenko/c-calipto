@@ -49,8 +49,10 @@ typedef struct s_bound_arguments {
 } s_bound_arguments;
 
 s_bindings s_prepare_bindings(s_expr_ref** symbols);
+s_bindings s_free_bindings(s_bindings);
 
-s_bound_arguments s_bind_arguments(s_bindings b, s_expr* v);
+s_bound_arguments s_bind_arguments(s_expr_ref** symbols, s_expr* v);
+void s_unbind_arguments(s_bound_arguments b);
 
 void s_eval(const s_expr e, const s_bound_arguments b);
 

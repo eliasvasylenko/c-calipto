@@ -131,42 +131,31 @@ bool read_list(reader* r, s_expr* e) {
 
 bool read_symbol(reader* r, s_expr* e) {
 	skip_whitespace(r->scanner);
-	int32_t nslen = scan_name(r->scanner);
-	if (nslen <= 0) {
-		return false;
-	}
+       
+	s_expr symbol = s_nil();
+	bool first = true;
 
-	if (!advance_input_if(r->scanner, is_equal, &colon)) {
-		int32_t nlen = nslen;
-		UChar *ns  = u"bootstrap";
+	do {
+		int32_t len = scan_name(r->scanner);
+		if (len <= 0) {
+			if (!first) {
+				// TODO error
+			}
+			return false;
+		}
+		UChar* n = malloc(sizeof(UChar) * len);
+		take_buffer_length(r->scanner, len, n);
 
-		UChar* n = malloc(sizeof(UChar) * nlen);
-		take_buffer_length(r->scanner, nlen, n);
-
-		*e = s_symbol(u_strref(ns), u_strnref(nlen, n));
+		symbol = s_symbol(symbol.p, u_strnref(len, n));
 
 		free(n);
 
-		return true;
-	}
+		first = false;
+	} while (advance_input_if(r->scanner, is_equal, &colon));
 
-	int32_t nlen = scan_name(r->scanner);
-	if (nlen <= 0) {
-		nlen = 0;
-	}
+	s_free(s_nil());
 
-	UChar* ns = malloc(sizeof(UChar) * nslen);
-	take_buffer_length(r->scanner, nslen, ns);
-
-	discard_buffer_length(r->scanner, 1);
-
-	UChar* n = malloc(sizeof(UChar) * nlen);
-	take_buffer_length(r->scanner, nlen, n);
-
-	*e = s_symbol(u_strnref(nslen, ns), u_strnref(nlen, n));
-
-	free(ns);
-	free(n);
+	*e = symbol;
 
 	return true;
 }

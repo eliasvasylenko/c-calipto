@@ -3,14 +3,12 @@ typedef enum s_expr_type {
 	SYMBOL,
 	CONS,
 
-	STATEMENT,
 	QUOTE,
 	LAMBDA,
 	VARIABLE,
 
 	FUNCTION,
 	BUILTIN,
-	INSTRUCTION, // a statement with all vars bound
 
 	CHARACTER,
 	STRING,
@@ -30,6 +28,12 @@ typedef struct s_expr {
 	};
 } s_expr;
 
+typedef struct s_statement {
+	int32_t term_count;
+	s_expr* terms; // borrowed, always QUOTE | LAMBDA | VARIABLE
+	s_expr* bindings; // owned
+} s_statement;
+
 typedef struct s_symbol_data {
 	s_expr_ref* qualifier; // always SYMBOL
 	uint32_t name_length;
@@ -48,17 +52,12 @@ typedef struct s_cons_data {
  * specialization for the purpose of performance.
  */
 typedef struct s_lambda_data {
-	int32_t param_count;
-	s_expr_ref** params; // always SYMBOLs
-	s_expr_ref* body; // always STATEMENT
-} s_lambda_data;
-
-typedef struct s_statement_data {
-	int32_t free_var_count;
-	s_expr_ref** free_vars; // always SYMBOLs
+	int32_t param_count; // <= var_count
+	int32_t var_count;
+	s_expr_ref** vars; // always SYMBOLs
 	int32_t term_count;
-	s_expr* terms;
-} s_statement_data;
+	s_expr* terms; // always QUOTE | LAMBDA | VARIABLE
+} s_lambda_data;
 
 typedef struct s_function_data {
 	s_expr_ref* lambda; // always LAMBDA
@@ -74,11 +73,6 @@ typedef struct s_builtin_data {
 	void* data;
 } s_builtin_data;
 
-typedef struct s_instruction_data {
-	s_expr_ref* statement; // always STATEMENT
-	s_expr* bindings;
-} s_instruction_data;
-
 typedef struct s_string_data {
 	UChar string[1]; // variable length
 } s_string_data;
@@ -92,8 +86,6 @@ struct s_expr_ref {
 		struct s_lambda_data lambda;
 		struct s_function_data function;
 		struct s_builtin_data builtin;
-		struct s_statement_data statement;
-		struct s_instruction_data instruction;
 		struct s_string_data string;
 	};
 };
@@ -104,18 +96,15 @@ s_expr s_cons(s_expr car, s_expr cdr);
 s_expr s_character(UChar32 c);
 s_expr s_string(strref s);
 s_expr s_builtin(s_expr_ref* n,
-		void* (*r)(void* d),
+		s_expr (*r)(void* d),
 		int32_t c,
-		bool (*a)(s_expr* result, s_expr* a, void* d),
+		bool (*a)(s_statement* result, s_expr* a, void* d),
 		void (*f)(void* d),
 		void* data);
 s_expr s_quote(s_expr data);
 s_expr s_lambda(int32_t param_count, s_expr_ref** params,
 		s_expr_ref* body);
 s_expr s_variable(uint64_t offset);
-s_expr s_statement(int32_t free_var_count, s_expr_ref** free_vars,
-		int32_t term_count, s_expr* terms);
-s_expr s_instruction(s_expr_ref* statement, s_expr* bindings);
 
 s_expr s_function(s_expr_ref* lambda, s_expr* capture);
 s_expr s_error();
@@ -130,4 +119,8 @@ bool s_eq(s_expr a, s_expr b);
 
 void s_ref(s_expr s);
 void s_free(s_expr s);
+
+void s_ref_ref(s_expr_ref* r);
+void s_ref_free(s_expr_type t, s_expr_ref* r);
+
 void s_dump(s_expr s);
