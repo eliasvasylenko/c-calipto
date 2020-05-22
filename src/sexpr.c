@@ -14,10 +14,10 @@
 #include "c-calipto/stringref.h"
 #include "c-calipto/sexpr.h"
 
-_Atomic(int32_t)* counter() {
-	_Atomic(int32_t)* c = malloc(sizeof(_Atomic(int32_t)));
-	*c = ATOMIC_VAR_INIT(1);
-	return c;
+s_expr_ref* ref(int32_t payload_size) {
+	s_expr_ref* ref = malloc(sizeof(_Atomic(int32_t)) + payload_size);
+	ref->ref_count = ATOMIC_VAR_INIT(1);
+	return ref;
 }
 
 s_bindings s_alloc_bindings(const s_bindings* p, int32_t c, const s_binding* b) {
@@ -85,30 +85,36 @@ s_expr s_nil() {
 	return data_nil;
 }
 
-s_expr s_error(strref message) {
-	return (s_expr){ ERROR, counter(), .error=malloc_strrefcpy(message, NULL) };
+s_expr s_error() {
+	return (s_expr){ ERROR, .p=NULL };
 }
 
-s_expr s_function(s_bindings capture, s_expr lambda) {
-	s_ref_bindings(capture);
-	s_ref(lambda);
-	s_function_data* fd = malloc(sizeof(s_function_data));
-	fd->capture = capture;
-	fd->lambda = lambda;
-	return (s_expr){ FUNCTION, counter(), .function=fd };
+s_expr s_function(s_expr_ref* lambda, s_expr* capture) {
+	s_expr_ref* ref = ref(sizeof(s_function_data));
+	ref->lambda = lambda;
+	ref->capture = capture;
+
+	s_ref_ref(lambda);
+	for (int i = 0; i < lambda->free_var_count; i++) {
+		s_ref(capture[i]);
+	}
+	return (s_expr){ FUNCTION, .p=ref };
 }
 
-s_expr s_builtin(strref n, int32_t c,
+s_expr s_builtin(s_expr_ref* n,
+		void (*r)(void* d),
+		int32_t c,
 		bool (*a)(s_bound_expr* result, s_expr* a, void* d),
 		void (*f)(void* d),
 		void* d) {
-	s_builtin_data* bp = malloc(sizeof(s_builtin_data));
-	bp->name = malloc_strrefcpy(n, NULL);
-	bp->arg_count = c;
-	bp->apply = a;
-	bp->free = f;
-	bp->data = d;
-	return (s_expr){ BUILTIN, counter(), .builtin=bp };
+	s_expr_ref* ref = ref(sizeof(s_builtin_data));
+	ref->builtin.name = n;
+	ref->builtin.represent = r;
+	ref->builtin.arg_count = c;
+	ref->builtin.apply = a;
+	ref->builtin.free = f;
+	ref->builtin.data = d;
+	return (s_expr){ BUILTIN, .p=ref };
 }
 
 /*
@@ -133,7 +139,10 @@ static struct {
 			uint64_t population[4]; // for popcount compression
 			union s_table_node[1] children;
 		}* internal;
-		s_symbol_data* leaf;
+		struct {
+			_Atomic(int32_t) ref_count;
+			s_symbol_data symbol;
+		}* leaf;
 	} root;
 } s_table;
 
