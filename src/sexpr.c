@@ -13,6 +13,7 @@
 
 #include "c-calipto/stringref.h"
 #include "c-calipto/sexpr.h"
+#include "c-calipto/libpopcnt.h"
 
 s_expr_ref* ref(int32_t payload_size) {
 	s_expr_ref* r = malloc(sizeof(_Atomic(int32_t)) + payload_size);
@@ -93,75 +94,54 @@ static struct {
 	s_table_node root;
 } s_table;
 
-struct s_table_inner_node {
+struct s_table_node_inner {
 	int64_t offset; // for common prefix compression, negated
 	uint64_t population[4]; // for popcount compression
 	union s_table_node children[1];
 };
 
-struct s_table_outer_node {
+struct s_table_node_outer {
 	_Atomic(int32_t) ref_count;
 	s_symbol_data symbol;
 };
 
-*s_expr s_interned(strref name, s_expr qualifier) {
-	return s_interned(name, qualifier, s_table.root);
-}
-
-*s_expr s_interned(strref name, s_expr qualifier, s_table_node node) {
-	if (node.internal->offset <= 0) {
-		int8_t index = popcnt(node.internal->population, 32);
-		return s_interned(name, qualifier, node.internal->children[index]);
+s_expr_ref* s_intern_recur(strref name, s_expr_ref* qualifier, s_table_node node) {
+	if (node.inner->offset <= 0) {
+		int8_t index = popcnt(node.inner->population, 32);
+		return s_intern_recur(name, qualifier, node.inner->children[index]);
 
 	} else {
-		s_expr leaf_qualifier = *node.leaf->key_qualifier;
+		s_expr_ref* leaf_qualifier = node.outer->symbol.qualifier;
 		strref leaf_name = u_strnref(
-				node.leaf->key_name_length,
-				node.leaf->key_name);
+				node.outer->symbol.name_length,
+				node.outer->symbol.name);
 
-		if (s_eq(leaf_qualifier == qualifier)
+		if (leaf_qualifier == qualifier
 			&& !strrefcmp(leaf_name, name)) {
-			return *node.leaf->value;
+			return (s_expr_ref*)node.outer;
 
 		} else {
-			return NULL;
+			s_expr_ref* r = ref(sizeof(s_symbol_data));
+			r->symbol.qualifier = q;
+			r->symbol.name = malloc_strrefcpy(n, &sp->name_length);
+			// insert at offset
+			return r;
 		}
 	}
+}
+
+s_expr_ref* s_intern(strref name, s_expr_ref* qualifier) {
+	return s_intern_recur(name, qualifier, s_table.root);
 }
 
 const UChar const* unicode_ns = u"unicode";
 const int32_t unicode_nsl = 7;
 
-s_expr s_regular_symbol(strref ns, strref n) {
-	s_symbol_data* sp = malloc(sizeof(s_symbol_data));
-	sp->namespace = malloc_strrefcpy(ns, NULL);
-	sp->name = malloc_strrefcpy(n, NULL);
-	return (s_expr){ SYMBOL, counter(), .symbol=sp };
-}
-
-bool s_unicode_hex_codepoint(const UChar* name, UChar32* cp) {
-	return u_sscanf(name, "%04x", cp) != EOF;
-}
-
-s_expr s_symbol(strref ns, strref n) {
-	int32_t unsl;
-	UChar* uns = malloc_strrefcpy(ns, &unsl);
-	int32_t unl;
-	UChar* un = malloc_strrefcpy(n, &unl);
-
-	UChar32 codepoint;
-	if (unicode_nsl == unsl
-			&& u_strcmp(unicode_ns, uns)
-			&& s_unicode_hex_codepoint(un, &codepoint)) {
-		free(uns);
-		free(un);
-		return (s_expr){ CHARACTER, counter(), .character=codepoint };;
-	}
-
-	s_symbol_data* sp = malloc(sizeof(s_symbol_data));
-	sp->namespace = uns;
-	sp->name = un;
-	return (s_expr){ SYMBOL, counter(), .symbol=sp };
+s_expr s_symbol(s_expr_ref* q, strref n) {
+	s_expr_ref* r = ref(sizeof(s_symbol_data));
+	r.s_symbol_data->qualifier = q;
+	sp->name = malloc_strrefcpy(n, &sp->name_length);
+	return (s_expr){ SYMBOL, .symbol=sp };
 }
 
 s_expr s_character(UChar32 cp) {
