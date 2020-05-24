@@ -124,7 +124,9 @@ s_expr_ref* s_intern_recur(strref name, s_expr_ref* qualifier, s_table_node node
 			s_expr_ref* r = ref(sizeof(s_symbol_data));
 			r->symbol.qualifier = q;
 			r->symbol.name = malloc_strrefcpy(n, &sp->name_length);
-			// insert at offset
+			
+			; // intern!
+
 			return r;
 		}
 	}

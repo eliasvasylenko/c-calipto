@@ -19,5 +19,7 @@ strref c_strnref(UConverter* conv, int32_t size, const char* chars);
 strref u_strref(const UChar* chars);
 strref u_strnref(int32_t size, const UChar* chars);
 
-UChar* malloc_strrefcpy(strref s, int32_t* l);
+int32_t maxlen(str
+
+UChar* strrefcpy(strref s, int32_t* l);
 uint32_t strrefcmp(strref a, strref b);
