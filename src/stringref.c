@@ -35,7 +35,7 @@ strref u_strref(const UChar* chars) {
 	return u_strnref(u_strlen(chars), chars);
 }
 
-int32_t maxlen(strref s) {
+uint32_t strref_maxlen(strref s) {
 	switch (s.type) {
 		case CSTR:
 			return s.size * 2;
@@ -44,36 +44,23 @@ int32_t maxlen(strref s) {
 	}
 }
 
-UChar* malloc_strrefcpy(strref s, int32_t* l) {
-	int32_t max = maxlen(s);
-	UChar* us = malloc(sizeof(UChar) * (max + 1));
+uint32_t strref_cpy(int destSize, UChar* dest, strref s) {
 	int32_t len;
 	switch (s.type) {
 		case CSTR:
 			;
 			UErrorCode error = 0;
 			len = ucnv_toUChars(s.conv,
-					us, max,
+					dest, destSize,
 					s.c_chars, s.size,
 					&error);
 			break;
 		case USTR:
 			;
 			len = s.size;
-			u_strncpy(us, s.u_chars, s.size);
+			u_strncpy(dest, s.u_chars, len < destSize ? len : destSize);
 			break;
 	}
-	if (len < max) {
-		UChar* uso = us;
-		us = malloc(sizeof(UChar) * (len + 1));
-		u_strcpy(us, uso, len);
-		free(uso);
-	}
-	us[len] = u'\0';
-	if (l != NULL) {
-		*l = len;
-	}
-	return us;
+	return len;
 }
-
 

@@ -94,16 +94,16 @@ static struct {
 	s_table_node root;
 } s_table;
 
-struct s_table_node_inner {
+typedef struct s_table_node_inner {
 	int64_t offset; // for common prefix compression, negated
 	uint64_t population[4]; // for popcount compression
 	union s_table_node children[1];
-};
+} s_table_node_inner;
 
-struct s_table_node_outer {
+typedef struct s_table_node_outer {
 	_Atomic(int32_t) ref_count;
 	s_symbol_data symbol;
-};
+} s_table_node_outer;
 
 s_expr_ref* s_intern_recur(strref name, s_expr_ref* qualifier, s_table_node node) {
 	if (node.inner->offset <= 0) {
@@ -117,14 +117,19 @@ s_expr_ref* s_intern_recur(strref name, s_expr_ref* qualifier, s_table_node node
 				node.outer->symbol.name);
 
 		if (leaf_qualifier == qualifier
-			&& !strrefcmp(leaf_name, name)) {
+			&& !strref_cmp(leaf_name, name)) {
 			return (s_expr_ref*)node.outer;
 
 		} else {
-			s_expr_ref* r = ref(sizeof(s_symbol_data));
-			r->symbol.qualifier = q;
-			r->symbol.name = malloc_strrefcpy(n, &sp->name_length);
-			
+			int32_t maxlen = strref_maxlen(name);
+			s_expr_ref* r = ref(sizeof(s_symbol_data) + maxlen);
+			int32_t len = strref_cpy(maxlen, (UChar*) &r->symbol.name, name);
+			if (maxlen != len) {
+				free(r);
+				r = ref(sizeof(s_table_node_outer) + len);
+				strref_cpy(len, (UChar*) &r->symbol.name, name);
+			}
+			r->symbol.qualifier = qualifier;
 			; // intern!
 
 			return r;
