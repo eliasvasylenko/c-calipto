@@ -86,7 +86,7 @@ struct s_table_node_outer;
 
 typedef union s_table_node {
 	struct s_table_node_inner* inner;
-	struct s_table_node_outer* outer;
+	struct s_expr_ref* outer;
 } s_table_node;
 
 static struct {
@@ -100,15 +100,10 @@ typedef struct s_table_node_inner {
 	union s_table_node children[1];
 } s_table_node_inner;
 
-typedef struct s_table_node_outer {
-	_Atomic(int32_t) ref_count;
-	s_symbol_data symbol;
-} s_table_node_outer;
-
-s_expr_ref* s_intern_recur(strref name, s_expr_ref* qualifier, s_table_node node) {
+s_expr_ref* s_intern_recur(s_expr_ref* qualifier, strref name, s_table_node node) {
 	if (node.inner->offset <= 0) {
 		int8_t index = popcnt(node.inner->population, 32);
-		return s_intern_recur(name, qualifier, node.inner->children[index]);
+		return s_intern_recur(qualifier, name, node.inner->children[index]);
 
 	} else {
 		s_expr_ref* leaf_qualifier = node.outer->symbol.qualifier;
@@ -126,7 +121,7 @@ s_expr_ref* s_intern_recur(strref name, s_expr_ref* qualifier, s_table_node node
 			int32_t len = strref_cpy(maxlen, (UChar*) &r->symbol.name, name);
 			if (maxlen != len) {
 				free(r);
-				r = ref(sizeof(s_table_node_outer) + len);
+				r = ref(sizeof(s_symbol_data) + len);
 				strref_cpy(len, (UChar*) &r->symbol.name, name);
 			}
 			r->symbol.qualifier = qualifier;
@@ -137,18 +132,15 @@ s_expr_ref* s_intern_recur(strref name, s_expr_ref* qualifier, s_table_node node
 	}
 }
 
-s_expr_ref* s_intern(strref name, s_expr_ref* qualifier) {
-	return s_intern_recur(name, qualifier, s_table.root);
+s_expr_ref* s_intern(s_expr_ref* qualifier, strref name) {
+	return s_intern_recur(qualifier, name, s_table.root);
 }
 
 const UChar const* unicode_ns = u"unicode";
 const int32_t unicode_nsl = 7;
 
 s_expr s_symbol(s_expr_ref* q, strref n) {
-	s_expr_ref* r = ref(sizeof(s_symbol_data));
-	r.s_symbol_data->qualifier = q;
-	sp->name = malloc_strrefcpy(n, &sp->name_length);
-	return (s_expr){ SYMBOL, .symbol=sp };
+	return (s_expr){ SYMBOL, s_intern(q, n); };
 }
 
 s_expr s_character(UChar32 cp) {
