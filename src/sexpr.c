@@ -140,7 +140,7 @@ const UChar const* unicode_ns = u"unicode";
 const int32_t unicode_nsl = 7;
 
 s_expr s_symbol(s_expr_ref* q, strref n) {
-	return (s_expr){ SYMBOL, s_intern(q, n); };
+	return (s_expr){ SYMBOL, .p=s_intern(q, n) };
 }
 
 s_expr s_character(UChar32 cp) {
