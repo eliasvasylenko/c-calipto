@@ -81,17 +81,9 @@ s_expr s_builtin(s_expr_ref* n,
  * from this trie once they're free.
  */
 
-struct s_table_node_inner;
-struct s_table_node_outer;
-
-typedef union s_table_node {
-	struct s_table_node_inner* inner;
-	struct s_expr_ref* outer;
-} s_table_node;
-
 static struct {
 	// mutex?
-	s_table_node root;
+	idtrie root;
 } s_table;
 
 typedef struct s_table_node_inner {
@@ -144,11 +136,11 @@ s_expr s_symbol(s_expr_ref* q, strref n) {
 }
 
 s_expr s_character(UChar32 cp) {
-	return (s_expr){ CHARACTER, counter(), .character=cp };
+	return (s_expr){ CHARACTER, .character=cp };
 }
 
 s_expr s_string(strref s) {
-	return (s_expr){ STRING, counter(), .string=malloc_strrefcpy(s, NULL) };
+	return (s_expr){ STRING, .string=malloc_strrefcpy(s, NULL) };
 }
 s_expr s_cons(const s_expr car, const s_expr cdr) {
 	if (car.type == CHARACTER && cdr.type == STRING) {
