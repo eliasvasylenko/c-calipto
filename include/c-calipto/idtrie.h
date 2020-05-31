@@ -11,7 +11,7 @@ typedef struct idtrie_node {
 	uint64_t
 		hasleaf: 1,
 		hasbranch: 1,
-		index : 62;
+		size : 62;
 	// followed by 'index' bytes of key data
 	// if 'hasbranch' then followed by idtrie_branch
 } idtrie_node;
@@ -29,7 +29,7 @@ typedef struct id {
 	idtrie_node* node;
 } id;
 
-id idtrie_intern(idtrie t, uint64_t l, void* d);
+id idtrie_intern(idtrie t, uint64_t l, int8_t* d);
 
 void idtrie_remove(id i);
 
