@@ -17,11 +17,16 @@
 
 typedef struct idtrie_node {
 	struct idtrie_node* parent;
-	bool
-		hasleaf: 1,
-		hasbranch: 1;
-	uint64_t
-		size : 62;
+	union {
+		struct {
+			bool
+				hasleaf: 1,
+				hasbranch: 1;
+			uint64_t
+				size : 62;
+		};
+		uint64_t layout;
+	};
 	// followed by 'index' bytes of key data
 	// if 'hasbranch' then followed by idtrie_branch
 	// if 'hasleaf' then followed by id
