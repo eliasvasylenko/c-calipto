@@ -13,7 +13,6 @@
 
 #include "c-calipto/stringref.h"
 #include "c-calipto/sexpr.h"
-#include "c-calipto/libpopcnt.h"
 
 s_expr_ref* ref(int32_t payload_size) {
 	s_expr_ref* r = malloc(sizeof(_Atomic(int32_t)) + payload_size);
