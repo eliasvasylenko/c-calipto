@@ -21,6 +21,7 @@ typedef struct s_expr_ref s_expr_ref;
 typedef struct s_expr {
 	s_expr_type type;
 	union {
+		id symbol;
 		UChar32 character;
 		int64_t integer;
 		uint64_t variable;
@@ -33,12 +34,6 @@ typedef struct s_statement {
 	s_expr* terms; // borrowed, always QUOTE | LAMBDA | VARIABLE
 	s_expr* bindings; // owned
 } s_statement;
-
-typedef struct s_symbol_data {
-	s_expr_ref* qualifier; // always SYMBOL
-	uint32_t name_length;
-	UChar name[1]; // variable length
-} s_symbol_data;
 
 typedef struct s_cons_data {
 	s_expr car;
@@ -78,9 +73,8 @@ typedef struct s_string_data {
 } s_string_data;
 
 struct s_expr_ref {
-	_Atomic(int32_t) ref_count;
+	_Atomic(uint32_t) ref_count;
 	union {
-		struct s_symbol_data symbol;
 		struct s_cons_data cons;
 		struct s_expr quote;
 		struct s_lambda_data lambda;

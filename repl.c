@@ -13,6 +13,7 @@
 #include <unicode/ustdio.h>
 
 #include "c-calipto/stringref.h"
+#include "c-calipto/idtrie.h"
 #include "c-calipto/sexpr.h"
 #include "c-calipto/stream.h"
 #include "c-calipto/scanner.h"

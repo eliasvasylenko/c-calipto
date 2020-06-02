@@ -12,10 +12,11 @@
 #include <unicode/ucnv.h>
 
 #include "c-calipto/stringref.h"
+#include "c-calipto/idtrie.h"
 #include "c-calipto/sexpr.h"
 
 s_expr_ref* ref(int32_t payload_size) {
-	s_expr_ref* r = malloc(sizeof(_Atomic(int32_t)) + payload_size);
+	s_expr_ref* r = malloc(sizeof(_Atomic(uint32_t)) + payload_size);
 	r->ref_count = ATOMIC_VAR_INIT(1);
 	return r;
 }
@@ -80,51 +81,20 @@ s_expr s_builtin(s_expr_ref* n,
  * from this trie once they're free.
  */
 
-static struct {
-	// mutex?
-	idtrie root;
-} s_table;
-
-typedef struct s_table_node_inner {
-	int64_t offset; // for common prefix compression, negated
-	uint64_t population[4]; // for popcount compression
-	union s_table_node children[1];
-} s_table_node_inner;
-
-s_expr_ref* s_intern_recur(s_expr_ref* qualifier, strref name, s_table_node node) {
-	if (node.inner->offset <= 0) {
-		int8_t index = popcnt(node.inner->population, 32);
-		return s_intern_recur(qualifier, name, node.inner->children[index]);
-
-	} else {
-		s_expr_ref* leaf_qualifier = node.outer->symbol.qualifier;
-		strref leaf_name = u_strnref(
-				node.outer->symbol.name_length,
-				node.outer->symbol.name);
-
-		if (leaf_qualifier == qualifier
-			&& !strref_cmp(leaf_name, name)) {
-			return (s_expr_ref*)node.outer;
-
-		} else {
-			int32_t maxlen = strref_maxlen(name);
-			s_expr_ref* r = ref(sizeof(s_symbol_data) + maxlen);
-			int32_t len = strref_cpy(maxlen, (UChar*) &r->symbol.name, name);
-			if (maxlen != len) {
-				free(r);
-				r = ref(sizeof(s_symbol_data) + len);
-				strref_cpy(len, (UChar*) &r->symbol.name, name);
-			}
-			r->symbol.qualifier = qualifier;
-			; // intern!
-
-			return r;
-		}
-	}
-}
+static idtrie s_table;
 
 s_expr_ref* s_intern(s_expr_ref* qualifier, strref name) {
-	return s_intern_recur(qualifier, name, s_table.root);
+	int32_t maxlen = strref_maxlen(name);
+	s_expr_ref* r = ref(sizeof(s_symbol_data) + maxlen);
+	int32_t len = strref_cpy(maxlen, (UChar*) &r->symbol.name, name);
+	if (maxlen != len) {
+		free(r);
+		r = ref(sizeof(s_symbol_data) + len);
+		strref_cpy(len, (UChar*) &r->symbol.name, name);
+	}
+	r->symbol.qualifier = qualifier;
+
+	return idtrie_intern(s_table, sizeof(s_symbol_data) + len - 1, r);
 }
 
 const UChar const* unicode_ns = u"unicode";

@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "c-calipto/idtrie.h"
 #include "c-calipto/libpopcnt.h"
@@ -9,154 +10,164 @@ static const uint64_t slot_bit = 1;
 static const uint64_t slot_mask = (int64_t) -1;
 
 typedef struct cursor {
-	idtrie_node** node;
+	idtrie_node node;
+	idtrie_node** pointer;
+
 	uint8_t* data_start;
-	union {
-		struct {
-			bool
-				hasleaf: 1,
-				hasbranch: 1;
-			uint64_t
-				size : 62;
-		};
-		uint64_t layout;
-	};
 	union {
 		uint8_t* data_end;
 		idtrie_branch* branch;
 	};
 	union {
 		void* branch_end;
-		id id;
+		idtrie_leaf* leaf;
 	};
 	void* end;
 } cursor;
 
-void update_cursor(cursor* c, idtrie_node* n) {
-	(*c->node) = n;
-	c->layout = (*n).layout;
-	c->data_start = (uint8_t*)(n + 1);
-	c->data_end = c->data_start + c->size;
-	c->branch_end = c->hasbranch ? c->data_end + sizeof(idtrie_branch) : c->data_end;
-	c->end = c->hasleaf ? c->branch_end + sizeof(id) : c->branch_end;
+void update_cursor(cursor* c) {
+	c->node = **c->pointer;
+	c->data_start = (uint8_t*)(*c->pointer + 1);
+	c->data_end = c->data_start + c->node.size;
+	c->branch_end = c->node.hasbranch ? c->data_end + sizeof(idtrie_branch) : c->data_end;
+	c->end = c->node.hasleaf ? c->branch_end + sizeof(idtrie_leaf*) : c->branch_end;
 }
 
 cursor make_cursor(idtrie_node** n) {
 	cursor c;
-	c.node = n;
-	update_cursor(&c, *n);
+	c.pointer = n;
+	update_cursor(&c);
 	return c;
 }
 
+idtrie_node* split(cursor c, uint64_t index, idtrie_node* parent) {
+	idtrie_node* after = malloc(c.end - (void*)*c.pointer - index);
+	after->parent = parent;
+	after->layout = c.node.layout;
+	after->size -= index;
+	memcpy(after + sizeof(idtrie_node), c.data_start + index, (uint8_t*)c.end - c.data_start - index);
+	for (idtrie_node** child = &c.branch->children[0]; child < (idtrie_node**)c.branch_end; child++) {
+		(**child).parent = after;
+	}
+	if (c.node.hasleaf) {
+		c.leaf->owner = after;
+	}
 
-
-uint8_t* branch_index(cursor c, int8_t* d) {
-	;
+	return after;
 }
 
-uint64_t sizeof_node(int64_t size, bool leaf, int8_t branches) {
-	return sizeof(idtrie_node)
-		+ size
-		+ branches
-			? (sizeof(idtrie_branch) + sizeof(idtrie_node*) * (branches - 1))
-			: 0
-		+ leaf
-			? sizeof(id*)
-			: 0;
+bool haspop(uint64_t* p, uint8_t slot) {
+	return slot_bit << (slot) & p[0]
+		|| slot_bit << (slot - 64) & p[1]
+		|| slot_bit << (slot - 128) & p[2]
+		|| slot_bit << (slot - 192) & p[3];
 }
 
-id split(cursor c, uint64_t index) {
-	idtrie_node* before = malloc(sizeof_node(index, true, 1));
-	before->parent = (**c.node).parent;
-	before->hasleaf = 1;
-	before->hasbranch = 1;
+void addpop(uint64_t* p, uint8_t slot) {
+	p[0] = slot_bit << (slot) | p[0];
+	p[1] = slot_bit << (slot - 64) | p[1];
+	p[2] = slot_bit << (slot - 128) | p[2];
+	p[3] = slot_bit << (slot - 192) | p[3];
+}
+
+id insert_leaf(cursor c, uint64_t index) {
+	idtrie_node* before = malloc(sizeof(idtrie_node) + index + sizeof(idtrie_branch) + sizeof(idtrie_leaf*));
+	before->parent = c.node.parent;
+	before->hasleaf = true;
+	before->hasbranch = true;
 	before->size = index;
-	// copy data
+	memcpy(before + sizeof(idtrie_node), c.data_start, index);
 
-	idtrie_node* after = malloc(c.end - (void*)c.node - index);
-	after->parent = before;
-	after->hasleaf = (**c.node).hasleaf;
-	after->hasbranch = (**c.node).hasbranch;
-	after->size = (**c.node).size - index;
-	// copy data & branch data
+	idtrie_node* after = split(c, index, before);
 
 	// free previous
+	*c.pointer = before;
+	update_cursor(&c);
 
-	update_cursor(&c, before);
-	uint8_t slot = *(uint8_t*)(after + 1);
-	c.branch->population[0] = slot_bit << (slot);
-	c.branch->population[1] = slot_bit << (slot - 64);
-	c.branch->population[2] = slot_bit << (slot - 128);
-	c.branch->population[3] = slot_bit << (slot - 192);
+	addpop(c.branch->population, *(c.data_start + index));
 	c.branch->children[0] = after;
 
-	id id = { malloc(sizeof(idtrie_node*)) };
-	*(id.node) = before;
-	return id;
+	c.leaf = malloc(sizeof(idtrie_leaf));
+	c.leaf->owner = before;
+	return (id){ c.leaf };
 }
 
-id split_and_branch(cursor c, uint64_t index, uint64_t len, int8_t* data) {
-	idtrie_node* before = malloc(sizeof_node(index, false, 2));
-	before->parent = (**c.node).parent;
-	before->hasleaf = 0;
-	before->hasbranch = 1;
+id insert_branch(cursor c, uint64_t index, uint64_t len, uint8_t* data) {
+	idtrie_node* before = malloc(sizeof(idtrie_node) + index + sizeof(idtrie_branch) + sizeof(idtrie_node*));
+	before->parent = c.node.parent;
+	before->hasleaf = false;
+	before->hasbranch = true;
 	before->size = index;
-	// copy data
+	memcpy(before + sizeof(idtrie_node), c.data_start, index);
 
-	idtrie_node* after = malloc(c.end - (void*)c.node - index);
-	after->parent = before;
-	after->hasleaf = (**c.node).hasleaf;
-	after->hasbranch = (**c.node).hasbranch;
-	after->size = (**c.node).size - index;
-	// copy data & branch data
+	idtrie_node* leaf = malloc(sizeof(idtrie_node) + len + sizeof(idtrie_leaf*));
+	leaf->parent = before;
+	leaf->hasleaf = true;
+	leaf->hasbranch = false;
+	leaf->size = len;
+	memcpy(leaf + sizeof(idtrie_node), data, len);
 
-	// free previous
+	idtrie_node* after = split(c, index, before);
 
-	update_cursor(&c, before);
-	uint8_t slot = *(uint8_t*)(after + 1);
-	c.branch->population[0] = slot_bit << (slot);
-	c.branch->population[1] = slot_bit << (slot - 64);
-	c.branch->population[2] = slot_bit << (slot - 128);
-	c.branch->population[3] = slot_bit << (slot - 192);
-	c.branch->children[0] = after;
+	*c.pointer = before;
+	update_cursor(&c);
 
-	id id = { malloc(sizeof(idtrie_node*)) };
-	*(id.node) = leaf;
-	return id;
+	addpop(c.branch->population, *(c.data_start + index));
+	addpop(c.branch->population, *data);
+	if (*data > *(c.data_start + index)) {
+		c.branch->children[0] = after;
+		c.branch->children[1] = leaf;
+	} else {
+		c.branch->children[0] = leaf;
+		c.branch->children[1] = after;
+	}
+
+	idtrie_leaf* l = (void*)(leaf + 1) + len;
+	l = malloc(sizeof(idtrie_leaf));
+	l->owner = leaf;
+	return (id){ l };
 }
 
-id idtrie_intern_recur(cursor c, uint64_t l, int8_t* d) {
-	if (l <= (**c.node).size) {
+id idtrie_intern_recur(cursor c, uint64_t l, uint8_t* d) {
+	if (l <= c.node.size) {
 		for (int i = 0; i < l; i++) {
 			if (c.data_start[i] != d[i]) {
-				return split_and_branch(c, i, l - i, d + i);
+				return insert_branch(c, i, l - i, d + i);
 			}
 		}
-		if (l < n->index) {
-			return split(c, l);
+		if (l < c.node.size) {
+			return insert_leaf(c, l);
 
 		} else {
-			c.node->hasleaf = 1;
-			return (id){ c.node };
+			(**c.pointer).hasleaf = true;
+			return (id){ c.leaf };
 		}
 
 	} else {
-		for (int i = 0; i < c.node->size; i++) {
+		for (int i = 0; i < c.node.size; i++) {
 			if (c.data_start[i] != d[i]) {
-				return split_and_branch(c, i, l - i, d + i);
+				return insert_branch(c, i, l - i, d + i);
 			}
 		}
 		// find branch and recur into it, or add branch
 	}
 }
 
-id idtrie_intern(idtrie t, uint64_t l, int8_t* d) {
-	return idtrie_intern_recur(make_cursor(t.root), l, d);
+void idtrie_clear(idtrie t) {
+	;
 }
 
-void idtrie_remove(id i) {
+id idtrie_insert(idtrie t, uint64_t l, void* d) {
+	return idtrie_intern_recur(make_cursor(t.root), l, d);
 }
 
 void* idtrie_fetch(id i) {
 	;
 }
+
+void idtrie_ref(id i) {
+}
+
+void idtrie_free(id i) {
+}
+
