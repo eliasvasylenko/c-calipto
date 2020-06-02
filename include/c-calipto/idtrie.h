@@ -39,7 +39,7 @@ typedef struct idtrie_branch {
 
 typedef struct idtrie_leaf {
 	idtrie_node* owner;
-	_Atomic(uint32_t) ref_count;
+	void* value;
 } idtrie_leaf;
 
 typedef struct idtrie {
@@ -52,10 +52,8 @@ typedef struct id {
 
 void idtrie_clear(idtrie t);
 
-id idtrie_insert(idtrie t, uint64_t l, void* d);
+id idtrie_insert(idtrie t, uint64_t l, void* key, void* (*value)(void* key, id id));
 
-void* idtrie_fetch(id i);
+void idtrie_remove(id i);
 
-void idtrie_ref(id i);
-
-void idtrie_free(id i);
+void* idtrie_fetch_key(id i);

@@ -70,7 +70,7 @@ void addpop(uint64_t* p, uint8_t slot) {
 	p[3] = slot_bit << (slot - 192) | p[3];
 }
 
-id insert_leaf(cursor c, uint64_t index) {
+id insert_leaf(cursor c, uint64_t index, void* k, void* (*v)(void* key, id id)) {
 	idtrie_node* before = malloc(sizeof(idtrie_node) + index + sizeof(idtrie_branch) + sizeof(idtrie_leaf*));
 	before->parent = c.node.parent;
 	before->hasleaf = true;
@@ -89,10 +89,12 @@ id insert_leaf(cursor c, uint64_t index) {
 
 	c.leaf = malloc(sizeof(idtrie_leaf));
 	c.leaf->owner = before;
-	return (id){ c.leaf };
+	id id = { c.leaf };
+	c.leaf->value = v(k, id);
+	return id;
 }
 
-id insert_branch(cursor c, uint64_t index, uint64_t len, uint8_t* data) {
+id insert_branch(cursor c, uint64_t index, uint64_t len, uint8_t* data, void* k, void* (*v)(void* key, id id)) {
 	idtrie_node* before = malloc(sizeof(idtrie_node) + index + sizeof(idtrie_branch) + sizeof(idtrie_node*));
 	before->parent = c.node.parent;
 	before->hasleaf = false;
@@ -125,18 +127,20 @@ id insert_branch(cursor c, uint64_t index, uint64_t len, uint8_t* data) {
 	idtrie_leaf* l = (void*)(leaf + 1) + len;
 	l = malloc(sizeof(idtrie_leaf));
 	l->owner = leaf;
-	return (id){ l };
+	id id = { l };
+	l->value = v(k, id);
+	return id;
 }
 
-id idtrie_intern_recur(cursor c, uint64_t l, uint8_t* d) {
+id idtrie_intern_recur(cursor c, uint64_t l, uint8_t* d, void* k, void* (*v)(void* key, id id)) {
 	if (l <= c.node.size) {
 		for (int i = 0; i < l; i++) {
 			if (c.data_start[i] != d[i]) {
-				return insert_branch(c, i, l - i, d + i);
+				return insert_branch(c, i, l - i, d + i, k, v);
 			}
 		}
 		if (l < c.node.size) {
-			return insert_leaf(c, l);
+			return insert_leaf(c, l, k, v);
 
 		} else {
 			(**c.pointer).hasleaf = true;
@@ -146,7 +150,7 @@ id idtrie_intern_recur(cursor c, uint64_t l, uint8_t* d) {
 	} else {
 		for (int i = 0; i < c.node.size; i++) {
 			if (c.data_start[i] != d[i]) {
-				return insert_branch(c, i, l - i, d + i);
+				return insert_branch(c, i, l - i, d + i, k, v);
 			}
 		}
 		// find branch and recur into it, or add branch
@@ -157,17 +161,13 @@ void idtrie_clear(idtrie t) {
 	;
 }
 
-id idtrie_insert(idtrie t, uint64_t l, void* d) {
-	return idtrie_intern_recur(make_cursor(t.root), l, d);
+id idtrie_insert(idtrie t, uint64_t l, void* d, void* (*v)(void* key, id id)) {
+	return idtrie_intern_recur(make_cursor(t.root), l, d, d, v);
 }
 
-void* idtrie_fetch(id i) {
-	;
+void idtrie_remove(id i) {
 }
 
-void idtrie_ref(id i) {
-}
-
-void idtrie_free(id i) {
+void* idtrie_fetch_key(id i) {
 }
 
