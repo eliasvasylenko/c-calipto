@@ -70,8 +70,8 @@ typedef struct s_key {
 } s_key;
 
 void* s_value(void* key, id id) {
-	s_expr_ref* r = ref(sizeof(s_symbol_data));
-	r->symbol.id = id;
+	s_expr_ref* r = ref(sizeof(id));
+	r->symbol = id;
 	return r;
 }
 
@@ -102,6 +102,13 @@ const int32_t unicode_nsl = 7;
 
 s_expr s_symbol(s_table t, s_expr_ref* q, strref n) {
 	return (s_expr){ SYMBOL, .p=s_intern(t, q, n) };
+}
+
+s_symbol_info* s_inspect(s_table t, const s_expr e) {
+	if (e.type != SYMBOL) {
+		return NULL;
+	}
+	return idtrie_fetch_key(e.p->symbol);
 }
 
 s_expr s_character(UChar32 cp) {
@@ -180,84 +187,18 @@ s_expr s_lambda(int32_t param_count, int32_t var_count, s_expr_ref** vars,
 	return (s_expr){ LAMBDA, .p=r };
 }
 
-/*
- * We don't want to have to allocate memory here when the string already exists, but
- * then when we have to materialize a string there will be nobody to free it.
- *
- * TODO We must allocate strings upon request and put them into the interning table,
- * then we can free them when the refcount hits 0.
- */
-UChar* s_name(const s_expr e) {
-	switch (e.type) {
-		case ERROR:
-			return e.error;
-
-		case SYMBOL:
-			return e.symbol->name;
-
-		case NIL:
-			return u"nil";
-
-		case BUILTIN:
-			return e.builtin->name;
-
-		case FUNCTION:
-			return u"_";
-
-		case CHARACTER:
-			return u"_char_";
-		
-		default:
-			return NULL;
-	}
-}
-
-UChar* s_namespace(const s_expr e) {
-	switch (e.type) {
-		case ERROR:
-			return u"error";
-
-		case SYMBOL:
-			return e.symbol->namespace;
-
-		case NIL:
-			return u"data";
-
-		case BUILTIN:
-			return u"builtin";
-
-		case FUNCTION:
-			return u"function";
-
-		case CHARACTER:
-			return u"unicode";
-		
-		default:
-			return NULL;
-	}
-}
-
-static s_expr data_quote = { ERROR, NULL, .error=NULL };
-static s_expr data_lambda = { ERROR, NULL, .error=NULL };
-
 s_expr s_car(const s_expr e) {
 	switch (e.type) {
 		case CONS:
-			s_ref(e.cons->car);
-			return e.cons->car;
+			s_alias(e.p->cons.car);
+			return e.p->cons.car;
 
 		case QUOTE:
-			if (data_quote.type == ERROR) {
-				data_quote = s_symbol(u_strref(u"data"), u_strref(u"quote"));
-			}
-			s_ref(data_quote);
+			s_alias(data_quote);
 			return data_quote;
 
 		case LAMBDA:
-			if (data_lambda.type == ERROR) {
-				data_lambda = s_symbol(u_strref(u"data"), u_strref(u"lambda"));
-			}
-			s_ref(data_lambda);
+			s_alias(data_lambda);
 			return data_lambda;
 
 		case STRING:
@@ -270,7 +211,7 @@ s_expr s_car(const s_expr e) {
 
 		case STATEMENT:
 			;
-			s_ref(e.statement->target);
+			s_alias(e.statement->target);
 			return e.statement->target;
 
 		default:
@@ -333,17 +274,7 @@ s_expr s_cdr(const s_expr e) {
 }
 
 bool s_atom(const s_expr e) {
-	switch (e.type) {
-		case ERROR:
-		case SYMBOL:
-		case NIL:
-		case CHARACTER:
-		case BUILTIN:
-		case FUNCTION:
-			return true;
-		default:
-			return false;
-	}
+	return e.type == SYMBOL;
 }
 
 bool s_eq(const s_expr a, const s_expr b) {

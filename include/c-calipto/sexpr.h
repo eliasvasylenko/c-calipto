@@ -21,7 +21,6 @@ typedef struct s_expr_ref s_expr_ref;
 typedef struct s_expr {
 	s_expr_type type;
 	union {
-		id symbol;
 		UChar32 character;
 		int64_t integer;
 		uint64_t variable;
@@ -39,9 +38,10 @@ typedef struct s_table {
 	idtrie trie;
 } s_table;
 
-typedef struct s_symbol_data {
-	id id;
-} s_symbol_data;
+typedef struct s_symbol_info {
+	s_expr qualifier;
+	UChar name[1];
+} s_symbol_info;
 
 typedef struct s_cons_data {
 	s_expr car;
@@ -83,20 +83,20 @@ typedef struct s_string_data {
 struct s_expr_ref {
 	_Atomic(uint32_t) ref_count;
 	union {
-		struct s_symbol_data symbol;
-		struct s_cons_data cons;
-		struct s_expr quote;
-		struct s_lambda_data lambda;
-		struct s_function_data function;
-		struct s_builtin_data builtin;
-		struct s_string_data string;
+		id symbol;
+		s_cons_data cons;
+		s_expr quote;
+		s_lambda_data lambda;
+		s_function_data function;
+		s_builtin_data builtin;
+		s_string_data string;
 	};
 };
 
-s_table s_init_table();
-void s_free_table(s_table t);
+void s_init();
+void s_close();
 
-s_expr s_symbol(s_table t, s_expr_ref* qualifier, strref name);
+s_expr s_symbol(s_expr_ref* qualifier, strref name);
 s_expr s_cons(s_expr car, s_expr cdr);
 
 s_expr s_list(int32_t count, s_expr* e);
@@ -117,17 +117,15 @@ s_expr s_variable(uint64_t offset);
 s_expr s_function(s_expr_ref* lambda, s_expr* capture);
 s_expr s_error();
 
-UChar* s_name(s_expr s);
-UChar* s_namespace(s_expr s);
-
+s_symbol_info* s_inspect( s_expr s);
 s_expr s_car(s_expr s);
 s_expr s_cdr(s_expr s);
+
 bool s_atom(s_expr e);
 bool s_eq(s_expr a, s_expr b);
 
 void s_alias(s_expr s);
 void s_dealias(s_expr s);
-
 void s_ref(s_expr_ref* r);
 void s_free(s_expr_type t, s_expr_ref* r);
 
