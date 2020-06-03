@@ -17,11 +17,18 @@
 #include "c-calipto/scanner.h"
 #include "c-calipto/reader.h"
 
-reader* open_reader(scanner* s) {
+reader* open_reader(scanner* s, s_table t) {
 	reader* r = malloc(sizeof(reader));
 	r->scanner = s;
 	r->cursor.position = 0;
 	r->cursor.stack = NULL;
+	r->symbols = t;
+
+	s_expr data = s_symbol(t, NULL, u_strref(u"data"));
+	r->data_quote = s_symbol(t, data.p, u_strref(u"quote"));
+	r->data_nil = s_symbol(t, data.p, u_strref(u"nil"));
+	s_dealias(data);
+
 	return r;
 }
 
@@ -146,7 +153,7 @@ bool read_symbol(reader* r, s_expr* e) {
 		UChar* n = malloc(sizeof(UChar) * len);
 		take_buffer_length(r->scanner, len, n);
 
-		symbol = s_symbol(symbol.p, u_strnref(len, n));
+		symbol = s_symbol(r->symbols, symbol.p, u_strnref(len, n));
 
 		free(n);
 	} while (advance_input_if(r->scanner, is_equal, &colon));
@@ -154,17 +161,6 @@ bool read_symbol(reader* r, s_expr* e) {
 	*e = symbol;
 
 	return true;
-}
-
-static s_expr data_quote = { ERROR, .p=NULL };
-
-s_expr init_data_quote() {
-	if (data_quote.p == NULL) {
-		s_expr data = s_symbol(NULL, u_strref(u"data"));
-		data_quote = s_symbol(data.p, u_strref(u"quote"));
-		s_free(data);
-	}
-	return data_quote;
 }
 
 bool read_string(reader* r, s_expr* e) {
@@ -186,10 +182,10 @@ bool read_string(reader* r, s_expr* e) {
 	take_buffer_length(r->scanner, len, c);
 	s_expr string = s_string(u_strnref(len, c));
 
-	s_expr list[] = { init_data_quote(), string };
+	s_expr list[] = { r->data_quote, string };
 	*e = s_list(2, list);
 
-	s_free(string);
+	s_dealias(string);
 	free(c);
 
 	return true;
@@ -208,10 +204,10 @@ bool read_quote(reader* r, s_expr* e) {
 		return false;
 	}
 
-	s_expr list[] = { init_data_quote(), data };
+	s_expr list[] = { r->data_quote, data };
 	*e = s_list(2, list);
 
-	s_free(data);
+	s_dealias(data);
 
 	return true;
 }
@@ -242,7 +238,7 @@ bool read_step_out(reader* r, s_expr* e) {
 	if (advance_input_if(r->scanner, is_equal, &close_bracket)) {
 		discard_buffer(r->scanner);
 
-		*e = s_nil();
+		*e = r->data_nil;
 		return true;
 	}
 
@@ -255,31 +251,31 @@ bool read_step_out(reader* r, s_expr* e) {
 	skip_whitespace(r->scanner);
 	if (advance_input_if(r->scanner, is_equal, &dot)) {
 		if (!read_next(r, &tail)) {
-			s_free(head);
+			s_dealias(head);
 			return false;
 		}
 
 		skip_whitespace(r->scanner);
 		s_expr nil;
 		if (!read_step_out(r, &nil)) {
-			s_free(head);
+			s_dealias(head);
 			return false;
 		}
 		if (nil.type == SYMBOL && NULL == nil.p->symbol.id.leaf->value) {
-			s_free(nil);
-			s_free(head);
+			s_dealias(nil);
+			s_dealias(head);
 			return false;
 		}
-		s_free(nil);
+		s_dealias(nil);
 	} else if (!read_step_out(r, &tail)) {
-		s_free(head);
+		s_dealias(head);
 		return false;
 	}
 
 	s_expr cons = s_cons(head, tail);
 
-	s_free(head);
-	s_free(tail);
+	s_dealias(head);
+	s_dealias(tail);
 
 	*e = cons;
 	return true;

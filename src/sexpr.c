@@ -21,17 +21,6 @@ s_expr_ref* ref(int32_t payload_size) {
 	return r;
 }
 
-s_expr data_nil = (s_expr){ SYMBOL, .p=NULL };
-
-s_expr s_nil() {
-	if (!data_nil.p) {
-		s_expr data = s_symbol(NULL, u_strref(u"data"));
-		data_nil = s_symbol(data.p, u_strref(u"nil"));
-		s_free(data);
-	}
-	return data_nil;
-}
-
 s_expr s_error() {
 	return (s_expr){ ERROR, .p=NULL };
 }
@@ -41,11 +30,11 @@ s_expr s_function(s_expr_ref* lambda, s_expr* capture) {
 	r->function.lambda = lambda;
 	r->function.capture = capture;
 
-	s_ref_ref(lambda);
+	s_ref(lambda);
 
 	int32_t capture_count = lambda->lambda.var_count - lambda->lambda.param_count;
 	for (int i = 0; i < capture_count; i++) {
-		s_ref(capture[i]);
+		s_alias(capture[i]);
 	}
 	return (s_expr){ FUNCTION, .p=r };
 }
@@ -65,13 +54,6 @@ s_expr s_builtin(s_expr_ref* n,
 	r->builtin.data = d;
 	return (s_expr){ BUILTIN, .p=r };
 }
-
-/*
- * This is a trie mapping symbol names & qualifiers to symbols, used
- * for interning. Keys are the composition of a pointer to a qualifier
- * symbol and a name string.
- */
-static idtrie s_table;
 
 s_table s_init_table() {
 	s_table t;
@@ -93,7 +75,7 @@ void* s_value(void* key, id id) {
 	return r;
 }
 
-s_expr_ref* s_intern(s_expr_ref* qualifier, strref name) {
+s_expr_ref* s_intern(s_table t, s_expr_ref* qualifier, strref name) {
 	int32_t maxlen = strref_maxlen(name);
 	s_key* key = malloc(sizeof(s_key) + sizeof(UChar) * (maxlen - 1));
 	int32_t len = strref_cpy(maxlen, key->name, name);
@@ -107,7 +89,7 @@ s_expr_ref* s_intern(s_expr_ref* qualifier, strref name) {
 	key->qualifier = qualifier;
 
 	id id = idtrie_insert(
-			s_table,
+			t.trie,
 			sizeof(s_key) + sizeof(UChar) * (len - 1),
 			key,
 			s_value);
@@ -118,8 +100,8 @@ s_expr_ref* s_intern(s_expr_ref* qualifier, strref name) {
 const UChar const* unicode_ns = u"unicode";
 const int32_t unicode_nsl = 7;
 
-s_expr s_symbol(s_expr_ref* q, strref n) {
-	return (s_expr){ SYMBOL, .p=s_intern(q, n) };
+s_expr s_symbol(s_table t, s_expr_ref* q, strref n) {
+	return (s_expr){ SYMBOL, .p=s_intern(t, q, n) };
 }
 
 s_expr s_character(UChar32 cp) {
@@ -144,77 +126,58 @@ s_expr s_cons(const s_expr car, const s_expr cdr) {
 	if (car.type == CHARACTER && cdr.type == STRING) {
 		bool single = !U_IS_SURROGATE(car.character);
 		int32_t head = single ? 1 : 2;
-		int32_t len = u_strlen(cdr.string);
-		UChar* s = malloc(sizeof(UChar) * (len + head));
-		u_strncpy(s + head, cdr.string, len);
+		int32_t len = u_strlen(cdr.p->string.string);
+
+		s_expr_ref* r = ref(sizeof(UChar) * (len + head));
+		memcpy(r->string.string + head, cdr.p->string.string, sizeof(UChar) * len);
 		if (single) {
-			*s = car.character;
+			r->string.string[0] = car.character;
 		} else {
-			*s = U16_LEAD(car.character);
-			*(s + 1) = U16_TRAIL(car.character);
+			r->string.string[0] = U16_LEAD(car.character);
+			r->string.string[1] = U16_TRAIL(car.character);
 		}
-		return (s_expr){ STRING, counter(), .string=s };
+		return (s_expr){ STRING, .p=r };
 	}
 
-	s_cons_data *cons = malloc(sizeof(s_cons_data));
-	cons->car = car;
-	cons->cdr = cdr;
-	s_ref(cons->car);
-	s_ref(cons->cdr);
-	return (s_expr){ CONS, counter(), .cons=cons };
+	s_expr_ref* r = ref(sizeof(s_cons_data));
+	r->cons.car = car;
+	r->cons.cdr = cdr;
+	s_alias(r->cons.car);
+	s_alias(r->cons.cdr);
+	return (s_expr){ CONS, .p=r };
 }
 
 s_expr s_quote(s_expr e) {
-	s_expr* quote = malloc(sizeof(s_expr));
-	*quote = e;
-	s_ref(*quote);
-	return (s_expr){ QUOTE, counter(), .quote=quote };
+	s_expr_ref* r = ref(sizeof(s_expr));
+	r->quote = e;
+	s_alias(e);
+	return (s_expr){ QUOTE, .p=r };
 }
 
-s_expr s_lambda(int32_t param_count, s_expr* params, s_expr body) {
-	s_lambda_data* lp = malloc(sizeof(s_lambda_data));
-	lp->param_count = param_count;
-	if (param_count > 0) {
-		lp->params = malloc(sizeof(s_expr) * param_count);
-		for (int i = 0; i < param_count; i++) {
-			s_ref(params[i]);
-			lp->params[i] = params[i];
+s_expr s_lambda(int32_t param_count, int32_t var_count, s_expr_ref** vars,
+		int32_t term_count, s_expr* terms) {
+	s_expr_ref* r = ref(sizeof(s_lambda_data));
+	r->lambda.param_count = param_count;
+	r->lambda.var_count = var_count;
+	if (var_count > 0) {
+		r->lambda.vars = malloc(sizeof(s_expr_ref*) * var_count);
+		for (int i = 0; i < var_count; i++) {
+			s_ref(vars[i]);
+			r->lambda.vars[i] = vars[i];
 		}
 	} else {
-		lp->params = NULL;
+		r->lambda.vars = NULL;
 	}
-	s_ref(body);
-	lp->body = body;
-	return (s_expr){ LAMBDA, counter(), .lambda=lp };
-}
-
-s_expr s_statement(int32_t free_var_count, s_expr* free_vars,
-		s_expr target,
-		int32_t arg_count, s_expr* args) {
-	s_statement_data* sp = malloc(sizeof(s_statement_data));
-	sp->free_var_count = free_var_count;
-	if (free_var_count > 0) {
-		sp->free_vars = malloc(sizeof(s_expr) * free_var_count);
-		for (int i = 0; i < free_var_count; i++) {
-			s_ref(free_vars[i]);
-			sp->free_vars[i] = free_vars[i];
+	if (term_count > 0) {
+		r->lambda.terms = malloc(sizeof(s_expr) * term_count);
+		for (int i = 0; i < term_count; i++) {
+			s_alias(terms[i]);
+			r->lambda.terms[i] = terms[i];
 		}
 	} else {
-		sp->free_vars = NULL;
+		r->lambda.terms = NULL;
 	}
-	s_ref(target);
-	sp->target = target;
-	sp->arg_count = arg_count;
-	if (arg_count > 0) {
-		sp->args = malloc(sizeof(s_expr) * arg_count);
-		for (int i = 0; i < arg_count; i++) {
-			s_ref(args[i]);
-			sp->args[i] = args[i];
-		}
-	} else {
-		sp->args = NULL;
-	}
-	return (s_expr){ STATEMENT, counter(), .statement=sp };
+	return (s_expr){ LAMBDA, .p=r };
 }
 
 /*
@@ -391,8 +354,7 @@ bool s_eq(const s_expr a, const s_expr b) {
 		case CONS:
 			return s_eq(a.cons->car, b.cons->car);
 		case SYMBOL:
-			return !u_strcmp(a.symbol->namespace, b.symbol->namespace)
-				&& !u_strcmp(a.symbol->name, b.symbol->name);
+			return a.p == b.p;
 		case STRING:
 		case CHARACTER:
 		case INTEGER:
@@ -402,14 +364,14 @@ bool s_eq(const s_expr a, const s_expr b) {
 	}
 }
 
-void s_ref(const s_expr e) {
+void s_alias(const s_expr e) {
 	s_expr me = (s_expr) e;
 	if (me.ref_count != NULL) {
 		atomic_fetch_add(me.ref_count, 1);
 	}
 }
 
-void s_free(s_expr e) {
+void s_dealias(s_expr e) {
 	if (e.ref_count == NULL || atomic_fetch_add(e.ref_count, -1) > 1) {
 		return;
 	}
@@ -423,8 +385,8 @@ void s_free(s_expr e) {
 			free(e.symbol);
 			break;
 		case CONS:
-			s_free(e.cons->car);
-			s_free(e.cons->cdr);
+			s_dealias(e.cons->car);
+			s_dealias(e.cons->cdr);
 			free(e.cons);
 			break;
 		case NIL:
@@ -435,35 +397,35 @@ void s_free(s_expr e) {
 			free(e.builtin);
 			break;
 		case FUNCTION:
-			s_free_bindings(e.function->capture);
-			s_free(e.function->lambda);
+			s_dealias(e.function->capture);
+			s_dealias(e.function->lambda);
 			free(e.function);
 			break;
 		case QUOTE:
-			s_free(*e.quote);
+			s_dealias(*e.quote);
 			free(e.quote);
 			break;
 		case LAMBDA:
 			if (e.lambda->param_count > 0) {
 				for (int j = 0; j < e.lambda->param_count; j++) {
-					s_free(e.lambda->params[j]);
+					s_dealias(e.lambda->params[j]);
 				}
 				free(e.lambda->params);
 			}
-			s_free(e.lambda->body);
+			s_dealias(e.lambda->body);
 			free(e.lambda);
 			break;
 		case STATEMENT:
 			if (e.statement->free_var_count > 0) {
 				for (int i = 0; i < e.statement->free_var_count; i++) {
-					s_free(e.statement->free_vars[i]);
+					s_dealias(e.statement->free_vars[i]);
 				}
 				free(e.statement->free_vars);
 			}
 			s_free(e.statement->target);
 			if (e.statement->arg_count > 0) {
 				for (int i = 0; i < e.statement->arg_count; i++) {
-					s_free(e.statement->args[i]);
+					s_dealias(e.statement->args[i]);
 				}
 				free(e.statement->args);
 			}
@@ -479,7 +441,6 @@ void s_free(s_expr e) {
 		case BIG_INTEGER:
 			break;
 	}
-	free(e.ref_count);
 }
 
 void s_elem_dump(const s_expr s);

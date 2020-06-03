@@ -37,7 +37,7 @@ typedef struct s_statement {
 
 typedef struct s_table {
 	idtrie trie;
-}
+} s_table;
 
 typedef struct s_symbol_data {
 	id id;
@@ -96,7 +96,6 @@ struct s_expr_ref {
 s_table s_init_table();
 void s_free_table(s_table t);
 
-s_expr s_nil();
 s_expr s_symbol(s_table t, s_expr_ref* qualifier, strref name);
 s_expr s_cons(s_expr car, s_expr cdr);
 
@@ -111,8 +110,8 @@ s_expr s_builtin(s_expr_ref* n,
 		void (*f)(void* d),
 		void* data);
 s_expr s_quote(s_expr data);
-s_expr s_lambda(int32_t param_count, s_expr_ref** params,
-		s_expr_ref* body);
+s_expr s_lambda(int32_t param_count, int32_t var_count, s_expr_ref** vars,
+		int32_t term_count, s_expr* terms);
 s_expr s_variable(uint64_t offset);
 
 s_expr s_function(s_expr_ref* lambda, s_expr* capture);
@@ -126,10 +125,10 @@ s_expr s_cdr(s_expr s);
 bool s_atom(s_expr e);
 bool s_eq(s_expr a, s_expr b);
 
-void s_ref(s_expr s);
-void s_free(s_expr s);
+void s_alias(s_expr s);
+void s_dealias(s_expr s);
 
-void s_ref_ref(s_expr_ref* r);
-void s_ref_free(s_expr_type t, s_expr_ref* r);
+void s_ref(s_expr_ref* r);
+void s_free(s_expr_type t, s_expr_ref* r);
 
 void s_dump(s_expr s);

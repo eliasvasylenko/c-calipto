@@ -20,13 +20,16 @@
 #include "c-calipto/reader.h"
 #include "c-calipto/interpreter.h"
 
+static s_expr s_system;
+static s_expr s_data;
+static s_expr s_data_nil;
 static s_expr* terms;
-
+static s_table symbols;
 static UConverter* char_conv;
 
 void no_op(void* d) {}
 
-s_expr no_rep(void* d) { return s_nil(); }
+s_expr no_rep(void* d) { return s_data_nil; }
 
 bool system_exit(s_statement* b, s_expr* args, void* d) {
 	return false;
@@ -53,7 +56,7 @@ void system_in_free(void* d) {
 	system_in_data data = *(system_in_data*)d;
 
 	if (data.next) {
-		s_free(*data.next);
+		s_dealias(*data.next);
 		free(data.next);
 
 		if (data.text) {
@@ -102,7 +105,7 @@ void system_out_free(void* d) {
 	system_out_data data = *(system_out_data*)d;
 
 	if (data.next) {
-		s_free(*data.next);
+		s_dealias(*data.next);
 		free(data.next);
 
 		if (data.text) {
@@ -173,26 +176,16 @@ s_expr make_builtin(s_expr_ref* q, UChar* n,
 		bool (*a)(s_statement* b, s_expr* args, void* d),
 		void (*f)(void* d),
 		void* data) {
-	s_expr symbol  = s_symbol(q, u_strref(n));
+	s_expr symbol  = s_symbol(symbols, q, u_strref(n));
 
 	s_expr bi = s_builtin(symbol.p, r, c, a, f, data);
 
-	s_free(symbol);
+	s_dealias(symbol);
 
 	return bi;
 }
 
 s_bound_arguments bind_root_arguments(s_expr args) {
-	terms = (s_expr[]){
-		s_variable(0),
-		s_variable(1),
-		s_variable(2),
-		s_variable(3)
-	};
-
-	s_expr_ref* s_system = s_symbol(NULL, u_strref(u"system")).p;
-	s_expr_ref* s_data = s_symbol(NULL, u_strref(u"data")).p;
-
 	system_in_data* s_i = malloc(sizeof(system_in_data));
 	*s_i = (system_in_data){ u_finit(stdin, NULL, NULL), NULL, NULL };
 
@@ -203,19 +196,19 @@ s_bound_arguments bind_root_arguments(s_expr args) {
 	*s_e = (system_out_data){ u_finit(stderr, NULL, NULL), NULL, NULL };
 
 	s_expr builtins[] = {
-		s_builtin(s_symbol(s_system, u_strref(u"exit")).p,
+		s_builtin(s_symbol(symbols, s_system.p, u_strref(u"exit")).p,
 				*no_rep, 0, *system_exit, *no_op, NULL),
-		s_builtin(s_symbol(s_system, u_strref(u"in")).p,
+		s_builtin(s_symbol(symbols, s_system.p, u_strref(u"in")).p,
 				*no_rep, 2, *system_in, *system_in_free, s_i),
-		s_builtin(s_symbol(s_system, u_strref(u"out")).p,
+		s_builtin(s_symbol(symbols, s_system.p, u_strref(u"out")).p,
 				*no_rep, 3, *system_out, *system_out_free, s_o),
-		s_builtin(s_symbol(s_system, u_strref(u"err")).p,
+		s_builtin(s_symbol(symbols, s_system.p, u_strref(u"err")).p,
 				*no_rep, 3, *system_out, *system_out_free, s_e),
-		s_builtin(s_symbol(s_data, u_strref(u"cons")).p,
+		s_builtin(s_symbol(symbols, s_data.p, u_strref(u"cons")).p,
 				*no_rep, 3, *data_cons, *no_op, NULL),
-		s_builtin(s_symbol(s_data, u_strref(u"des")).p,
+		s_builtin(s_symbol(symbols, s_data.p, u_strref(u"des")).p,
 				*no_rep, 3, *data_des, *no_op, NULL),
-		s_builtin(s_symbol(s_data, u_strref(u"eq")).p,
+		s_builtin(s_symbol(symbols, s_data.p, u_strref(u"eq")).p,
 				*no_rep, 4, *data_eq, *no_op, NULL),
 	};
 
@@ -225,12 +218,12 @@ s_bound_arguments bind_root_arguments(s_expr args) {
 	s_expr* arguments = malloc(sizeof(s_expr) * builtin_count);
 
 	for (int i = 0; i < builtin_count; i++) {
-		s_ref_free(SYMBOL, builtins[i].p->builtin.name);
+		s_free(SYMBOL, builtins[i].p->builtin.name);
 		parameters[i] = builtins[i].p->builtin.name;
 		arguments[i] = builtins[i];
 	}
 
-	s_expr_ref* system_args = s_symbol(s_system, u_strref(u"arguments")).p;
+	s_expr_ref* system_args = s_symbol(symbols, s_system.p, u_strref(u"arguments")).p;
 
 	return s_bind_arguments(parameters, arguments);
 }
@@ -240,21 +233,33 @@ int main(int argc, char** argv) {
 	UErrorCode error = 0;
 	char_conv = ucnv_open(NULL, &error);
 
-	s_expr args = s_nil();
+	symbols = s_init_table();
+	s_system = s_symbol(symbols, NULL, u_strref(u"system"));
+	s_data = s_symbol(symbols, NULL, u_strref(u"data"));
+	s_data_nil = s_symbol(symbols, s_data.p, u_strref(u"nil"));
+
+	terms = (s_expr[]){
+		s_variable(0),
+		s_variable(1),
+		s_variable(2),
+		s_variable(3)
+	};
+
+	s_expr args = s_data_nil;
 	for (int i = argc - 1; i >= 0; i--) {
 		s_expr arg = s_string(c_strref(char_conv, argv[i]));
 		s_expr rest = args;
 
 		args = s_cons(arg, rest);
 
-		s_free(arg);
-		s_free(rest);
+		s_dealias(arg);
+		s_dealias(rest);
 	}
 
 	UFILE* f = u_fopen("./bootstrap.cal", "r", NULL, NULL);
 	stream* st = open_file_stream(f);
 	scanner* sc = open_scanner(st);
-	reader* r = open_reader(sc);
+	reader* r = open_reader(sc, symbols);
 
 	s_expr e;
 	if (read(r, &e)) {
@@ -262,7 +267,7 @@ int main(int argc, char** argv) {
 		s_eval(e, b);
 		s_unbind_arguments(b);
 
-		s_free(e);
+		s_dealias(e);
 	} else {
 		printf("Failed to read bootstrap file!");
 	}
@@ -272,7 +277,7 @@ int main(int argc, char** argv) {
 	close_stream(st);
 	u_fclose(f);
 
-	s_free(args);
+	s_dealias(args);
 
 	ucnv_close(char_conv);
 	return 0;
