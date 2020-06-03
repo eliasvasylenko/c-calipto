@@ -265,7 +265,7 @@ bool read_step_out(reader* r, s_expr* e) {
 			s_free(head);
 			return false;
 		}
-		if (nil.type == SYMBOL && NULL == nil.p->symbol.qualifier) {
+		if (nil.type == SYMBOL && NULL == nil.p->symbol.id.leaf->value) {
 			s_free(nil);
 			s_free(head);
 			return false;

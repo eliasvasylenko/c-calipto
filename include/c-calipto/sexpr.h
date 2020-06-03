@@ -35,6 +35,14 @@ typedef struct s_statement {
 	s_expr* bindings; // owned
 } s_statement;
 
+typedef struct s_table {
+	idtrie trie;
+}
+
+typedef struct s_symbol_data {
+	id id;
+} s_symbol_data;
+
 typedef struct s_cons_data {
 	s_expr car;
 	s_expr cdr;
@@ -75,6 +83,7 @@ typedef struct s_string_data {
 struct s_expr_ref {
 	_Atomic(uint32_t) ref_count;
 	union {
+		struct s_symbol_data symbol;
 		struct s_cons_data cons;
 		struct s_expr quote;
 		struct s_lambda_data lambda;
@@ -84,8 +93,11 @@ struct s_expr_ref {
 	};
 };
 
+s_table s_init_table();
+void s_free_table(s_table t);
+
 s_expr s_nil();
-s_expr s_symbol(s_expr_ref* qualifier, strref name);
+s_expr s_symbol(s_table t, s_expr_ref* qualifier, strref name);
 s_expr s_cons(s_expr car, s_expr cdr);
 
 s_expr s_list(int32_t count, s_expr* e);

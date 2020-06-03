@@ -68,33 +68,51 @@ s_expr s_builtin(s_expr_ref* n,
 
 /*
  * This is a trie mapping symbol names & qualifiers to symbols, used
- * for interning. Keys are composed of a fixed-length pointer and a
- * variable-length string, which can be viewed as a variable-length
- * sequence of bytes. Pretty well understood any easy to optimise.
- *
- * The fixed-length qualifiers will make for many common prefixes, so
- * we should optimise for this. Perhaps a two-level data structure
- * where we map by qualifier first then switch to a different strategy
- * for subtrees?
- *
- * Since symbols are reference counted, they should remove themselves
- * from this trie once they're free.
+ * for interning. Keys are the composition of a pointer to a qualifier
+ * symbol and a name string.
  */
-
 static idtrie s_table;
+
+s_table s_init_table() {
+	s_table t;
+	t.trie.root;
+
+	// TODO insert common symbols, e.g. nil
+
+	return t;
+}
+
+typedef struct s_key {
+	s_expr_ref* qualifier;
+	UChar name[1];
+} s_key;
+
+void* s_value(void* key, id id) {
+	s_expr_ref* r = ref(sizeof(s_symbol_data));
+	r->symbol.id = id;
+	return r;
+}
 
 s_expr_ref* s_intern(s_expr_ref* qualifier, strref name) {
 	int32_t maxlen = strref_maxlen(name);
-	s_expr_ref* r = ref(sizeof(s_symbol_data) + maxlen);
-	int32_t len = strref_cpy(maxlen, (UChar*) &r->symbol.name, name);
+	s_key* key = malloc(sizeof(s_key) + sizeof(UChar) * (maxlen - 1));
+	int32_t len = strref_cpy(maxlen, key->name, name);
 	if (maxlen != len) {
-		free(r);
-		r = ref(sizeof(s_symbol_data) + len);
-		strref_cpy(len, (UChar*) &r->symbol.name, name);
+		s_key* key2 = malloc(sizeof(s_key) + sizeof(UChar) * (len - 1));
+		memcpy(key2->name, key->name, len);
+		free(key);
+		key = key2;
 	}
-	r->symbol.qualifier = qualifier;
 
-	return idtrie_intern(s_table, sizeof(s_symbol_data) + len - 1, r);
+	key->qualifier = qualifier;
+
+	id id = idtrie_insert(
+			s_table,
+			sizeof(s_key) + sizeof(UChar) * (len - 1),
+			key,
+			s_value);
+
+	return (s_expr_ref*)id.leaf->value;
 }
 
 const UChar const* unicode_ns = u"unicode";
@@ -109,8 +127,19 @@ s_expr s_character(UChar32 cp) {
 }
 
 s_expr s_string(strref s) {
-	return (s_expr){ STRING, .string=malloc_strrefcpy(s, NULL) };
+	int32_t maxlen = strref_maxlen(s);
+	s_expr_ref* r = ref(sizeof(s_string_data) + sizeof(UChar) * maxlen);
+	int32_t len = strref_cpy(maxlen, r->string.string, s);
+	if (maxlen != len) {
+		s_expr_ref* r2 = ref(sizeof(s_string_data) + sizeof(UChar) * len);
+		memcpy(r2->string.string, r->string.string, len);
+		free(r);
+		r = r2;
+	}
+	r->string.string[len] = u'\0';
+	return (s_expr){ STRING, .p=r };
 }
+
 s_expr s_cons(const s_expr car, const s_expr cdr) {
 	if (car.type == CHARACTER && cdr.type == STRING) {
 		bool single = !U_IS_SURROGATE(car.character);
