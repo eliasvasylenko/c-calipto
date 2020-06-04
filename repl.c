@@ -23,8 +23,7 @@
 static s_expr s_system;
 static s_expr s_data;
 static s_expr s_data_nil;
-static s_expr* terms;
-static s_table symbols;
+static s_term* terms;
 static UConverter* char_conv;
 
 void no_op(void* d) {}
@@ -176,7 +175,7 @@ s_expr make_builtin(s_expr_ref* q, UChar* n,
 		bool (*a)(s_statement* b, s_expr* args, void* d),
 		void (*f)(void* d),
 		void* data) {
-	s_expr symbol  = s_symbol(symbols, q, u_strref(n));
+	s_expr symbol  = s_symbol(q, u_strref(n));
 
 	s_expr bi = s_builtin(symbol.p, r, c, a, f, data);
 
@@ -196,19 +195,19 @@ s_bound_arguments bind_root_arguments(s_expr args) {
 	*s_e = (system_out_data){ u_finit(stderr, NULL, NULL), NULL, NULL };
 
 	s_expr builtins[] = {
-		s_builtin(s_symbol(symbols, s_system.p, u_strref(u"exit")).p,
+		s_builtin(s_symbol(s_system.p, u_strref(u"exit")).p,
 				*no_rep, 0, *system_exit, *no_op, NULL),
-		s_builtin(s_symbol(symbols, s_system.p, u_strref(u"in")).p,
+		s_builtin(s_symbol(s_system.p, u_strref(u"in")).p,
 				*no_rep, 2, *system_in, *system_in_free, s_i),
-		s_builtin(s_symbol(symbols, s_system.p, u_strref(u"out")).p,
+		s_builtin(s_symbol(s_system.p, u_strref(u"out")).p,
 				*no_rep, 3, *system_out, *system_out_free, s_o),
-		s_builtin(s_symbol(symbols, s_system.p, u_strref(u"err")).p,
+		s_builtin(s_symbol(s_system.p, u_strref(u"err")).p,
 				*no_rep, 3, *system_out, *system_out_free, s_e),
-		s_builtin(s_symbol(symbols, s_data.p, u_strref(u"cons")).p,
+		s_builtin(s_symbol(s_data.p, u_strref(u"cons")).p,
 				*no_rep, 3, *data_cons, *no_op, NULL),
-		s_builtin(s_symbol(symbols, s_data.p, u_strref(u"des")).p,
+		s_builtin(s_symbol(s_data.p, u_strref(u"des")).p,
 				*no_rep, 3, *data_des, *no_op, NULL),
-		s_builtin(s_symbol(symbols, s_data.p, u_strref(u"eq")).p,
+		s_builtin(s_symbol(s_data.p, u_strref(u"eq")).p,
 				*no_rep, 4, *data_eq, *no_op, NULL),
 	};
 
@@ -223,7 +222,7 @@ s_bound_arguments bind_root_arguments(s_expr args) {
 		arguments[i] = builtins[i];
 	}
 
-	s_expr_ref* system_args = s_symbol(symbols, s_system.p, u_strref(u"arguments")).p;
+	s_expr_ref* system_args = s_symbol(s_system.p, u_strref(u"arguments")).p;
 
 	return s_bind_arguments(parameters, arguments);
 }
@@ -233,12 +232,13 @@ int main(int argc, char** argv) {
 	UErrorCode error = 0;
 	char_conv = ucnv_open(NULL, &error);
 
-	symbols = s_init_table();
-	s_system = s_symbol(symbols, NULL, u_strref(u"system"));
-	s_data = s_symbol(symbols, NULL, u_strref(u"data"));
-	s_data_nil = s_symbol(symbols, s_data.p, u_strref(u"nil"));
+	s_init();
 
-	terms = (s_expr[]){
+	s_system = s_symbol(NULL, u_strref(u"system"));
+	s_data = s_symbol(NULL, u_strref(u"data"));
+	s_data_nil = s_symbol(s_data.p, u_strref(u"nil"));
+
+	terms = (s_term[]){
 		s_variable(0),
 		s_variable(1),
 		s_variable(2),
@@ -259,7 +259,7 @@ int main(int argc, char** argv) {
 	UFILE* f = u_fopen("./bootstrap.cal", "r", NULL, NULL);
 	stream* st = open_file_stream(f);
 	scanner* sc = open_scanner(st);
-	reader* r = open_reader(sc, symbols);
+	reader* r = open_reader(sc);
 
 	s_expr e;
 	if (read(r, &e)) {
@@ -278,6 +278,8 @@ int main(int argc, char** argv) {
 	u_fclose(f);
 
 	s_dealias(args);
+
+	s_close();
 
 	ucnv_close(char_conv);
 	return 0;

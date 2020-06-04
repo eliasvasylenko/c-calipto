@@ -17,16 +17,15 @@
 #include "c-calipto/scanner.h"
 #include "c-calipto/reader.h"
 
-reader* open_reader(scanner* s, s_table t) {
+reader* open_reader(scanner* s) {
 	reader* r = malloc(sizeof(reader));
 	r->scanner = s;
 	r->cursor.position = 0;
 	r->cursor.stack = NULL;
-	r->symbols = t;
 
-	s_expr data = s_symbol(t, NULL, u_strref(u"data"));
-	r->data_quote = s_symbol(t, data.p, u_strref(u"quote"));
-	r->data_nil = s_symbol(t, data.p, u_strref(u"nil"));
+	s_expr data = s_symbol(NULL, u_strref(u"data"));
+	r->data_quote = s_symbol(data.p, u_strref(u"quote"));
+	r->data_nil = s_symbol(data.p, u_strref(u"nil"));
 	s_dealias(data);
 
 	return r;
@@ -153,7 +152,7 @@ bool read_symbol(reader* r, s_expr* e) {
 		UChar* n = malloc(sizeof(UChar) * len);
 		take_buffer_length(r->scanner, len, n);
 
-		symbol = s_symbol(r->symbols, symbol.p, u_strnref(len, n));
+		symbol = s_symbol(symbol.p, u_strnref(len, n));
 
 		free(n);
 	} while (advance_input_if(r->scanner, is_equal, &colon));

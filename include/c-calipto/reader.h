@@ -6,12 +6,11 @@ typedef struct cursor_stack {
 typedef struct reader {
 	cursor_stack cursor;
 	scanner* scanner;
-	s_table symbols;
 	s_expr data_quote;
 	s_expr data_nil;
 } reader;
 
-reader* open_reader(scanner* s, s_table t);
+reader* open_reader(scanner* s);
 
 void close_reader(reader* r);
 

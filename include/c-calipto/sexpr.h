@@ -1,11 +1,13 @@
+/*
+ * Types
+ */
+
+// expressions
+
 typedef enum s_expr_type {
 	ERROR,
 	SYMBOL,
 	CONS,
-
-	QUOTE,
-	LAMBDA,
-	VARIABLE,
 
 	FUNCTION,
 	BUILTIN,
@@ -16,6 +18,7 @@ typedef enum s_expr_type {
 	BIG_INTEGER
 } s_expr_type;
 
+
 typedef struct s_expr_ref s_expr_ref;
 
 typedef struct s_expr {
@@ -23,16 +26,53 @@ typedef struct s_expr {
 	union {
 		UChar32 character;
 		int64_t integer;
-		uint64_t variable;
+		uint32_t variable;
 		s_expr_ref* p;
 	};
 } s_expr;
 
+// terms
+
+typedef enum s_term_type {
+	LAMBDA = -1,
+	VARIABLE = -2
+	// anything else is an s_expr_type and represents a QUOTE
+} s_term_type;
+
+struct s_lambda_data;
+
+typedef union s_term {
+	struct {
+		s_term_type type;
+		union {
+			uint32_t variable;
+			struct s_lambda_data* lambda;
+		};
+	};
+	s_expr quote;
+} s_term;
+
+// statements
+
 typedef struct s_statement {
 	int32_t term_count;
-	s_expr* terms; // borrowed, always QUOTE | LAMBDA | VARIABLE
+	s_term* terms; // borrowed, always QUOTE | LAMBDA | VARIABLE
 	s_expr* bindings; // owned
 } s_statement;
+
+/*
+ * Data
+ */
+
+typedef struct s_lambda_term {
+	_Atomic(uint32_t) ref_count;
+	uint32_t param_count;
+	s_expr_ref** params; // always SYMBOL
+	uint32_t var_count;
+	uint32_t* vars; // indices into vars of lexical context
+	int32_t term_count;
+	s_term* terms;
+} s_lambda_term;
 
 typedef struct s_table {
 	idtrie trie;
@@ -48,22 +88,8 @@ typedef struct s_cons_data {
 	s_expr cdr;
 } s_cons_data;
 
-/*
- * An expression can be promoted to a lambda when it
- * appears as a term in a statement. This promotion
- * does not modify the data, it is merely a
- * specialization for the purpose of performance.
- */
-typedef struct s_lambda_data {
-	int32_t param_count; // <= var_count
-	int32_t var_count;
-	s_expr_ref** vars; // always SYMBOLs
-	int32_t term_count;
-	s_expr* terms; // always QUOTE | LAMBDA | VARIABLE
-} s_lambda_data;
-
 typedef struct s_function_data {
-	s_expr_ref* lambda; // always LAMBDA
+	s_lambda_term* lambda;
 	s_expr* capture;
 } s_function_data;
 
@@ -85,13 +111,15 @@ struct s_expr_ref {
 	union {
 		id symbol;
 		s_cons_data cons;
-		s_expr quote;
-		s_lambda_data lambda;
 		s_function_data function;
 		s_builtin_data builtin;
 		s_string_data string;
 	};
 };
+
+/*
+ * Functions
+ */
 
 void s_init();
 void s_close();
@@ -109,24 +137,30 @@ s_expr s_builtin(s_expr_ref* n,
 		bool (*a)(s_statement* result, s_expr* a, void* d),
 		void (*f)(void* d),
 		void* data);
-s_expr s_quote(s_expr data);
-s_expr s_lambda(int32_t param_count, int32_t var_count, s_expr_ref** vars,
-		int32_t term_count, s_expr* terms);
-s_expr s_variable(uint64_t offset);
 
-s_expr s_function(s_expr_ref* lambda, s_expr* capture);
+s_expr s_function(s_lambda_term* lambda, s_expr* capture);
 s_expr s_error();
 
-s_symbol_info* s_inspect( s_expr s);
+s_symbol_info* s_inspect(s_expr s);
 s_expr s_car(s_expr s);
 s_expr s_cdr(s_expr s);
 
 bool s_atom(s_expr e);
 bool s_eq(s_expr a, s_expr b);
 
-void s_alias(s_expr s);
+void s_dump(s_expr s);
+
+s_expr s_alias(s_expr s);
 void s_dealias(s_expr s);
-void s_ref(s_expr_ref* r);
+s_expr_ref* s_ref(s_expr_ref* r);
 void s_free(s_expr_type t, s_expr_ref* r);
 
-void s_dump(s_expr s);
+s_term s_quote(s_expr data);
+s_term s_lambda(int32_t param_count, int32_t var_count, s_expr_ref** vars,
+		int32_t term_count, s_expr* terms);
+s_term s_variable(uint64_t offset);
+
+s_term s_alias_term(s_term t);
+void s_dealias_term(s_term t);
+s_lambda_term* s_ref_lambda(s_lambda_term* r);
+void s_free_lambda(s_lambda_term* r);
