@@ -26,7 +26,6 @@ typedef struct s_expr {
 	union {
 		UChar32 character;
 		int64_t integer;
-		uint32_t variable;
 		s_expr_ref* p;
 	};
 } s_expr;
@@ -39,14 +38,14 @@ typedef enum s_term_type {
 	// anything else is an s_expr_type and represents a QUOTE
 } s_term_type;
 
-struct s_lambda_data;
+struct s_lambda_term;
 
 typedef union s_term {
 	struct {
 		s_term_type type;
 		union {
 			uint32_t variable;
-			struct s_lambda_data* lambda;
+			struct s_lambda_term* lambda;
 		};
 	};
 	s_expr quote;
@@ -70,7 +69,7 @@ typedef struct s_lambda_term {
 	s_expr_ref** params; // always SYMBOL
 	uint32_t var_count;
 	uint32_t* vars; // indices into vars of lexical context
-	int32_t term_count;
+	uint32_t term_count;
 	s_term* terms;
 } s_lambda_term;
 
@@ -156,8 +155,9 @@ s_expr_ref* s_ref(s_expr_ref* r);
 void s_free(s_expr_type t, s_expr_ref* r);
 
 s_term s_quote(s_expr data);
-s_term s_lambda(int32_t param_count, int32_t var_count, s_expr_ref** vars,
-		int32_t term_count, s_expr* terms);
+s_term s_lambda(uint32_t param_count, s_expr_ref** params,
+		uint32_t var_count, uint32_t* vars,
+		uint32_t term_count, s_term* terms);
 s_term s_variable(uint64_t offset);
 
 s_term s_alias_term(s_term t);

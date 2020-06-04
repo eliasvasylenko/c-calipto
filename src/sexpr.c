@@ -146,36 +146,44 @@ s_expr s_cons(const s_expr car, const s_expr cdr) {
 }
 
 s_term s_quote(s_expr e) {
-	s_expr_ref* r = ref(sizeof(s_expr));
-	r->quote = e;
-	s_alias(e);
-	return (s_expr){ QUOTE, .p=r };
+	return (s_term){ .quote=s_alias(e) };
 }
 
-s_expr s_lambda(int32_t param_count, int32_t var_count, s_expr_ref** vars,
-		int32_t term_count, s_expr* terms) {
-	s_expr_ref* r = ref(sizeof(s_lambda_data));
-	r->lambda.param_count = param_count;
-	r->lambda.var_count = var_count;
+s_term s_lambda(uint32_t param_count, s_expr_ref** params,
+		uint32_t var_count, uint32_t* vars,
+		uint32_t term_count, s_term* terms) {
+	s_lambda_term* l = malloc(sizeof(s_lambda_term));
+	l->ref_count = ATOMIC_VAR_INIT(1);
+	l->param_count = param_count;
+	if (param_count > 0) {
+		l->params = malloc(sizeof(s_expr_ref*) * param_count);
+		for (int i = 0; i < param_count; i++) {
+			s_ref(params[i]);
+			l->params[i] = params[i];
+		}
+	} else {
+		l->params = NULL;
+	}
+	l->var_count = var_count;
 	if (var_count > 0) {
-		r->lambda.vars = malloc(sizeof(s_expr_ref*) * var_count);
+		l->vars = malloc(sizeof(uint32_t) * var_count);
 		for (int i = 0; i < var_count; i++) {
-			s_ref(vars[i]);
-			r->lambda.vars[i] = vars[i];
+			l->vars[i] = vars[i];
 		}
 	} else {
-		r->lambda.vars = NULL;
+		l->vars = NULL;
 	}
+	l->term_count = term_count;
 	if (term_count > 0) {
-		r->lambda.terms = malloc(sizeof(s_expr) * term_count);
+		l->terms = malloc(sizeof(s_term) * term_count);
 		for (int i = 0; i < term_count; i++) {
-			s_alias(terms[i]);
-			r->lambda.terms[i] = terms[i];
+			s_alias_term(terms[i]);
+			l->terms[i] = terms[i];
 		}
 	} else {
-		r->lambda.terms = NULL;
+		l->terms = NULL;
 	}
-	return (s_expr){ LAMBDA, .p=r };
+	return (s_term){ .type=LAMBDA, .lambda=l };
 }
 
 s_expr s_car(const s_expr e) {
@@ -183,14 +191,6 @@ s_expr s_car(const s_expr e) {
 		case CONS:
 			s_alias(e.p->cons.car);
 			return e.p->cons.car;
-
-		case QUOTE:
-			s_alias(data_quote);
-			return data_quote;
-
-		case LAMBDA:
-			s_alias(data_lambda);
-			return data_lambda;
 
 		case STRING:
 			;
@@ -213,45 +213,20 @@ s_expr s_cdr(const s_expr e) {
 		case CONS:
 			return s_alias(e.p->cons.cdr);
 
-		case QUOTE:
-			return s_cons(e.p->quote, data_nil);
-
-		case LAMBDA:
-			;
-			s_expr params = data_nil;
-			for (int i = e.p->lambda.param_count - 1; i >= 0; i--) {
-				s_expr tail = params;
-				params = s_cons(e.lambda->params[i], tail);
-				s_free(tail);
-			}
-			s_expr tail = s_cons(e.lambda->body, s_nil());
-			s_expr cdr = s_cons(params, tail);
-			s_free(params);
-			s_free(tail);
-			return cdr;
-
 		case STRING:
 			;
-			bool single = U16_IS_SINGLE(e.string[0]);
+			bool single = U16_IS_SINGLE(e.p->string.string[0]);
 			int32_t head = single ? 1 : 2;
-			int32_t len = u_strlen(e.string);
+			int32_t len = u_strlen(e.p->string.string);
+			len -= head;
 			if (len == 0) {
-				return s_nil();
+				return s_alias(data_nil);
 			}
-			UChar* s = malloc(sizeof(UChar) * (len - head));
-			u_strncpy(s, e.string, len - head);
+			s_expr_ref* r = ref(sizeof(s_string_data) + sizeof(UChar) * len);
+			u_strncpy(r->string.string, e.p->string.string, len);
+			r->string.string[len] = u'\0';
 
-			return (s_expr){ STRING, counter(), .string=s };
-		
-		case STATEMENT:
-			;
-			s_expr args = s_nil();
-			for (int i = e.statement->arg_count - 1; i >= 0; i--) {
-				s_expr tail = args;
-				args = s_cons(e.statement->args[i], tail);
-				s_free(tail);
-			}
-			return args;
+			return (s_expr){ STRING, .p=r };
 
 		default:
 			return s_error(u_strref(u"Type error, cannot destructure atom"));
@@ -262,28 +237,96 @@ bool s_atom(const s_expr e) {
 	return e.type == SYMBOL;
 }
 
+bool s_eq_lambda(const s_lambda_term* a, const s_lambda_term* b);
+
 bool s_eq(const s_expr a, const s_expr b) {
 	if (a.type != b.type) {
 		return false;
 	}
 	switch (a.type) {
-		case CONS:
-			return s_eq(a.cons->car, b.cons->car);
+		case ERROR:
+			return true;
 		case SYMBOL:
 			return a.p == b.p;
-		case STRING:
+		case CONS:
+			return s_eq(a.p->cons.car, b.p->cons.car) && s_eq(a.p->cons.cdr, b.p->cons.cdr);
+		case FUNCTION:
+			;
+			uint32_t var_count = a.p->function.lambda->var_count;
+			if (var_count != b.p->function.lambda->var_count) {
+				return false;
+			}
+			for (int i = 0; i < var_count; i++) {
+				if (!s_eq(a.p->function.capture[i], b.p->function.capture[i])) {
+					return false;
+				}
+			}
+			return s_eq_lambda(a.p->function.lambda, b.p->function.lambda);
+		case BUILTIN:
+			return a.p == b.p;
 		case CHARACTER:
+			return a.character == b.character;
+		case STRING:
+			return !u_strcmp(a.p->string.string, b.p->string.string);
 		case INTEGER:
-			break;
-		case NIL:
-			return true;
+			return a.integer == b.integer;
 	}
+	return true;
+}
+
+bool s_eq_lambda(const s_lambda_term* a, const s_lambda_term* b) {
+	uint32_t param_count = a->param_count;
+	if (param_count != b->param_count) {
+		return false;
+	}
+	for (int i = 0; i < param_count; i++) {
+		if (a->params[i] != b->params[i]) {
+			return false;
+		}
+	}
+	uint32_t var_count = a->var_count;
+	if (var_count != b->var_count) {
+		return false;
+	}
+	for (int i = 0; i < var_count; i++) {
+		if (a->vars[i] != b->vars[i]) {
+			return false;
+		}
+	}
+	uint32_t term_count = a->term_count;
+	if (term_count != b->term_count) {
+		return false;
+	}
+	for (int i = 0; i < term_count; i++) {
+		s_term_type type = a->terms[i].type;
+		if (type != b->terms[i].type) {
+			return false;
+		}
+		switch (type) {
+			case LAMBDA:
+				if (!s_eq_lambda(a->terms[i].lambda, b->terms[i].lambda)) {
+					return false;
+				}
+				break;
+			case VARIABLE:
+				if (a->terms[i].variable != b->terms[i].variable) {
+					return false;
+				}
+				break;
+			default:
+				if (!s_eq(a->terms[i].quote, b->terms[i].quote)) {
+					return false;
+				}
+				break;
+		}
+	}
+	return true;
 }
 
 void s_elem_dump(const s_expr s);
 
 void s_tail_dump(const s_expr s) {
-	if (s.type == NIL) {
+	if (s_eq(s, data_nil)) {
 		printf(")");
 		return;
 	}
@@ -298,8 +341,8 @@ void s_tail_dump(const s_expr s) {
 	s_expr cdr = s_cdr(s);
 	s_elem_dump(car);
 	s_tail_dump(cdr);
-	s_free(car);
-	s_free(cdr);
+	s_dealias(car);
+	s_dealias(cdr);
 }
 
 void s_elem_dump(const s_expr s) {
@@ -307,7 +350,7 @@ void s_elem_dump(const s_expr s) {
 
 	switch (s.type) {
 	case STRING:;
-		u_printf_u(u"\"%S\"", s.string);
+		u_printf_u(u"\"%S\"", s.p->string.string);
 		break;
 	case CHARACTER:
 		u_printf_u(u"unicode:%04x", s.character);
@@ -315,20 +358,24 @@ void s_elem_dump(const s_expr s) {
 	case INTEGER:
 		printf("%li", s.integer);
 		break;
-	case NIL:
-		printf("()");
-		break;
 	default:
 		if (s_atom(s)) {
-			u_printf_u(u"%S:%S", s_namespace(s), s_name(s));
+			if (s_eq(s, data_nil)) {
+				printf("()");
+			} else {
+				s_symbol_info* i = s_inspect(s);
+				s_elem_dump(i->qualifier);
+				u_printf_u(u":%S", i->name);
+				free(i);
+			}
 		} else {
 			s_expr car = s_car(s);
 			s_expr cdr = s_cdr(s);
 			printf("(");
 			s_elem_dump(car);
 			s_tail_dump(cdr);
-			s_free(car);
-			s_free(cdr);
+			s_dealias(car);
+			s_dealias(cdr);
 		}
 		break;
 	}
@@ -358,22 +405,20 @@ void s_dealias(s_expr e) {
 		case VARIABLE:
 			break;
 		default:
-			s_free(e.p);
+			s_free(e.type, e.p);
 	}
 }
 
 s_expr_ref* s_ref(s_expr_ref* r) {
-	if (e.ref_count != NULL) {
-		atomic_fetch_add(e.ref_count, 1);
-	}
-	return e;
+	atomic_fetch_add(&r->ref_count, 1);
+	return r;
 }
 
 void s_free(s_expr_type t, s_expr_ref* r) {
-	if (e.ref_count == NULL || atomic_fetch_add(e.ref_count, -1) > 1) {
+	if (atomic_fetch_add(&r->ref_count, -1) > 1) {
 		return;
 	}
-	switch (e.type) {
+	switch (t) {
 		case CHARACTER:
 		case INTEGER:
 		case VARIABLE:
@@ -381,43 +426,28 @@ void s_free(s_expr_type t, s_expr_ref* r) {
 		case ERROR:
 			break;
 		case SYMBOL:
-			idtrie_remove(e.p->symbol);
+			idtrie_remove(r->symbol);
 			break;
 		case CONS:
-			s_dealias(e.p->cons.car);
-			s_dealias(e.p->cons.cdr);
-			break;
-		case QUOTE:
-			s_dealias(*e.p->quote);
-			break;
-		case LAMBDA:
-			if (e.p->lambda.var_count > 0) {
-				for (int j = 0; j < e.p->lambda.var_count; j++) {
-					s_dealias(e.p->lambda.vars[j]);
-				}
-				free(e.p->lambda.vars);
-			}
-			if (e.p->lambda.term_count > 0) {
-				for (int j = 0; j < e.p->lambda.term_count; j++) {
-					s_dealias(e.p->lambda.terms[j]);
-				}
-				free(e.p->lambda.terms);
-			}
+			s_dealias(r->cons.car);
+			s_dealias(r->cons.cdr);
 			break;
 		case FUNCTION:
-			s_dealias(e.function->capture);
-			s_dealias(e.function->lambda);
+			for (int i = 0; i < r->function.lambda->var_count; i++) {
+				s_dealias(r->function.capture[i]);
+			}
+			s_free_lambda(r->function.lambda);
 			break;
 		case BUILTIN:
-			free(e.builtin->name);
-			e.builtin->free(e.builtin->data);
+			free(r->builtin.name);
+			r->builtin.free(r->builtin.data);
 			break;
 		case STRING:
 			break;
 		case BIG_INTEGER:
 			break;
 	}
-	free(e.p);
+	free(r);
 }
 
 s_term s_alias_term(s_term t) {
@@ -448,28 +478,35 @@ void s_dealias_term(s_term t) {
 }
 
 s_lambda_term* s_ref_lambda(s_lambda_term* l) {
-	atomic_fetch_add(lambda->ref_count, 1);
+	atomic_fetch_add(&l->ref_count, 1);
 }
 
 void s_free_lambda(s_lambda_term* l) {
-	if (atomic_fetch_add(lambda->ref_count, -1) > 1) {
-		for (int i = 0; i < lambda->param_count; i++) {
-			s_free(lambda->params[i]);
+	if (atomic_fetch_add(&l->ref_count, -1) > 1) {
+		if (l->param_count > 0) {
+			for (int i = 0; i < l->param_count; i++) {
+				s_free(SYMBOL, l->params[i]);
+			}
+			free(l->params);
 		}
-		free(lambda->params);
-		free(lambda->vars);
-		for (int i = 0; i < lambda->term_count; i++) {
-			s_dealias_term(lambda->terms[i]);
+		if (l->var_count > 0) {
+			free(l->vars);
+			for (int i = 0; i < l->term_count; i++) {
+				s_dealias_term(l->terms[i]);
+			}
 		}
-		free(lambda->terms);
+		if (l->term_count > 0) {
+			free(l->terms);
+		}
 	}
 }
 
 void s_init() {
-	s_expr data = s_intern(NULL, u_strref(u"data"));
-	data_nil = s_intern(data, u_strref(u"nil"));
-	data_quote = s_intern(data, u_strref(u"quote"));
-	data_lambda = s_intern(data, u_strref(u"lambda"));
+	s_expr data = s_symbol(NULL, u_strref(u"data"));
+	data_nil = s_symbol(data.p, u_strref(u"nil"));
+	data_quote = s_symbol(data.p, u_strref(u"quote"));
+	data_lambda = s_symbol(data.p, u_strref(u"lambda"));
+	s_dealias(data);
 }
 
 void s_close() {
