@@ -1,3 +1,42 @@
+// terms
+
+typedef enum s_term_type {
+	LAMBDA = -1,
+	VARIABLE = -2
+	// anything else is an s_expr_type and represents a QUOTE
+} s_term_type;
+
+struct s_lambda_term;
+
+typedef union s_term {
+	struct {
+		s_term_type type;
+		union {
+			uint32_t variable;
+			struct s_lambda_term* lambda;
+		};
+	};
+	s_expr quote;
+} s_term;
+
+// statements
+
+typedef struct s_statement {
+	int32_t term_count;
+	s_term* terms; // borrowed, always QUOTE | LAMBDA | VARIABLE
+	s_expr* bindings; // owned
+} s_statement;
+
+typedef struct s_lambda_term {
+	_Atomic(uint32_t) ref_count;
+	uint32_t param_count;
+	s_expr_ref** params; // always SYMBOL
+	uint32_t var_count;
+	uint32_t* vars; // indices into vars of lexical context
+	uint32_t term_count;
+	s_term* terms;
+} s_lambda_term;
+
 /*
  * Associative trie for binding symbols to indices. This is how the array of
  * variables captured by a lambda is populated from the enclosing scope.
@@ -54,5 +93,18 @@ s_bindings s_free_bindings(s_bindings);
 s_bound_arguments s_bind_arguments(s_expr_ref** symbols, s_expr* v);
 void s_unbind_arguments(s_bound_arguments b);
 
-void s_eval(const s_expr e, const s_bound_arguments b);
+s_statement s_compile(const s_expr e, const uint32_t param_count, const s_expr_ref** params);
+
+void s_eval(const s_statement s, const s_expr* args);
+
+s_term s_quote(s_expr data);
+s_term s_lambda(uint32_t param_count, s_expr_ref** params,
+		uint32_t var_count, uint32_t* vars,
+		uint32_t term_count, s_term* terms);
+s_term s_variable(uint64_t offset);
+
+s_term s_alias_term(s_term t);
+void s_dealias_term(s_term t);
+s_lambda_term* s_ref_lambda(s_lambda_term* r);
+void s_free_lambda(s_lambda_term* r);
 

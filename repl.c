@@ -20,15 +20,12 @@
 #include "c-calipto/reader.h"
 #include "c-calipto/interpreter.h"
 
-static s_expr s_system;
-static s_expr s_data;
-static s_expr s_data_nil;
 static s_term* terms;
 static UConverter* char_conv;
 
 void no_op(void* d) {}
 
-s_expr no_rep(void* d) { return s_data_nil; }
+s_expr no_rep(void* d) { return s_list(0, NULL); }
 
 bool system_exit(s_statement* b, s_expr* args, void* d) {
 	return false;
@@ -194,6 +191,8 @@ s_bound_arguments bind_root_arguments(s_expr args) {
 	system_out_data* s_e = malloc(sizeof(system_out_data));
 	*s_e = (system_out_data){ u_finit(stderr, NULL, NULL), NULL, NULL };
 
+	s_expr s_system = s_symbol(NULL, u_strref(u"system"));
+	s_expr s_data = s_symbol(NULL, u_strref(u"data"));
 	s_expr builtins[] = {
 		s_builtin(s_symbol(s_system.p, u_strref(u"exit")).p,
 				*no_rep, 0, *system_exit, *no_op, NULL),
@@ -210,6 +209,8 @@ s_bound_arguments bind_root_arguments(s_expr args) {
 		s_builtin(s_symbol(s_data.p, u_strref(u"eq")).p,
 				*no_rep, 4, *data_eq, *no_op, NULL),
 	};
+	s_dealias(s_system);
+	s_dealias(s_data);
 
 	int32_t builtin_count = sizeof(builtins) / sizeof(s_expr);
 
@@ -227,16 +228,16 @@ s_bound_arguments bind_root_arguments(s_expr args) {
 	return s_bind_arguments(parameters, arguments);
 }
 
+s_expr read_arg(void* arg) {
+	return s_string(c_strref(char_conv, *(char**)arg));
+}
+
 int main(int argc, char** argv) {
 	setlocale(LC_ALL, "");
 	UErrorCode error = 0;
 	char_conv = ucnv_open(NULL, &error);
 
 	s_init();
-
-	s_system = s_symbol(NULL, u_strref(u"system"));
-	s_data = s_symbol(NULL, u_strref(u"data"));
-	s_data_nil = s_symbol(s_data.p, u_strref(u"nil"));
 
 	terms = (s_term[]){
 		s_variable(0),
@@ -245,16 +246,7 @@ int main(int argc, char** argv) {
 		s_variable(3)
 	};
 
-	s_expr args = s_data_nil;
-	for (int i = argc - 1; i >= 0; i--) {
-		s_expr arg = s_string(c_strref(char_conv, argv[i]));
-		s_expr rest = args;
-
-		args = s_cons(arg, rest);
-
-		s_dealias(arg);
-		s_dealias(rest);
-	}
+	s_expr args = s_list_of(argc, (void**)argv, read_arg);
 
 	UFILE* f = u_fopen("./bootstrap.cal", "r", NULL, NULL);
 	stream* st = open_file_stream(f);

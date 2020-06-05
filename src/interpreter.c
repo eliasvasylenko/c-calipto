@@ -6,62 +6,33 @@
 #include <unicode/ucnv.h>
 
 #include "c-calipto/stringref.h"
+#include "c-calipto/idtrie.h"
 #include "c-calipto/sexpr.h"
 #include "c-calipto/interpreter.h"
 
-bool flatten_list_recur(int32_t size, s_expr s, int32_t* count, s_expr** elems) {
-	if (s_eq(s, s_nil())) {
-		*count = size;
-		*elems = size == 0 ? NULL : malloc(sizeof(s_expr) * size);
-		return true;
-	}
-
-	if (s_atom(s)) {
+bool compile_quote(s_term* result, int32_t part_count, s_expr* parts) {
+	if (part_count != 1) {
 		return false;
 	}
 
-	s_expr tail = s_cdr(s);
-	if (!flatten_list_recur(size + 1, tail, count, elems)) {
-		s_free(tail);
-		return false;
-	}
-
-	s_free(tail);
-	(*elems)[size] = s_car(s);
-
-	return true;
-}
-
-bool flatten_list(s_expr s, int32_t* count, s_expr** elems) {
-	return flatten_list_recur(0, s, count, elems);
-}
-
-static s_expr data_quote = { ERROR, NULL, .error=NULL };
-static s_expr data_lambda = { ERROR, NULL, .error=NULL };
-
-bool compile_quote(s_expr* result, int32_t term_count, s_expr* terms) {
-	if (term_count != 1) {
-		return false;
-	}
-
-	*result = s_quote(terms[0]);
+	*result = s_quote(parts[0]);
 
 	return true;
 }
 
 bool compile_statement(s_expr* result, s_expr s);
 
-bool compile_lambda(s_expr* result, int32_t term_count, s_expr* terms) {
-	if (term_count != 2) {
+bool compile_lambda(s_term* result, int32_t part_count, s_expr* parts) {
+	if (part_count != 2) {
 		return false;
 	}
 
-	s_expr params_decl = terms[0];
-	s_expr body_decl = terms[1];
+	s_expr params_decl = parts[0];
+	s_expr body_decl = parts[1];
 
-	int32_t param_count;
 	s_expr* params;
-	if (!flatten_list(params_decl, &param_count, &params)) {
+	int32_t param_count = s_delist(params_decl, &params);
+	if (param_count < 0) {
 		return false;
 	}
 
@@ -83,7 +54,7 @@ bool compile_lambda(s_expr* result, int32_t term_count, s_expr* terms) {
 	return success;
 }
 
-bool compile_expression(s_expr* result, s_expr e) {
+bool compile_expression(s_term* result, s_expr e) {
 	if (s_atom(e)) {
 		s_ref(e);
 		*result = e;
@@ -128,7 +99,7 @@ bool compile_expression(s_expr* result, s_expr e) {
 	return success;
 }
 
-bool compile_statement(s_expr* result, s_expr s) {
+bool compile_statement(s_statement* result, s_expr s) {
 	if (s.type == STATEMENT) {
 		s_ref(s);
 		*result = s;
@@ -305,10 +276,12 @@ bool eval_statement(s_bound_expr* result, s_bound_expr s) {
 	return success;
 }
 
-void eval(const s_expr e, const s_bindings b) {
-	s_bound_expr s = { e, b };
-	s_ref(s.form);
-	s_ref_bindings(s.bindings);
+static s_expr s_data;
+static s_expr s_data_nil;
+
+void s_eval(const s_expr e, const s_expr_ref** arguments, const s_expr* parameters) {
+	s_data = s_symbol(NULL, u_strref(u"data"));
+	s_data_nil = s_symbol(s_data.p, u_strref(u"nil"));
 
 	s_expr c;
 	s_bound_expr next;
@@ -324,7 +297,7 @@ void eval(const s_expr e, const s_bindings b) {
 		}
 	}
 
-	s_free(s.form);
-	s_free_bindings(s.bindings);
+	s_dealias(s_data);
+	s_dealias(s_data_nil);
 }
 

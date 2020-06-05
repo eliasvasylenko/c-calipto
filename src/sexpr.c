@@ -323,6 +323,31 @@ bool s_eq_lambda(const s_lambda_term* a, const s_lambda_term* b) {
 	return true;
 }
 
+int32_t s_delist_recur(int32_t index, s_expr s, s_expr** elems) {
+	if (s_eq(s, data_nil)) {
+		*elems = index == 0 ? NULL : malloc(sizeof(s_expr) * index);
+		return index;
+	}
+
+	if (s_atom(s)) {
+		return -1;
+	}
+
+	s_expr tail = s_cdr(s);
+	int32_t size = s_delist_recur(index + 1, tail, elems);
+	s_dealias(tail);
+
+	if (size >= 0) {
+		(*elems)[index] = s_car(s);
+	}
+
+	return size;
+}
+
+int32_t s_delist(s_expr s, s_expr** elems) {
+	return s_delist_recur(0, s, elems);
+}
+
 void s_elem_dump(const s_expr s);
 
 void s_tail_dump(const s_expr s) {
