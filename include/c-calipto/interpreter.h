@@ -1,19 +1,17 @@
-// terms
-
 typedef enum s_term_type {
 	LAMBDA = -1,
 	VARIABLE = -2
 	// anything else is an s_expr_type and represents a QUOTE
 } s_term_type;
 
-struct s_lambda_term;
+struct s_lambda;
 
 typedef union s_term {
 	struct {
 		s_term_type type;
 		union {
 			uint32_t variable;
-			struct s_lambda_term* lambda;
+			struct s_lambda* lambda;
 		};
 	};
 	s_expr quote;
@@ -24,10 +22,9 @@ typedef union s_term {
 typedef struct s_statement {
 	int32_t term_count;
 	s_term* terms; // borrowed, always QUOTE | LAMBDA | VARIABLE
-	s_expr* bindings; // owned
 } s_statement;
 
-typedef struct s_lambda_term {
+typedef struct s_lambda {
 	_Atomic(uint32_t) ref_count;
 	uint32_t param_count;
 	s_expr_ref** params; // always SYMBOL
@@ -35,7 +32,12 @@ typedef struct s_lambda_term {
 	uint32_t* vars; // indices into vars of lexical context
 	uint32_t term_count;
 	s_term* terms;
-} s_lambda_term;
+} s_lambda;
+
+typedef struct s_bound_lambda {
+	s_lambda* lambda;
+	s_expr closure[1]; // variable length
+} s_bound_lambda;
 
 /*
  * Associative trie for binding symbols to indices. This is how the array of
@@ -97,14 +99,8 @@ s_statement s_compile(const s_expr e, const uint32_t param_count, const s_expr_r
 
 void s_eval(const s_statement s, const s_expr* args);
 
-s_term s_quote(s_expr data);
-s_term s_lambda(uint32_t param_count, s_expr_ref** params,
-		uint32_t var_count, uint32_t* vars,
-		uint32_t term_count, s_term* terms);
-s_term s_variable(uint64_t offset);
-
 s_term s_alias_term(s_term t);
 void s_dealias_term(s_term t);
-s_lambda_term* s_ref_lambda(s_lambda_term* r);
-void s_free_lambda(s_lambda_term* r);
+s_lambda* s_ref_lambda(s_lambda* r);
+void s_free_lambda(s_lambda* r);
 

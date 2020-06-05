@@ -30,32 +30,26 @@ s_expr s_error() {
 	return (s_expr){ ERROR, .p=NULL };
 }
 
-s_expr s_function(s_lambda_term* lambda, s_expr* capture) {
-	s_expr_ref* r = ref(sizeof(s_function_data));
-	r->function.lambda = s_ref_lambda(lambda);
-	r->function.capture = capture;
+s_expr s_function(s_function_type* t, uint32_t data_size, void* data) {
+	s_expr_ref* r = ref(sizeof(s_function_data) + data_size);
+	r->function.type = t;
+	memcpy(&r->function + 1, data, data_size);
 
-	int32_t capture_count = lambda->var_count - lambda->param_count;
-	for (int i = 0; i < capture_count; i++) {
-		s_alias(capture[i]);
-	}
 	return (s_expr){ FUNCTION, .p=r };
 }
-
-s_expr s_builtin(s_expr_ref* n,
-		s_expr (*rp)(void* d),
+s_function_type* s_define_function_type(
+		s_expr_ref* n,
+		s_expr (*r)(void* d),
 		int32_t c,
-		bool (*a)(s_statement* result, s_expr* a, void* d),
-		void (*f)(void* d),
-		void* d) {
-	s_expr_ref* r = ref(sizeof(s_builtin_data));
-	r->builtin.name = n;
-	r->builtin.represent = rp;
-	r->builtin.arg_count = c;
-	r->builtin.apply = a;
-	r->builtin.free = f;
-	r->builtin.data = d;
-	return (s_expr){ BUILTIN, .p=r };
+		bool (*a)(s_expr* (*r)(uint32_t s), s_expr* a, void* d),
+		void (*f)(void* d)) {
+	s_function_type* t = malloc(sizeof(s_function_type));
+	t->name = n;
+	t->represent = r;
+	t->arg_count = c;
+	t->apply = a;
+	t->free = f;
+	return t;
 }
 
 typedef struct s_key {
@@ -145,47 +139,6 @@ s_expr s_cons(const s_expr car, const s_expr cdr) {
 	return (s_expr){ CONS, .p=r };
 }
 
-s_term s_quote(s_expr e) {
-	return (s_term){ .quote=s_alias(e) };
-}
-
-s_term s_lambda(uint32_t param_count, s_expr_ref** params,
-		uint32_t var_count, uint32_t* vars,
-		uint32_t term_count, s_term* terms) {
-	s_lambda_term* l = malloc(sizeof(s_lambda_term));
-	l->ref_count = ATOMIC_VAR_INIT(1);
-	l->param_count = param_count;
-	if (param_count > 0) {
-		l->params = malloc(sizeof(s_expr_ref*) * param_count);
-		for (int i = 0; i < param_count; i++) {
-			s_ref(params[i]);
-			l->params[i] = params[i];
-		}
-	} else {
-		l->params = NULL;
-	}
-	l->var_count = var_count;
-	if (var_count > 0) {
-		l->vars = malloc(sizeof(uint32_t) * var_count);
-		for (int i = 0; i < var_count; i++) {
-			l->vars[i] = vars[i];
-		}
-	} else {
-		l->vars = NULL;
-	}
-	l->term_count = term_count;
-	if (term_count > 0) {
-		l->terms = malloc(sizeof(s_term) * term_count);
-		for (int i = 0; i < term_count; i++) {
-			s_alias_term(terms[i]);
-			l->terms[i] = terms[i];
-		}
-	} else {
-		l->terms = NULL;
-	}
-	return (s_term){ .type=LAMBDA, .lambda=l };
-}
-
 s_expr s_car(const s_expr e) {
 	switch (e.type) {
 		case CONS:
@@ -237,8 +190,6 @@ bool s_atom(const s_expr e) {
 	return e.type == SYMBOL;
 }
 
-bool s_eq_lambda(const s_lambda_term* a, const s_lambda_term* b);
-
 bool s_eq(const s_expr a, const s_expr b) {
 	if (a.type != b.type) {
 		return false;
@@ -251,74 +202,15 @@ bool s_eq(const s_expr a, const s_expr b) {
 		case CONS:
 			return s_eq(a.p->cons.car, b.p->cons.car) && s_eq(a.p->cons.cdr, b.p->cons.cdr);
 		case FUNCTION:
-			;
-			uint32_t var_count = a.p->function.lambda->var_count;
-			if (var_count != b.p->function.lambda->var_count) {
-				return false;
-			}
-			for (int i = 0; i < var_count; i++) {
-				if (!s_eq(a.p->function.capture[i], b.p->function.capture[i])) {
-					return false;
-				}
-			}
-			return s_eq_lambda(a.p->function.lambda, b.p->function.lambda);
-		case BUILTIN:
-			return a.p == b.p;
+			return a.p->function.type == b.p->function.type
+				&& s_eq(a.p->function.type->represent(&a.p->function + 1),
+					b.p->function.type->represent(&b.p->function + 1));
 		case CHARACTER:
 			return a.character == b.character;
 		case STRING:
 			return !u_strcmp(a.p->string.string, b.p->string.string);
 		case INTEGER:
 			return a.integer == b.integer;
-	}
-	return true;
-}
-
-bool s_eq_lambda(const s_lambda_term* a, const s_lambda_term* b) {
-	uint32_t param_count = a->param_count;
-	if (param_count != b->param_count) {
-		return false;
-	}
-	for (int i = 0; i < param_count; i++) {
-		if (a->params[i] != b->params[i]) {
-			return false;
-		}
-	}
-	uint32_t var_count = a->var_count;
-	if (var_count != b->var_count) {
-		return false;
-	}
-	for (int i = 0; i < var_count; i++) {
-		if (a->vars[i] != b->vars[i]) {
-			return false;
-		}
-	}
-	uint32_t term_count = a->term_count;
-	if (term_count != b->term_count) {
-		return false;
-	}
-	for (int i = 0; i < term_count; i++) {
-		s_term_type type = a->terms[i].type;
-		if (type != b->terms[i].type) {
-			return false;
-		}
-		switch (type) {
-			case LAMBDA:
-				if (!s_eq_lambda(a->terms[i].lambda, b->terms[i].lambda)) {
-					return false;
-				}
-				break;
-			case VARIABLE:
-				if (a->terms[i].variable != b->terms[i].variable) {
-					return false;
-				}
-				break;
-			default:
-				if (!s_eq(a->terms[i].quote, b->terms[i].quote)) {
-					return false;
-				}
-				break;
-		}
 	}
 	return true;
 }
@@ -415,7 +307,6 @@ s_expr s_alias(s_expr e) {
 	switch (e.type) {
 		case CHARACTER:
 		case INTEGER:
-		case VARIABLE:
 			break;
 		default:
 			s_ref(e.p);
@@ -427,7 +318,6 @@ void s_dealias(s_expr e) {
 	switch (e.type) {
 		case CHARACTER:
 		case INTEGER:
-		case VARIABLE:
 			break;
 		default:
 			s_free(e.type, e.p);
@@ -446,7 +336,6 @@ void s_free(s_expr_type t, s_expr_ref* r) {
 	switch (t) {
 		case CHARACTER:
 		case INTEGER:
-		case VARIABLE:
 			return;
 		case ERROR:
 			break;
@@ -458,14 +347,7 @@ void s_free(s_expr_type t, s_expr_ref* r) {
 			s_dealias(r->cons.cdr);
 			break;
 		case FUNCTION:
-			for (int i = 0; i < r->function.lambda->var_count; i++) {
-				s_dealias(r->function.capture[i]);
-			}
-			s_free_lambda(r->function.lambda);
-			break;
-		case BUILTIN:
-			free(r->builtin.name);
-			r->builtin.free(r->builtin.data);
+			r->function.type->free(&r->function + 1);
 			break;
 		case STRING:
 			break;
@@ -473,57 +355,6 @@ void s_free(s_expr_type t, s_expr_ref* r) {
 			break;
 	}
 	free(r);
-}
-
-s_term s_alias_term(s_term t) {
-	switch (t.type) {
-		case LAMBDA:
-			s_ref_lambda(t.lambda);
-			break;
-		case VARIABLE:
-			break;
-		default:
-			s_alias(t.quote);
-			break;
-	}
-	return t;
-}
-
-void s_dealias_term(s_term t) {
-	switch (t.type) {
-		case LAMBDA:
-			s_free_lambda(t.lambda);
-			break;
-		case VARIABLE:
-			break;
-		default:
-			s_dealias(t.quote);
-			break;
-	}
-}
-
-s_lambda_term* s_ref_lambda(s_lambda_term* l) {
-	atomic_fetch_add(&l->ref_count, 1);
-}
-
-void s_free_lambda(s_lambda_term* l) {
-	if (atomic_fetch_add(&l->ref_count, -1) > 1) {
-		if (l->param_count > 0) {
-			for (int i = 0; i < l->param_count; i++) {
-				s_free(SYMBOL, l->params[i]);
-			}
-			free(l->params);
-		}
-		if (l->var_count > 0) {
-			free(l->vars);
-			for (int i = 0; i < l->term_count; i++) {
-				s_dealias_term(l->terms[i]);
-			}
-		}
-		if (l->term_count > 0) {
-			free(l->terms);
-		}
-	}
 }
 
 void s_init() {

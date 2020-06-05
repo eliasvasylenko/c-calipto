@@ -11,7 +11,6 @@ typedef enum s_expr_type {
 	BIG_INTEGER
 } s_expr_type;
 
-
 typedef struct s_expr_ref s_expr_ref;
 
 typedef struct s_expr {
@@ -39,10 +38,10 @@ typedef struct s_cons_data {
 
 typedef struct s_function_type {
 	s_expr_ref* name; // always SYMBOL
-	s_expr (*represent)(void** data);
+	s_expr (*represent)(void* data);
 	int32_t arg_count;
-	bool (*apply)(s_expr* (*result)(int32_t size), s_expr* args, void** d);
-	void (*free) (void** data);
+	bool (*apply)(s_expr* (*result)(uint32_t size), s_expr* args, void* d);
+	void (*free) (void* data);
 } s_function_type;
 
 typedef struct s_function_data {
@@ -81,7 +80,7 @@ int32_t s_delist_of(s_expr l, void*** e, void* (*map)(s_expr elem));
 
 s_expr s_character(UChar32 c);
 s_expr s_string(strref s);
-s_function_type* s_define_function_type(s_expr_ref* n,
+s_function_type* s_define_function_type(
 		s_expr_ref* name,
 		s_expr (*r)(void* d),
 		int32_t c,

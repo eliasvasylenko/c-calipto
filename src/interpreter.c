@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -15,12 +16,63 @@ bool compile_quote(s_term* result, int32_t part_count, s_expr* parts) {
 		return false;
 	}
 
-	*result = s_quote(parts[0]);
+	*result = (s_term){ .quote=parts[0] };
 
 	return true;
 }
 
 bool compile_statement(s_expr* result, s_expr s);
+
+s_term s_alias_term(s_term t) {
+	switch (t.type) {
+		case LAMBDA:
+			s_ref_lambda(t.lambda);
+			break;
+		case VARIABLE:
+			break;
+		default:
+			s_alias(t.quote);
+			break;
+	}
+	return t;
+}
+
+void s_dealias_term(s_term t) {
+	switch (t.type) {
+		case LAMBDA:
+			s_free_lambda(t.lambda);
+			break;
+		case VARIABLE:
+			break;
+		default:
+			s_dealias(t.quote);
+			break;
+	}
+}
+
+s_lambda* s_ref_lambda(s_lambda* l) {
+	atomic_fetch_add(&l->ref_count, 1);
+}
+
+void s_free_lambda(s_lambda* l) {
+	if (atomic_fetch_add(&l->ref_count, -1) > 1) {
+		if (l->param_count > 0) {
+			for (int i = 0; i < l->param_count; i++) {
+				s_free(SYMBOL, l->params[i]);
+			}
+			free(l->params);
+		}
+		if (l->var_count > 0) {
+			free(l->vars);
+			for (int i = 0; i < l->term_count; i++) {
+				s_dealias_term(l->terms[i]);
+			}
+		}
+		if (l->term_count > 0) {
+			free(l->terms);
+		}
+	}
+}
 
 bool compile_lambda(s_term* result, int32_t part_count, s_expr* parts) {
 	if (part_count != 2) {
@@ -30,7 +82,7 @@ bool compile_lambda(s_term* result, int32_t part_count, s_expr* parts) {
 	s_expr params_decl = parts[0];
 	s_expr body_decl = parts[1];
 
-	s_expr* params;
+	s_expr_ref** params;
 	int32_t param_count = s_delist(params_decl, &params);
 	if (param_count < 0) {
 		return false;
@@ -40,8 +92,40 @@ bool compile_lambda(s_term* result, int32_t part_count, s_expr* parts) {
 	bool success = compile_statement(&body, body_decl);
 
 	if (success) {
-		*result = s_lambda(param_count, params, body);
-		s_free(body);
+		s_lambda* l = malloc(sizeof(s_lambda));
+		l->ref_count = ATOMIC_VAR_INIT(1);
+		l->param_count = param_count;
+		if (param_count > 0) {
+			l->params = malloc(sizeof(s_expr_ref*) * param_count);
+			for (int i = 0; i < param_count; i++) {
+				s_ref(params[i]);
+				l->params[i] = params[i];
+			}
+		} else {
+			l->params = NULL;
+		}
+		l->var_count = var_count;
+		if (var_count > 0) {
+			l->vars = malloc(sizeof(uint32_t) * var_count);
+			for (int i = 0; i < var_count; i++) {
+				l->vars[i] = vars[i];
+			}
+		} else {
+			l->vars = NULL;
+		}
+		l->term_count = term_count;
+		if (term_count > 0) {
+			l->terms = malloc(sizeof(s_term) * term_count);
+			for (int i = 0; i < term_count; i++) {
+				s_alias_term(terms[i]);
+				l->terms[i] = terms[i];
+			}
+		} else {
+			l->terms = NULL;
+		}
+		*result = (s_term){ .type=LAMBDA, .lambda=l };
+			*result = s_lambda(param_count, params, body);
+			s_free(body);
 	}
 
 	if (param_count > 0) {
@@ -203,14 +287,6 @@ bool eval_function(s_bound_expr* result, s_expr target, int32_t arg_count, s_exp
 	return true;
 }
 
-bool eval_builtin(s_bound_expr* result, s_expr target, int32_t arg_count, s_expr* args) {
-	if (arg_count != target.builtin->arg_count) {
-		return false;
-	}
-
-	return target.builtin->apply(result, args, target.builtin->data);
-}
-
 bool eval_statement(s_bound_expr* result, s_bound_expr s) {
 	// printf("  trace: ");
 	// s_dump(s.form);
@@ -248,19 +324,14 @@ bool eval_statement(s_bound_expr* result, s_bound_expr s) {
 	}
 
 	bool success;
-	switch (target.type) {
-	case FUNCTION:
-		;
-		success = eval_function(result, target, arg_count, args);
-		break;
+	if (target.type == FUNCTION) {
+		if (arg_count != target.builtin->arg_count) {
+			return false;
+		}
 
-	case BUILTIN:
-		;
-		success = eval_builtin(result, target, arg_count, args);
-		break;
+		success = target.builtin->apply(result, args, target.builtin->data);
 
-	default:
-		;
+	} else {
 		printf("Unable to apply to target: ");
 		s_dump(target);
 		success = false;
@@ -279,7 +350,11 @@ bool eval_statement(s_bound_expr* result, s_bound_expr s) {
 static s_expr s_data;
 static s_expr s_data_nil;
 
-void s_eval(const s_expr e, const s_expr_ref** arguments, const s_expr* parameters) {
+s_statement s_compile(const s_expr e, const uint32_t param_count, const s_expr_ref** params) {
+	;
+}
+
+void s_eval(const s_statement s, const s_expr* args) {
 	s_data = s_symbol(NULL, u_strref(u"data"));
 	s_data_nil = s_symbol(s_data.p, u_strref(u"nil"));
 
