@@ -47,7 +47,7 @@ typedef struct s_function_type {
 
 typedef struct s_function_data {
 	s_function_type* type;
-	void* data[1]; // variable length
+	// variable length data
 } s_function_data;
 
 typedef struct s_string_data {
@@ -83,12 +83,12 @@ s_expr s_character(UChar32 c);
 s_expr s_string(strref s);
 s_function_type* s_define_function_type(s_expr_ref* n,
 		s_expr_ref* name,
-		s_expr (*r)(void** d),
+		s_expr (*r)(void* d),
 		int32_t c,
-		bool (*a)(s_expr* (*r)(uint32_t s), s_expr* a, void** d),
-		void (*f)(void** d));
+		bool (*a)(s_expr* (*r)(uint32_t s), s_expr* a, void* d),
+		void (*f)(void* d));
 void s_undefine_function_type(s_function_type* t);
-s_expr s_function(s_function_type* t, uint32_t data_size, void** data);
+s_expr s_function(s_function_type* t, uint32_t data_size, void* data);
 
 s_expr s_error();
 

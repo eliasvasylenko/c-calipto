@@ -19,6 +19,7 @@
 #include "c-calipto/scanner.h"
 #include "c-calipto/reader.h"
 #include "c-calipto/interpreter.h"
+#include "c-calipto/io.h"
 
 static s_term* terms;
 static UConverter* char_conv;
@@ -31,88 +32,6 @@ bool system_exit(s_statement* b, s_expr* args, void* d) {
 	return false;
 }
 
-typedef struct system_in_data {
-	UFILE* file;
-	s_expr* next;
-	UChar* text;
-} system_in_data;
-
-bool system_in(s_statement* b, s_expr* args, void* d) {
-	s_expr fail = args[0];
-	s_expr cont = args[1];
-
-	s_expr* bindings = malloc(sizeof(s_expr) * 1);
-	bindings[0] = fail;
-	*b = (s_statement){ 1, terms, bindings };
-
-	return true;
-}
-
-void system_in_free(void* d) {
-	system_in_data data = *(system_in_data*)d;
-
-	if (data.next) {
-		s_dealias(*data.next);
-		free(data.next);
-
-		if (data.text) {
-			free(data.text);
-		}
-	} else if (data.file) {
-		u_fclose(data.file);
-	}
-
-	free(d);
-}
-
-typedef struct system_out_data {
-	UFILE* file;
-	s_expr* next;
-	UChar* text;
-} system_out_data;
-
-bool system_out(s_statement* b, s_expr* args, void* d) {
-	s_expr string = args[0];
-	s_expr fail = args[1];
-	s_expr cont = args[2];
-	
-	system_out_data data = *(system_out_data*)d;
-
-	if (string.type != STRING) {
-		s_expr* bindings = malloc(sizeof(s_expr) * 1);
-		bindings[0] = fail;
-		*b = (s_statement){ 1, terms, bindings };
-
-	} else if (data.next == NULL) {
-		u_fprintf(data.file, "%S", &string.p->string);
-
-		s_expr* bindings = malloc(sizeof(s_expr) * 1);
-		bindings[0] = cont;
-		*b = (s_statement){ 1, terms, bindings };
-
-	} else {
-
-
-	}
-	return true;
-}
-
-void system_out_free(void* d) {
-	system_out_data data = *(system_out_data*)d;
-
-	if (data.next) {
-		s_dealias(*data.next);
-		free(data.next);
-
-		if (data.text) {
-			free(data.text);
-		}
-	} else if (data.file) {
-		u_fclose(data.file);
-	}
-
-	free(d);
-}
 
 bool data_cons(s_statement* b, s_expr* args, void* d) {
 	s_expr car = args[0];
@@ -166,42 +85,21 @@ bool data_eq(s_statement* b, s_expr* args, void* d) {
 	return true;
 }
 
-s_expr make_builtin(s_expr_ref* q, UChar* n,
-		s_expr (*r)(void* d),
-		int32_t c,
-		bool (*a)(s_statement* b, s_expr* args, void* d),
-		void (*f)(void* d),
-		void* data) {
-	s_expr symbol  = s_symbol(q, u_strref(n));
-
-	s_expr bi = s_builtin(symbol.p, r, c, a, f, data);
-
-	s_dealias(symbol);
-
-	return bi;
-}
-
 s_bound_arguments bind_root_arguments(s_expr args) {
-	system_in_data* s_i = malloc(sizeof(system_in_data));
-	*s_i = (system_in_data){ u_finit(stdin, NULL, NULL), NULL, NULL };
-
-	system_out_data* s_o = malloc(sizeof(system_out_data));
-	*s_o = (system_out_data){ u_finit(stdout, NULL, NULL), NULL, NULL };
-
-	system_out_data* s_e = malloc(sizeof(system_out_data));
-	*s_e = (system_out_data){ u_finit(stderr, NULL, NULL), NULL, NULL };
-
-	s_expr s_system = s_symbol(NULL, u_strref(u"system"));
-	s_expr s_data = s_symbol(NULL, u_strref(u"data"));
 	s_expr builtins[] = {
-		s_builtin(s_symbol(s_system.p, u_strref(u"exit")).p,
-				*no_rep, 0, *system_exit, *no_op, NULL),
-		s_builtin(s_symbol(s_system.p, u_strref(u"in")).p,
-				*no_rep, 2, *system_in, *system_in_free, s_i),
-		s_builtin(s_symbol(s_system.p, u_strref(u"out")).p,
-				*no_rep, 3, *system_out, *system_out_free, s_o),
+		cal_open_scanner(
+				u_finit(stdin, NULL, NULL),
+				s_string(u_strref(u"stdin"))),
+		cal_open_printer(
+				u_finit(stdout, NULL, NULL),
+				s_string(u_strref(u"stdout"))),
+		cal_open_printer(
+				u_finit(stdout, NULL, NULL),
+				s_string(u_strref(u"stderr"))),
 		s_builtin(s_symbol(s_system.p, u_strref(u"err")).p,
 				*no_rep, 3, *system_out, *system_out_free, s_e),
+		s_builtin(s_symbol(s_system.p, u_strref(u"exit")).p,
+				*no_rep, 0, *system_exit, *no_op, NULL),
 		s_builtin(s_symbol(s_data.p, u_strref(u"cons")).p,
 				*no_rep, 3, *data_cons, *no_op, NULL),
 		s_builtin(s_symbol(s_data.p, u_strref(u"des")).p,
@@ -209,8 +107,6 @@ s_bound_arguments bind_root_arguments(s_expr args) {
 		s_builtin(s_symbol(s_data.p, u_strref(u"eq")).p,
 				*no_rep, 4, *data_eq, *no_op, NULL),
 	};
-	s_dealias(s_system);
-	s_dealias(s_data);
 
 	int32_t builtin_count = sizeof(builtins) / sizeof(s_expr);
 
