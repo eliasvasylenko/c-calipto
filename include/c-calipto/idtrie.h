@@ -41,6 +41,7 @@ typedef struct idtrie {
 	idtrie_node** root;
 	void* (*get_value)(void* key, idtrie_node* owner);
 	void (*update_value)(void* value, idtrie_node* owner);
+	void (*free_value)(void* value);
 } idtrie;
 
 void idtrie_clear(idtrie t);

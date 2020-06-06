@@ -17,10 +17,8 @@ typedef union s_term {
 	s_expr quote;
 } s_term;
 
-// statements
-
 typedef struct s_statement {
-	int32_t term_count;
+	uint32_t term_count;
 	s_term* terms; // borrowed, always QUOTE | LAMBDA | VARIABLE
 } s_statement;
 
@@ -30,8 +28,7 @@ typedef struct s_lambda {
 	s_expr_ref** params; // always SYMBOL
 	uint32_t var_count;
 	uint32_t* vars; // indices into vars of lexical context
-	uint32_t term_count;
-	s_term* terms;
+	s_statement body;
 } s_lambda;
 
 typedef struct s_bound_lambda {

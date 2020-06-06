@@ -1,10 +1,11 @@
+void s_init();
+void s_close();
+
 typedef enum s_expr_type {
 	ERROR,
 	SYMBOL,
 	CONS,
-
 	FUNCTION,
-
 	CHARACTER,
 	STRING,
 	INTEGER,
@@ -69,38 +70,20 @@ struct s_expr_ref {
 	};
 };
 
-/*
- * Functions
- */
-
-void s_init();
-void s_close();
-
 s_expr s_symbol(s_expr_ref* qualifier, strref name);
 s_expr s_cons(s_expr car, s_expr cdr);
+s_expr s_character(UChar32 c);
+s_expr s_string(strref s);
+s_expr s_function(s_function_type* t, uint32_t data_size, void* data);
 
 s_expr s_list(int32_t count, s_expr* e);
 s_expr s_list_of(int32_t count, void** e, s_expr (*map)(void* elem));
 int32_t s_delist(s_expr l, s_expr** e); 
 int32_t s_delist_of(s_expr l, void*** e, void* (*map)(s_expr elem)); 
 
-s_expr s_character(UChar32 c);
-s_expr s_string(strref s);
-s_function_type* s_define_function_type(
-		s_expr_ref* name,
-		s_expr (*r)(void* d),
-		int32_t c,
-		bool (*a)(s_expr* r, s_expr* a, void* d),
-		void (*f)(void* d));
-void s_undefine_function_type(s_function_type* t);
-s_expr s_function(s_function_type* t, uint32_t data_size, void* data);
-
-s_expr s_error();
-
 s_symbol_info* s_inspect(s_expr s);
 s_expr s_car(s_expr s);
 s_expr s_cdr(s_expr s);
-
 bool s_atom(s_expr e);
 bool s_eq(s_expr a, s_expr b);
 

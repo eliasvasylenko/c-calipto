@@ -21,7 +21,7 @@ bool compile_quote(s_term* result, int32_t part_count, s_expr* parts) {
 	return true;
 }
 
-bool compile_statement(s_expr* result, s_expr s);
+bool compile_statement(s_statement* result, s_expr s);
 
 s_term s_alias_term(s_term t) {
 	switch (t.type) {
@@ -68,8 +68,11 @@ bool compile_lambda(s_term* result, int32_t part_count, s_expr* parts) {
 		return false;
 	}
 
-	s_expr body;
+	s_statement body;
 	bool success = compile_statement(&body, body_decl);
+
+	uint32_t var_count = 0;
+	uint32_t* vars = NULL;
 
 	if (success) {
 		s_lambda* l = malloc(sizeof(s_lambda));
@@ -93,26 +96,8 @@ bool compile_lambda(s_term* result, int32_t part_count, s_expr* parts) {
 		} else {
 			l->vars = NULL;
 		}
-		l->term_count = term_count;
-		if (term_count > 0) {
-			l->terms = malloc(sizeof(s_term) * term_count);
-			for (int i = 0; i < term_count; i++) {
-				s_alias_term(terms[i]);
-				l->terms[i] = terms[i];
-			}
-		} else {
-			l->terms = NULL;
-		}
+		l->body = body;
 		*result = (s_term){ .type=LAMBDA, .lambda=l };
-			*result = s_lambda(param_count, params, body);
-			s_free(body);
-	}
-
-	if (param_count > 0) {
-		for (int i = 0; i < param_count; i++) {
-			s_free(params[i]);
-		}
-		free(params);
 	}
 
 	return success;
@@ -132,19 +117,19 @@ void s_free_lambda(s_lambda* l) {
 		}
 		if (l->var_count > 0) {
 			free(l->vars);
-			for (int i = 0; i < l->term_count; i++) {
-				s_dealias_term(l->terms[i]);
-			}
 		}
-		if (l->term_count > 0) {
-			free(l->terms);
+		if (l->body.term_count > 0) {
+			for (int i = 0; i < l->body.term_count; i++) {
+				s_dealias_term(l->body.terms[i]);
+			}
+			free(l->body.terms);
 		}
 	}
 }
 
 bool compile_expression(s_term* result, s_expr e) {
 	if (s_atom(e)) {
-		s_ref(e);
+		s_dealias(e);
 		*result = e;
 		return true;
 	}
@@ -231,6 +216,45 @@ bool compile_statement(s_statement* result, s_expr s) {
 	return success;
 }
 
+typedef struct symbol_bindings {
+	uint32_t count;
+	uint32_t* indices_into_parent;
+	idtrie indices;
+}
+
+void* get_symbol_index(void* key, idtrie_node* owner) {
+	uint32_t* value = malloc(sizeof(uint32_t*));
+	*value = ((symbol_index*)key).index;
+	return value;
+}
+
+void update_symbol_index(void* value, idtrie_node* owner) {}
+
+void free_symbol_index(void* value) {
+	free(value);
+}
+
+typedef struct symbol_index {
+	idtrie_node* symbol;
+	uint32_t index;
+} symbol_index;
+
+bool s_compile(s_statement* s, const s_expr e, const uint32_t param_count, const s_expr_ref** params) {
+	idtrie t;
+	t.get_value = get_symbol_value;
+	t.update_value = update_symbol_value;
+	t.free_value = free_symbol_value;
+	for (int i = 0; i < param_count; i++) {
+		symbol_index si = {
+			params[i]->symbol,
+			i
+		};
+		idtrie_insert(t, sizeof(idtrie_node*), &si);
+	}
+
+	compile_statement(s,
+}
+
 bool eval_expression(s_expr* result, s_bound_expr e) {
 	if (s_atom(e.form)) {
 		return s_resolve(result, e.form, e.bindings);
@@ -291,9 +315,10 @@ bool eval_function(s_bound_expr* result, s_expr target, int32_t arg_count, s_exp
 	return true;
 }
 
-bool eval_statement(s_bound_expr* result, s_bound_expr s) {
+bool eval_statement(s_instruction* result, s_bound_expr s) {
 	// printf("  trace: ");
 	// s_dump(s.form);
+	prepare_instruction_slot(result, s.term_count);
 
 	if (!s.form.type == STATEMENT) {
 		printf("Unable to resolve statement: ");
@@ -328,7 +353,37 @@ bool eval_statement(s_bound_expr* result, s_bound_expr s) {
 	}
 }
 
-bool execute_instruction(uint32_t instruction_size, s_expr* instruction) {
+static const uint8_t ARGS_ON_STACK = 16;
+static const uint8_t ARGS_ON_HEAP = 32;
+
+typedef struct instruction_slot {
+	s_expr stack_values[ARGS_ON_STACK];
+	uint32_t heap_values_size;
+	s_expr* heap_values;
+	uint32_t value_count;
+	s_expr* values;
+	struct instruction_slot* next;
+} instruction_slot;
+
+void prepare_instruction_slot(instruction_slot* i, uint32_t size) {
+	i->value_count = size;
+	if (size <= ARGS_ON_STACK) {
+		i->values = &i->stack_values;
+	} else {
+		if (size > i->heap_values_size) {
+			if (i->heap_values_size > 0) {
+				free(i->heap_values);
+			}
+			i->heap_values_size = size;
+			i->heap_values = malloc(sizeof(s_expr) * size);
+		}
+		i->values = i->heap_values;
+	}
+}
+
+bool execute_instruction(instruction_slot* next, instruction_slot* current) {
+	prepare_instruction_slot(next, current->values[0].p->function.type->max_result_size);
+
 	bool success;
 	if (target.type == FUNCTION) {
 		if (instruction[0].p->function.type->arg_count != instruction_size - 1) {
@@ -353,68 +408,38 @@ bool execute_instruction(uint32_t instruction_size, s_expr* instruction) {
 	return success;
 }
 
-static s_expr s_data;
-static s_expr s_data_nil;
-
-bool s_compile(s_statement* s, const s_expr e, const uint32_t param_count, const s_expr_ref** params) {
-	;
-}
-
-static const uint8_t ARGS_ON_STACK = 16;
-static const uint32_t OVERFLOW_SIZE = 0;
-
 void s_eval(const s_statement s, const s_expr* args) {
-	s_expr values_a[ARGS_ON_STACK];
-	s_expr values_b[ARGS_ON_STACK];
+	/*
+	 * We have two instruction slots, the current instruction which is
+	 * executing, and the next instruction which is being written. We
+	 * flip-flop between them, like double buffering.
+	 */
 
-	s_instruction stack_a = { 0, values_a };
-	s_instruction stack_b = { 0, values_b };
+	instruction_slot a;
+	instruction_slot b;
+	a.heap_values_size = 0;
+	b.heap_values_size = 0;
+	a.next = &b;
+	b.next = &a;
 
-	uint32_t overflow_a_size = OVERFLOW_SIZE;
-	s_instruction overflow_a = { 0, malloc(sizeof(s_expr) * overflow_a_size };
-	uint32_t overflow_b_size = OVERFLOW_SIZE;
-	s_instruction overflow_b = { 0, malloc(sizeof(s_expr) * overflow_b_size };
-
-	s_instruction next = instruction_a;
-	if (s.term_count > ARGS_ON_STACK) {
-		next.values = malloc(sizeof(s_expr) * s.term_count);
-	}
-	if (eval_statement(&instruction_a, s)) {
-		// in a loop, execute the instruction by taking the head value as a function
-		// and passing the tail values as arguments. This should result in another
-		// list of values.
-
-		while (true) {
-			if (instruction_a.size == 0) {
-				break;
-			} else if (instruction_a.values[0].type != FUNCTION) {
+	instruction_slot* current = &a;
+	if (eval_statement(current, s)) {
+		while (current->value_count > 0) {
+			if (current->values[0].type != FUNCTION) {
 				// error
 				break;
-			} else if (instruction_a.values[0].p->function.max_result_size > ARGS_ON_STACK) {
-				next.values = malloc(sizeof(s_expr) * instruction_a.values[0].p->function.max_result_size);
-				break;
 			}
-			bool success = execute_instruction(instruction_b, instruction_a);
+			bool success = execute_instruction(current->next, current);
 
-			for (int i = 0; i < instruction_size; i++) {
-				s_dealias(instruction[i]);
-			}
-			if (instruction_b.size == 0) {
-				break;
-			}
-
-			;
-
+			current = current->next;
 		}
 	}
 
-	for (int i = 0; i < overflow_a.size; i++) {
-		s_dealias(overflow_a.values[i]);
+	if (a.heap_values_size > 0) {
+		free(a.heap_values);
 	}
-	free(overflow_a.values);
-	for (int i = 0; i < overflow_b.size; i++) {
-		s_dealias(overflow_b.values[i]);
+	if (b.heap_values_size > 0) {
+		free(b.heap_values);
 	}
-	free(overflow_b.values);
 }
 

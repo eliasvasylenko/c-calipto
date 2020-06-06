@@ -26,30 +26,12 @@ s_expr_ref* ref(int32_t payload_size) {
 	return r;
 }
 
-s_expr s_error() {
-	return (s_expr){ ERROR, .p=NULL };
-}
-
 s_expr s_function(s_function_type* t, uint32_t data_size, void* data) {
 	s_expr_ref* r = ref(sizeof(s_function_data) + data_size);
 	r->function.type = t;
 	memcpy(&r->function + 1, data, data_size);
 
 	return (s_expr){ FUNCTION, .p=r };
-}
-s_function_type* s_define_function_type(
-		s_expr_ref* n,
-		s_expr (*r)(void* d),
-		int32_t c,
-		bool (*a)(s_expr* r, s_expr* a, void* d),
-		void (*f)(void* d)) {
-	s_function_type* t = malloc(sizeof(s_function_type));
-	t->name = n;
-	t->represent = r;
-	t->arg_count = c;
-	t->apply = a;
-	t->free = f;
-	return t;
 }
 
 typedef struct s_key {
