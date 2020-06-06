@@ -41,7 +41,7 @@ s_function_type* s_define_function_type(
 		s_expr_ref* n,
 		s_expr (*r)(void* d),
 		int32_t c,
-		bool (*a)(s_expr* (*r)(uint32_t s), s_expr* a, void* d),
+		bool (*a)(s_expr* r, s_expr* a, void* d),
 		void (*f)(void* d)) {
 	s_function_type* t = malloc(sizeof(s_function_type));
 	t->name = n;
@@ -57,10 +57,15 @@ typedef struct s_key {
 	UChar name[1];
 } s_key;
 
-void* s_value(void* key, id id) {
-	s_expr_ref* r = ref(sizeof(id));
-	r->symbol = id;
+void* s_get_value(void* key, idtrie_node* owner) {
+	s_expr_ref* r = ref(sizeof(idtrie_node*));
+	r->symbol = owner;
 	return r;
+}
+
+void s_update_value(void* value, idtrie_node* owner) {
+	s_expr_ref* r = value;
+	r->symbol = owner;
 }
 
 s_expr_ref* s_intern(s_expr_ref* qualifier, strref name) {
@@ -76,13 +81,10 @@ s_expr_ref* s_intern(s_expr_ref* qualifier, strref name) {
 
 	key->qualifier = qualifier;
 
-	id id = idtrie_insert(
+	return idtrie_insert(
 			table.trie,
 			sizeof(s_key) + sizeof(UChar) * (len - 1),
-			key,
-			s_value);
-
-	return (s_expr_ref*)id.leaf->value;
+			key);
 }
 
 s_expr s_symbol(s_expr_ref* q, strref n) {
@@ -358,6 +360,7 @@ void s_free(s_expr_type t, s_expr_ref* r) {
 }
 
 void s_init() {
+	table = (s_table){ { NULL, s_get_value, s_update_value } };
 	s_expr data = s_symbol(NULL, u_strref(u"data"));
 	data_nil = s_symbol(data.p, u_strref(u"nil"));
 	data_quote = s_symbol(data.p, u_strref(u"quote"));

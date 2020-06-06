@@ -260,7 +260,7 @@ bool read_step_out(reader* r, s_expr* e) {
 			s_dealias(head);
 			return false;
 		}
-		if (nil.type == SYMBOL && r->data_nil.p->symbol.leaf == nil.p->symbol.leaf) {
+		if (nil.type == SYMBOL && r->data_nil.p->symbol == nil.p->symbol) {
 			s_dealias(nil);
 			s_dealias(head);
 			return false;

@@ -29,7 +29,7 @@ typedef struct idtrie_node {
 	};
 	// followed by 'index' bytes of key data
 	// if 'hasbranch' then followed by idtrie_branch
-	// if 'hasleaf' then followed by idtrie_leaf*
+	// if 'hasleaf' then followed by void*
 } idtrie_node;
 
 typedef struct idtrie_branch {
@@ -37,23 +37,16 @@ typedef struct idtrie_branch {
 	idtrie_node* children[1]; // variable length equal to popcount
 } idtrie_branch;
 
-typedef struct idtrie_leaf {
-	idtrie_node* owner;
-	void* value;
-} idtrie_leaf;
-
 typedef struct idtrie {
 	idtrie_node** root;
+	void* (*get_value)(void* key, idtrie_node* owner);
+	void (*update_value)(void* value, idtrie_node* owner);
 } idtrie;
-
-typedef struct id {
-	idtrie_leaf* leaf;
-} id;
 
 void idtrie_clear(idtrie t);
 
-id idtrie_insert(idtrie t, uint64_t l, void* key, void* (*value)(void* key, id id));
+void* idtrie_insert(idtrie t, uint64_t l, void* key);
 
-void idtrie_remove(id i);
+void idtrie_remove(idtrie_node* n);
 
-void* idtrie_fetch_key(id i);
+void* idtrie_fetch_key(idtrie_node* n);

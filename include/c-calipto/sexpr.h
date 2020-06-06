@@ -22,6 +22,11 @@ typedef struct s_expr {
 	};
 } s_expr;
 
+typedef struct s_instruction {
+	uint32_t size;
+	s_expr* values;
+} s_instruction;
+
 typedef struct s_table {
 	idtrie trie;
 } s_table;
@@ -39,8 +44,9 @@ typedef struct s_cons_data {
 typedef struct s_function_type {
 	s_expr_ref* name; // always SYMBOL
 	s_expr (*represent)(void* data);
-	int32_t arg_count;
-	bool (*apply)(s_expr* (*result)(uint32_t size), s_expr* args, void* d);
+	uint32_t arg_count;
+	uint32_t max_result_size;
+	bool (*apply)(s_instruction result, s_expr* args, void* d);
 	void (*free) (void* data);
 } s_function_type;
 
@@ -56,7 +62,7 @@ typedef struct s_string_data {
 struct s_expr_ref {
 	_Atomic(uint32_t) ref_count;
 	union {
-		id symbol;
+		idtrie_node* symbol;
 		s_cons_data cons;
 		s_function_data function;
 		s_string_data string;
@@ -84,7 +90,7 @@ s_function_type* s_define_function_type(
 		s_expr_ref* name,
 		s_expr (*r)(void* d),
 		int32_t c,
-		bool (*a)(s_expr* (*r)(uint32_t s), s_expr* a, void* d),
+		bool (*a)(s_expr* r, s_expr* a, void* d),
 		void (*f)(void* d));
 void s_undefine_function_type(s_function_type* t);
 s_expr s_function(s_function_type* t, uint32_t data_size, void* data);

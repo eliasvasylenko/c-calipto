@@ -50,28 +50,8 @@ void s_dealias_term(s_term t) {
 	}
 }
 
-s_lambda* s_ref_lambda(s_lambda* l) {
-	atomic_fetch_add(&l->ref_count, 1);
-}
-
-void s_free_lambda(s_lambda* l) {
-	if (atomic_fetch_add(&l->ref_count, -1) > 1) {
-		if (l->param_count > 0) {
-			for (int i = 0; i < l->param_count; i++) {
-				s_free(SYMBOL, l->params[i]);
-			}
-			free(l->params);
-		}
-		if (l->var_count > 0) {
-			free(l->vars);
-			for (int i = 0; i < l->term_count; i++) {
-				s_dealias_term(l->terms[i]);
-			}
-		}
-		if (l->term_count > 0) {
-			free(l->terms);
-		}
-	}
+void* get_ref(s_expr e) {
+	return e.p;
 }
 
 bool compile_lambda(s_term* result, int32_t part_count, s_expr* parts) {
@@ -83,7 +63,7 @@ bool compile_lambda(s_term* result, int32_t part_count, s_expr* parts) {
 	s_expr body_decl = parts[1];
 
 	s_expr_ref** params;
-	int32_t param_count = s_delist(params_decl, &params);
+	int32_t param_count = s_delist_of(params_decl, (void***)&params, get_ref);
 	if (param_count < 0) {
 		return false;
 	}
@@ -136,6 +116,30 @@ bool compile_lambda(s_term* result, int32_t part_count, s_expr* parts) {
 	}
 
 	return success;
+}
+
+s_lambda* s_ref_lambda(s_lambda* l) {
+	atomic_fetch_add(&l->ref_count, 1);
+}
+
+void s_free_lambda(s_lambda* l) {
+	if (atomic_fetch_add(&l->ref_count, -1) > 1) {
+		if (l->param_count > 0) {
+			for (int i = 0; i < l->param_count; i++) {
+				s_free(SYMBOL, l->params[i]);
+			}
+			free(l->params);
+		}
+		if (l->var_count > 0) {
+			free(l->vars);
+			for (int i = 0; i < l->term_count; i++) {
+				s_dealias_term(l->terms[i]);
+			}
+		}
+		if (l->term_count > 0) {
+			free(l->terms);
+		}
+	}
 }
 
 bool compile_expression(s_term* result, s_expr e) {
@@ -322,10 +326,12 @@ bool eval_statement(s_bound_expr* result, s_bound_expr s) {
 			return false;
 		}
 	}
+}
 
+bool execute_instruction(uint32_t instruction_size, s_expr* instruction) {
 	bool success;
 	if (target.type == FUNCTION) {
-		if (arg_count != target.builtin->arg_count) {
+		if (instruction[0].p->function.type->arg_count != instruction_size - 1) {
 			return false;
 		}
 
@@ -350,29 +356,65 @@ bool eval_statement(s_bound_expr* result, s_bound_expr s) {
 static s_expr s_data;
 static s_expr s_data_nil;
 
-s_statement s_compile(const s_expr e, const uint32_t param_count, const s_expr_ref** params) {
+bool s_compile(s_statement* s, const s_expr e, const uint32_t param_count, const s_expr_ref** params) {
 	;
 }
 
-void s_eval(const s_statement s, const s_expr* args) {
-	s_data = s_symbol(NULL, u_strref(u"data"));
-	s_data_nil = s_symbol(s_data.p, u_strref(u"nil"));
+static const uint8_t ARGS_ON_STACK = 16;
+static const uint32_t OVERFLOW_SIZE = 0;
 
-	s_expr c;
-	s_bound_expr next;
-	while (compile_statement(&c, s.form)) {
-		s_free(s.form);
-		s.form = c;
-		if (eval_statement(&next, s)) {
-			s_free(s.form);
-			s_free_bindings(s.bindings);
-			s = next;
-		} else {
-			break;
+void s_eval(const s_statement s, const s_expr* args) {
+	s_expr values_a[ARGS_ON_STACK];
+	s_expr values_b[ARGS_ON_STACK];
+
+	s_instruction stack_a = { 0, values_a };
+	s_instruction stack_b = { 0, values_b };
+
+	uint32_t overflow_a_size = OVERFLOW_SIZE;
+	s_instruction overflow_a = { 0, malloc(sizeof(s_expr) * overflow_a_size };
+	uint32_t overflow_b_size = OVERFLOW_SIZE;
+	s_instruction overflow_b = { 0, malloc(sizeof(s_expr) * overflow_b_size };
+
+	s_instruction next = instruction_a;
+	if (s.term_count > ARGS_ON_STACK) {
+		next.values = malloc(sizeof(s_expr) * s.term_count);
+	}
+	if (eval_statement(&instruction_a, s)) {
+		// in a loop, execute the instruction by taking the head value as a function
+		// and passing the tail values as arguments. This should result in another
+		// list of values.
+
+		while (true) {
+			if (instruction_a.size == 0) {
+				break;
+			} else if (instruction_a.values[0].type != FUNCTION) {
+				// error
+				break;
+			} else if (instruction_a.values[0].p->function.max_result_size > ARGS_ON_STACK) {
+				next.values = malloc(sizeof(s_expr) * instruction_a.values[0].p->function.max_result_size);
+				break;
+			}
+			bool success = execute_instruction(instruction_b, instruction_a);
+
+			for (int i = 0; i < instruction_size; i++) {
+				s_dealias(instruction[i]);
+			}
+			if (instruction_b.size == 0) {
+				break;
+			}
+
+			;
+
 		}
 	}
 
-	s_dealias(s_data);
-	s_dealias(s_data_nil);
+	for (int i = 0; i < overflow_a.size; i++) {
+		s_dealias(overflow_a.values[i]);
+	}
+	free(overflow_a.values);
+	for (int i = 0; i < overflow_b.size; i++) {
+		s_dealias(overflow_b.values[i]);
+	}
+	free(overflow_b.values);
 }
 
