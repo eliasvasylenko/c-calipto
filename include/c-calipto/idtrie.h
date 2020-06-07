@@ -48,6 +48,8 @@ void idtrie_clear(idtrie t);
 
 void* idtrie_insert(idtrie t, uint64_t l, void* key);
 
+void* idtrie_fetch(idtrie t, uint64_t l, void* key);
+
 void idtrie_remove(idtrie_node* n);
 
 void* idtrie_fetch_key(idtrie_node* n);

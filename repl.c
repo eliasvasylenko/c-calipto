@@ -41,7 +41,8 @@ void run(s_expr e, s_expr args) {
 	s_free(SYMBOL, data);
 	s_free(SYMBOL, system);
 
-	s_statement s = s_compile(e, sizeof(parameters) / sizeof(s_expr_ref*), parameters);
+	s_statement s;
+	s_compile(&s, e, sizeof(parameters) / sizeof(s_expr_ref*), parameters);
 
 	const s_expr arguments[] = {
 		args,

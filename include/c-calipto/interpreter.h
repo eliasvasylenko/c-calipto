@@ -1,3 +1,8 @@
+typedef enum s_result {
+	S_SUCCESS,
+	S_ATTEMPT_TO_CALL_NON_FUNCTION
+} s_result;
+
 typedef enum s_term_type {
 	LAMBDA = -1,
 	VARIABLE = -2
@@ -92,9 +97,9 @@ s_bindings s_free_bindings(s_bindings);
 s_bound_arguments s_bind_arguments(s_expr_ref** symbols, s_expr* v);
 void s_unbind_arguments(s_bound_arguments b);
 
-s_statement s_compile(const s_expr e, const uint32_t param_count, const s_expr_ref** params);
+s_result s_compile(s_statement* s, const s_expr e, const uint32_t param_count, const s_expr_ref** params);
 
-void s_eval(const s_statement s, const s_expr* args);
+s_result s_eval(const s_statement s, const s_expr* args);
 
 s_term s_alias_term(s_term t);
 void s_dealias_term(s_term t);

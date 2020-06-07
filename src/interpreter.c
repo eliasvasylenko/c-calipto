@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <stdatomic.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 
 #include <unicode/utypes.h>
@@ -11,7 +12,13 @@
 #include "c-calipto/sexpr.h"
 #include "c-calipto/interpreter.h"
 
-bool compile_quote(s_term* result, int32_t part_count, s_expr* parts) {
+typedef struct compile_context {
+	idtrie indices;
+	s_expr data_quote;
+	s_expr data_lambda;
+} compile_context;
+
+bool compile_quote(s_term* result, int32_t part_count, s_expr* parts, compile_context c) {
 	if (part_count != 1) {
 		return false;
 	}
@@ -21,7 +28,7 @@ bool compile_quote(s_term* result, int32_t part_count, s_expr* parts) {
 	return true;
 }
 
-bool compile_statement(s_statement* result, s_expr s);
+bool compile_statement(s_statement* result, s_expr s, compile_context c);
 
 s_term s_alias_term(s_term t) {
 	switch (t.type) {
@@ -54,7 +61,7 @@ void* get_ref(s_expr e) {
 	return e.p;
 }
 
-bool compile_lambda(s_term* result, int32_t part_count, s_expr* parts) {
+bool compile_lambda(s_term* result, int32_t part_count, s_expr* parts, compile_context c) {
 	if (part_count != 2) {
 		return false;
 	}
@@ -69,7 +76,7 @@ bool compile_lambda(s_term* result, int32_t part_count, s_expr* parts) {
 	}
 
 	s_statement body;
-	bool success = compile_statement(&body, body_decl);
+	bool success = compile_statement(&body, body_decl, c);
 
 	uint32_t var_count = 0;
 	uint32_t* vars = NULL;
@@ -127,16 +134,16 @@ void s_free_lambda(s_lambda* l) {
 	}
 }
 
-bool compile_expression(s_term* result, s_expr e) {
+bool compile_expression(s_term* result, s_expr e, compile_context c) {
 	if (s_atom(e)) {
-		s_dealias(e);
-		*result = e;
+		uint32_t* index_into_parent = idtrie_fetch(c.indices, sizeof(s_expr_ref*), e.p);
+		*result = (s_term){ .type=VARIABLE, .variable=*index_into_parent };
 		return true;
 	}
 
-	int32_t count;
 	s_expr* parts;
-	if (!flatten_list(e, &count, &parts) || count == 0) {
+	uint32_t count = s_delist(e, &parts);
+	if (count <= 0) {
 		printf("Syntax error in expression: ");
 		s_dump(e);
 		return false;
@@ -146,72 +153,49 @@ bool compile_expression(s_term* result, s_expr e) {
 	int32_t term_count = count - 1;
 	s_expr* terms = parts + 1;
 
-	if (data_quote.type == ERROR) {
-		data_quote = s_symbol(u_strref(u"data"), u_strref(u"quote"));
-	}
-	if (data_lambda.type == ERROR) {
-		data_lambda = s_symbol(u_strref(u"data"), u_strref(u"lambda"));
-	}
-
 	bool success;
-	if (s_eq(kind, data_lambda)) {
-		success = compile_lambda(result, term_count, terms);
+	if (s_eq(kind, c.data_quote)) {
+		success = compile_quote(result, term_count, terms, c);
 
-	} else if (s_eq(kind, data_quote)) {
-		success = compile_quote(result, term_count, terms);
+	} else if (s_eq(kind, c.data_lambda)) {
+		success = compile_lambda(result, term_count, terms, c);
 
 	} else {
 		success = false;
 	}
 
 	for (int i = 0; i < count; i++) {
-		s_free(parts[i]);
+		s_dealias(parts[i]);
 	}
 	free(parts);
 	
 	return success;
 }
 
-bool compile_statement(s_statement* result, s_expr s) {
-	if (s.type == STATEMENT) {
-		s_ref(s);
-		*result = s;
-		return true;
-	}
-
-	int32_t count;
+bool compile_statement(s_statement* result, s_expr s, compile_context c) {
 	s_expr* expressions;
-	if (!flatten_list(s, &count, &expressions) || count == 0) {
+	uint32_t count = s_delist(s, &expressions);
+	if (count <= 0) {
 		printf("Syntax error in statement: ");
 		s_dump(s);
 		return false;
 	}
 
+	s_term* terms = malloc(sizeof(s_term) * count);
 	bool success = true;
 	for (int i = 0; i < count; i++) {
-		s_expr e;
-		if (compile_expression(&e, expressions[i])) {
-			s_free(expressions[i]);
-			expressions[i] = e;
+		if (compile_expression(&terms[i], expressions[i], c)) {
+			s_dealias(expressions[i]);
 		} else {
 			success = false;
 			break;
 		}
 	}
+	free(expressions);
 
 	if (success) {
-		int32_t free_var_count = 0;
-		s_expr* free_vars = NULL;
-
-		*result = s_statement(free_var_count, free_vars,
-				expressions[0],
-				count - 1, expressions + 1);
+		*result = (s_statement){ count, terms };
 	}
-
-	for (int i = 0; i < count; i++) {
-		s_free(expressions[i]);
-	}
-	free(expressions);
 
 	return success;
 }
@@ -220,11 +204,16 @@ typedef struct symbol_bindings {
 	uint32_t count;
 	uint32_t* indices_into_parent;
 	idtrie indices;
-}
+} symbol_bindings;
+
+typedef struct symbol_index {
+	const s_expr_ref* symbol;
+	uint32_t index;
+} symbol_index;
 
 void* get_symbol_index(void* key, idtrie_node* owner) {
 	uint32_t* value = malloc(sizeof(uint32_t*));
-	*value = ((symbol_index*)key).index;
+	*value = ((symbol_index*)key)->index;
 	return value;
 }
 
@@ -234,25 +223,45 @@ void free_symbol_index(void* value) {
 	free(value);
 }
 
-typedef struct symbol_index {
-	idtrie_node* symbol;
-	uint32_t index;
-} symbol_index;
+void bind_symbol_index(idtrie p, symbol_bindings* b, s_expr_ref* symbol, uint32_t index) {
+	symbol_index si = { symbol, index };
+	if (b->count == *(uint32_t*)idtrie_insert(b->indices, sizeof(s_expr_ref*), &si)) {
+		b->count++;
 
-bool s_compile(s_statement* s, const s_expr e, const uint32_t param_count, const s_expr_ref** params) {
-	idtrie t;
-	t.get_value = get_symbol_value;
-	t.update_value = update_symbol_value;
-	t.free_value = free_symbol_value;
+		uint32_t* old_indices = b->indices_into_parent;
+		b->indices_into_parent = malloc(sizeof(uint32_t*) * b->count);
+		if (old_indices != NULL) {
+			memcpy(b->indices_into_parent, old_indices, sizeof(uint32_t*) * (b->count - 1));
+			free(old_indices);
+		}
+
+		uint32_t* index_into_parent = idtrie_fetch(p, sizeof(s_expr_ref*), symbol);
+		if (index_into_parent == NULL) {
+			// TODO ERROR
+		}
+		b->indices_into_parent[b->count - 1] = *index_into_parent;
+	}
+}
+
+s_result s_compile(s_statement* result, const s_expr e, const uint32_t param_count, const s_expr_ref** params) {
+	compile_context c;
+	c.indices.get_value = get_symbol_index;
+	c.indices.update_value = update_symbol_index;
+	c.indices.free_value = free_symbol_index;
 	for (int i = 0; i < param_count; i++) {
-		symbol_index si = {
-			params[i]->symbol,
-			i
-		};
-		idtrie_insert(t, sizeof(idtrie_node*), &si);
+		symbol_index si = { params[i], i };
+		idtrie_insert(c.indices, sizeof(s_expr_ref*), &si);
 	}
 
-	compile_statement(s,
+	s_expr data = s_symbol(NULL, u_strref(u"data"));
+	c.data_quote = s_symbol(data.p, u_strref(u"quote"));
+	c.data_lambda = s_symbol(data.p, u_strref(u"lambda"));
+	s_dealias(data);
+	compile_statement(result, e, c);
+	s_dealias(c.data_quote);
+	s_dealias(c.data_lambda);
+
+	return S_SUCCESS;
 }
 
 bool eval_expression(s_expr* result, s_bound_expr e) {
@@ -408,7 +417,7 @@ bool execute_instruction(instruction_slot* next, instruction_slot* current) {
 	return success;
 }
 
-void s_eval(const s_statement s, const s_expr* args) {
+s_result s_eval(const s_statement s, const s_expr* args) {
 	/*
 	 * We have two instruction slots, the current instruction which is
 	 * executing, and the next instruction which is being written. We
@@ -423,16 +432,14 @@ void s_eval(const s_statement s, const s_expr* args) {
 	b.next = &a;
 
 	instruction_slot* current = &a;
-	if (eval_statement(current, s)) {
-		while (current->value_count > 0) {
-			if (current->values[0].type != FUNCTION) {
-				// error
-				break;
-			}
-			bool success = execute_instruction(current->next, current);
-
-			current = current->next;
+	s_result r = eval_statement(current, s);
+	while (r == S_SUCCESS && current->value_count > 0) {
+		if (current->values[0].type == FUNCTION) {
+			r = execute_instruction(current->next, current);
+		} else {
+			r = S_ATTEMPT_TO_CALL_NON_FUNCTION;
 		}
+		current = current->next;
 	}
 
 	if (a.heap_values_size > 0) {
@@ -441,5 +448,7 @@ void s_eval(const s_statement s, const s_expr* args) {
 	if (b.heap_values_size > 0) {
 		free(b.heap_values);
 	}
+
+	return r;
 }
 

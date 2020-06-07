@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include <uchar.h>
 #include <unicode/utypes.h>
@@ -138,10 +139,9 @@ s_expr s_car(const s_expr e) {
 			return s_character(cp);
 
 		default:
-			;
-			int32_t* a = NULL;
-			*a = 0;
-			return s_error(u_strref(u"Type error, cannot destructure atom"));
+			printf("Cannot destruct atom ");
+			s_dump(e);
+			assert(false);
 	}
 }
 
@@ -166,7 +166,9 @@ s_expr s_cdr(const s_expr e) {
 			return (s_expr){ STRING, .p=r };
 
 		default:
-			return s_error(u_strref(u"Type error, cannot destructure atom"));
+			printf("Cannot destruct atom ");
+			s_dump(e);
+			assert(false);
 	}
 }
 
