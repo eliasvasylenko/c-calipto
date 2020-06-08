@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <assert.h>
 
 #include <unicode/utypes.h>
 #include <unicode/ucnv.h>
@@ -264,106 +265,8 @@ s_result s_compile(s_statement* result, const s_expr e, const uint32_t param_cou
 	return S_SUCCESS;
 }
 
-bool eval_expression(s_expr* result, s_bound_expr e) {
-	if (s_atom(e.form)) {
-		return s_resolve(result, e.form, e.bindings);
-	}
-
-	switch (e.form.type) {
-		case LAMBDA:
-			;
-			if (e.form.lambda->body.statement->free_var_count > 0 || 1) {
-				/*
-				 * TODO only capture free vars not entire scope
-				 */
-				*result = s_function(e.bindings, e.form);
-				return true;
-			} else {
-				s_bindings b = s_alloc_bindings(NULL, 0, NULL);
-				*result = s_function(b, e.form);
-				s_free_bindings(b);
-				return true;
-			}
-
-		case QUOTE:
-			;
-			s_expr data = *e.form.quote;
-			s_ref(data);
-			*result = data;
-			return true;
-
-		default:
-			return false;
-	}
-}
-
-bool eval_function(s_bound_expr* result, s_expr target, int32_t arg_count, s_expr* args) {
-	s_lambda_data l = *target.function->lambda.lambda;
-	if (arg_count != l.param_count) {
-		return false;
-	}
-	
-	s_bindings bindings;
-	if (arg_count == 0) {
-		bindings = target.function->capture;
-		s_ref_bindings(bindings);
-	} else {
-		s_binding* b = malloc(sizeof(s_binding) * arg_count);
-		for (int i = 0; i < arg_count; i++) {
-			b[i] = (s_binding){ l.params[i], args[i] };
-		}
-		bindings = s_alloc_bindings(&target.function->capture, arg_count, b);
-		free(b);
-	}
-	s_ref(l.body);
-	*result = (s_bound_expr){
-		l.body,
-		bindings	
-	};
-
-	return true;
-}
-
-bool eval_statement(s_instruction* result, s_bound_expr s) {
-	// printf("  trace: ");
-	// s_dump(s.form);
-	prepare_instruction_slot(result, s.term_count);
-
-	if (!s.form.type == STATEMENT) {
-		printf("Unable to resolve statement: ");
-		s_dump(s.form);
-		return false;
-	}
-
-	s_bound_expr bound;
-	bound.bindings = s.bindings;
-	
-	bound.form = s.form.statement->target;
-	s_expr target;
-	if (!eval_expression(&target, bound)) {
-		printf("Failed to evaluate target: ");
-		s_dump(bound.form);
-		return false;
-	}
-	int32_t arg_count = s.form.statement->arg_count;
-	s_expr* args = malloc(sizeof(s_expr) * arg_count);
-	for (int i = 0; i < arg_count; i++) {
-		bound.form = s.form.statement->args[i];
-		if (!eval_expression(args + i, bound)) {
-			printf("Failed to evaluate argument: ");
-			s_dump(bound.form);
-			s_free(target);
-			for (int j = 0; j < i; j++) {
-				s_free(args[j]);
-			}
-			free(args);
-			return false;
-		}
-	}
-}
-
-static const uint8_t ARGS_ON_STACK = 16;
-static const uint8_t ARGS_ON_HEAP = 32;
+#define ARGS_ON_STACK 16
+#define ARGS_ON_HEAP 32
 
 typedef struct instruction_slot {
 	s_expr stack_values[ARGS_ON_STACK];
@@ -377,7 +280,7 @@ typedef struct instruction_slot {
 void prepare_instruction_slot(instruction_slot* i, uint32_t size) {
 	i->value_count = size;
 	if (size <= ARGS_ON_STACK) {
-		i->values = &i->stack_values;
+		i->values = i->stack_values;
 	} else {
 		if (size > i->heap_values_size) {
 			if (i->heap_values_size > 0) {
@@ -390,13 +293,50 @@ void prepare_instruction_slot(instruction_slot* i, uint32_t size) {
 	}
 }
 
-bool execute_instruction(instruction_slot* next, instruction_slot* current) {
-	prepare_instruction_slot(next, current->values[0].p->function.type->max_result_size);
+static s_function_type lambda_function = {
+	u"lambda",
+	represent_lambda,
+	arg_count_lambda,
+	max_result_size_lambda,
+	apply_lambda,
+	free_lambda
+};
 
+void eval_expression(s_expr* result, s_term e, s_expr* closure) {
+	switch (e.type) {
+		case VARIABLE:
+			*result = closure[e.variable];
+
+		case LAMBDA:
+			;
+			s_lambda l = {
+			};
+			*result = s_function(&lambda_function, sizeof(s_lambda), &l);
+
+		default:
+			*result = s_alias(e.quote);
+	}
+}
+
+void eval_statement(instruction_slot* result, s_statement s, s_expr* closure) {
+	prepare_instruction_slot(result, s.term_count);
+
+	for (int i = 0; i < s.term_count; i++) {
+		eval_expression(&result->values[i], s.terms[i], closure);
+	}
+}
+
+s_result execute_instruction(instruction_slot* next, instruction_slot* current) {
 	bool success;
 	if (target.type == FUNCTION) {
-		if (instruction[0].p->function.type->arg_count != instruction_size - 1) {
-			return false;
+		s_function_data* f = &current->values[0].p->function;
+
+		uint32_t max_result_size = f->type->max_result_size(f + 1);
+		prepare_instruction_slot(next, max_result_size);
+
+		uint32_t arg_count = f->type->arg_count(f + 1);
+		if (arg_count != instruction_size - 1) {
+			return S_ARGUMENT_COUNT_MISMATCH;
 		}
 
 		success = target.builtin->apply(result, args, target.builtin->data);

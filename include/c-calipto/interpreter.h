@@ -1,6 +1,7 @@
 typedef enum s_result {
 	S_SUCCESS,
-	S_ATTEMPT_TO_CALL_NON_FUNCTION
+	S_ATTEMPT_TO_CALL_NON_FUNCTION,
+	S_ARGUMENT_COUNT_MISMATCH
 } s_result;
 
 typedef enum s_term_type {
@@ -35,11 +36,6 @@ typedef struct s_lambda {
 	uint32_t* vars; // indices into vars of lexical context
 	s_statement body;
 } s_lambda;
-
-typedef struct s_bound_lambda {
-	s_lambda* lambda;
-	s_expr closure[1]; // variable length
-} s_bound_lambda;
 
 /*
  * Associative trie for binding symbols to indices. This is how the array of

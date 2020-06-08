@@ -43,10 +43,10 @@ typedef struct s_cons_data {
 } s_cons_data;
 
 typedef struct s_function_type {
-	s_expr_ref* name; // always SYMBOL
-	s_expr (*represent)(void* data);
-	uint32_t arg_count;
-	uint32_t max_result_size;
+	UChar* name;
+	s_expr (*represent)(void* d);
+	uint32_t (*arg_count)(void* d);
+	uint32_t (*max_result_size)(void* d);
 	bool (*apply)(s_instruction result, s_expr* args, void* d);
 	void (*free) (void* data);
 } s_function_type;
