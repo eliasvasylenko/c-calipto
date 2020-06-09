@@ -42,11 +42,15 @@ typedef struct s_cons_data {
 	s_expr cdr;
 } s_cons_data;
 
+typedef struct s_function_info {
+	uint32_t arg_count;
+	uint32_t max_result_size;
+} s_function_info;
+
 typedef struct s_function_type {
 	UChar* name;
 	s_expr (*represent)(void* d);
-	uint32_t (*arg_count)(void* d);
-	uint32_t (*max_result_size)(void* d);
+	s_function_info (*inspect)(void* d);
 	bool (*apply)(s_instruction result, s_expr* args, void* d);
 	void (*free) (void* data);
 } s_function_type;

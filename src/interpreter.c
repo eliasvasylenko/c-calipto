@@ -13,8 +13,32 @@
 #include "c-calipto/sexpr.h"
 #include "c-calipto/interpreter.h"
 
+typedef struct variable_bindings {
+	uint32_t capture_count;
+	uint32_t param_count;
+	s_variable* captures;
+	idtrie variables;
+} variable_bindings;
+
+typedef struct variable_binding {
+	const s_expr_ref* symbol;
+	s_variable variable;
+} variable_binding;
+
+void* get_variable_binding(void* key, idtrie_node* owner) {
+	s_variable* value = malloc(sizeof(s_variable*));
+	*value = ((variable_binding*)key)->variable;
+	return value;
+}
+
+void update_variable_binding(void* value, idtrie_node* owner) {}
+
+void free_variable_binding(void* value) {
+	free(value);
+}
+
 typedef struct compile_context {
-	idtrie indices;
+	variable_bindings variables;
 	s_expr data_quote;
 	s_expr data_lambda;
 } compile_context;
@@ -137,7 +161,7 @@ void s_free_lambda(s_lambda* l) {
 
 bool compile_expression(s_term* result, s_expr e, compile_context c) {
 	if (s_atom(e)) {
-		uint32_t* index_into_parent = idtrie_fetch(c.indices, sizeof(s_expr_ref*), e.p);
+		uint32_t* index_into_parent = idtrie_fetch(c.variables.variables, sizeof(s_expr_ref*), e.p);
 		*result = (s_term){ .type=VARIABLE, .variable=*index_into_parent };
 		return true;
 	}
@@ -201,57 +225,35 @@ bool compile_statement(s_statement* result, s_expr s, compile_context c) {
 	return success;
 }
 
-typedef struct symbol_bindings {
-	uint32_t count;
-	uint32_t* indices_into_parent;
-	idtrie indices;
-} symbol_bindings;
+void capture_variable(idtrie p, variable_bindings* b, s_expr_ref* symbol) {
+	if (idtrie_fetch(b->variables, sizeof(s_expr_ref*), &symbol) == NULL) {
+		variable_binding v = { symbol, { true, b->capture_count++ } };
+		idtrie_insert(b->variables, sizeof(s_expr_ref*), &v);
 
-typedef struct symbol_index {
-	const s_expr_ref* symbol;
-	uint32_t index;
-} symbol_index;
-
-void* get_symbol_index(void* key, idtrie_node* owner) {
-	uint32_t* value = malloc(sizeof(uint32_t*));
-	*value = ((symbol_index*)key)->index;
-	return value;
-}
-
-void update_symbol_index(void* value, idtrie_node* owner) {}
-
-void free_symbol_index(void* value) {
-	free(value);
-}
-
-void bind_symbol_index(idtrie p, symbol_bindings* b, s_expr_ref* symbol, uint32_t index) {
-	symbol_index si = { symbol, index };
-	if (b->count == *(uint32_t*)idtrie_insert(b->indices, sizeof(s_expr_ref*), &si)) {
-		b->count++;
-
-		uint32_t* old_indices = b->indices_into_parent;
-		b->indices_into_parent = malloc(sizeof(uint32_t*) * b->count);
-		if (old_indices != NULL) {
-			memcpy(b->indices_into_parent, old_indices, sizeof(uint32_t*) * (b->count - 1));
-			free(old_indices);
+		s_variable* old_captures = b->captures;
+		b->captures = malloc(sizeof(s_variable*) * b->capture_count);
+		if (old_captures != NULL) {
+			memcpy(b->captures, old_captures, sizeof(uint32_t*) * (b->capture_count - 1));
+			free(old_captures);
 		}
 
-		uint32_t* index_into_parent = idtrie_fetch(p, sizeof(s_expr_ref*), symbol);
-		if (index_into_parent == NULL) {
+		s_variable* capture = idtrie_fetch(p, sizeof(s_expr_ref*), &symbol);
+		if (capture == NULL) {
 			// TODO ERROR
 		}
-		b->indices_into_parent[b->count - 1] = *index_into_parent;
+		b->captures[b->capture_count - 1] = *capture;
 	}
 }
 
 s_result s_compile(s_statement* result, const s_expr e, const uint32_t param_count, const s_expr_ref** params) {
 	compile_context c;
-	c.indices.get_value = get_symbol_index;
-	c.indices.update_value = update_symbol_index;
-	c.indices.free_value = free_symbol_index;
+	c.variables.variables.get_value = get_variable_binding;
+	c.variables.variables.update_value = update_variable_binding;
+	c.variables.variables.free_value = free_variable_binding;
+	c.variables.param_count = param_count;
 	for (int i = 0; i < param_count; i++) {
-		symbol_index si = { params[i], i };
-		idtrie_insert(c.indices, sizeof(s_expr_ref*), &si);
+		variable_binding v = { params[i], { PARAMETER, i } };
+		idtrie_insert(c.variables.variables, sizeof(s_expr_ref*), &v);
 	}
 
 	s_expr data = s_symbol(NULL, u_strref(u"data"));
@@ -293,11 +295,38 @@ void prepare_instruction_slot(instruction_slot* i, uint32_t size) {
 	}
 }
 
+s_expr represent_param(void* p) {
+	return (s_expr){ SYMBOL, .p=*(s_expr_ref**)p };
+}
+
+s_expr represent_lambda(void* d) {
+	s_lambda* l = d;
+
+	s_expr form[] = {
+		s_list_of(l->param_count, (void**)l->params, represent_param),
+		s_list(0, NULL) // TODO
+	};
+	uint32_t size = sizeof(form) / sizeof(s_expr);
+
+	s_expr r = s_list(2, form);
+
+	for (int i = 0; i < size; i++) {
+		s_dealias(form[i]);
+	}
+
+	return r;
+}
+
+s_function_info inspect_lambda(void* d) {
+	s_lambda* l = d;
+
+	return (s_function_info){ l->param_count, l->body.term_count };
+}
+
 static s_function_type lambda_function = {
 	u"lambda",
 	represent_lambda,
-	arg_count_lambda,
-	max_result_size_lambda,
+	inspect_lambda,
 	apply_lambda,
 	free_lambda
 };
