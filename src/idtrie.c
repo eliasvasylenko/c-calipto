@@ -126,20 +126,21 @@ void* insert_branch(idtrie t, cursor c, uint64_t index, uint64_t len, uint8_t* d
 	return *l;
 }
 
-void* idtrie_intern_recur(idtrie t, cursor c, uint64_t l, uint8_t* d, void* k) {
+void* idtrie_insert_recur(idtrie t, cursor c, uint64_t l, uint8_t* d, void* k) {
 	if (l <= c.node.size) {
 		for (int i = 0; i < l; i++) {
 			if (c.data_start[i] != d[i]) {
 				return insert_branch(t, c, i, l - i, d + i, k);
 			}
 		}
+
 		if (l < c.node.size) {
 			return insert_leaf(t, c, l, k);
 
-		} else {
-			(**c.pointer).hasleaf = true;
-			return c.leaf;
 		}
+
+		(**c.pointer).hasleaf = true;
+		return c.leaf;
 
 	} else {
 		for (int i = 0; i < c.node.size; i++) {
@@ -156,12 +157,40 @@ void idtrie_clear(idtrie t) {
 }
 
 void* idtrie_insert(idtrie t, uint64_t l, void* d) {
-	return idtrie_intern_recur(t, make_cursor(t.root), l, d, d);
+	return idtrie_insert_recur(t, make_cursor(t.root), l, d, d);
 }
 
 void idtrie_remove(idtrie_node* n) {
 }
 
 void* idtrie_fetch_key(idtrie_node* n) {
+}
+
+void* idtrie_fetch_recur(idtrie t, cursor c, uint64_t l, uint8_t* d) {
+	if (l <= c.node.size) {
+		for (int i = 0; i < l; i++) {
+			if (c.data_start[i] != d[i]) {
+				return NULL;
+			}
+		}
+
+		if (l < c.node.size || !(**c.pointer).hasleaf) {
+			return NULL;
+		}
+
+		return c.leaf;
+
+	} else {
+		for (int i = 0; i < c.node.size; i++) {
+			if (c.data_start[i] != d[i]) {
+				return NULL;
+			}
+		}
+		// find branch and recur into it, or add branch
+	}
+}
+
+void* idtrie_fetch(idtrie t, uint64_t l, void* d) {
+	return idtrie_fetch_recur(t, make_cursor(t.root), l, d);
 }
 

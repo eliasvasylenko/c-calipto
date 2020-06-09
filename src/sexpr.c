@@ -201,31 +201,6 @@ bool s_eq(const s_expr a, const s_expr b) {
 	return true;
 }
 
-int32_t s_delist_recur(int32_t index, s_expr s, s_expr** elems) {
-	if (s_eq(s, data_nil)) {
-		*elems = index == 0 ? NULL : malloc(sizeof(s_expr) * index);
-		return index;
-	}
-
-	if (s_atom(s)) {
-		return -1;
-	}
-
-	s_expr tail = s_cdr(s);
-	int32_t size = s_delist_recur(index + 1, tail, elems);
-	s_dealias(tail);
-
-	if (size >= 0) {
-		(*elems)[index] = s_car(s);
-	}
-
-	return size;
-}
-
-int32_t s_delist(s_expr s, s_expr** elems) {
-	return s_delist_recur(0, s, elems);
-}
-
 void s_elem_dump(const s_expr s);
 
 void s_tail_dump(const s_expr s) {
@@ -354,5 +329,54 @@ void s_init() {
 
 void s_close() {
 	idtrie_clear(table.trie);
+}
+
+s_expr s_list(int32_t count, s_expr* e) {
+	s_expr l = s_alias(data_nil);
+	for (int i = count - 1; i >= 0; i--) {
+		s_expr prev = l;
+		l = s_cons(e[i], l);
+		s_dealias(prev);
+	}
+	return l;
+}
+
+s_expr s_list_of(int32_t count, void** e, s_expr (*map)(void* elem)) {
+	s_expr l = s_alias(data_nil);
+	for (int i = count - 1; i >= 0; i--) {
+		s_expr prev = l;
+		l = s_cons(map(e[i]), l);
+		s_dealias(prev);
+	}
+	return l;
+}
+
+int32_t s_delist_recur(int32_t index, s_expr s, s_expr** elems) {
+	if (s_eq(s, data_nil)) {
+		*elems = index == 0 ? NULL : malloc(sizeof(s_expr) * index);
+		return index;
+	}
+
+	if (s_atom(s)) {
+		return -1;
+	}
+
+	s_expr tail = s_cdr(s);
+	int32_t size = s_delist_recur(index + 1, tail, elems);
+	s_dealias(tail);
+
+	if (size >= 0) {
+		(*elems)[index] = s_car(s);
+	}
+
+	return size;
+}
+
+int32_t s_delist(s_expr s, s_expr** elems) {
+	return s_delist_recur(0, s, elems);
+}
+
+int32_t s_delist_of(s_expr l, void*** e, void* (*map)(s_expr elem)) {
+	;
 }
 
