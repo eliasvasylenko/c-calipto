@@ -1,9 +1,3 @@
-typedef enum s_result {
-	S_SUCCESS,
-	S_ATTEMPT_TO_CALL_NON_FUNCTION,
-	S_ARGUMENT_COUNT_MISMATCH
-} s_result;
-
 typedef enum s_variable_type {
 	PARAMETER,
 	CAPTURE
@@ -46,6 +40,11 @@ typedef struct s_lambda {
 	uint32_t* vars; // indices into vars of lexical context
 	s_statement body;
 } s_lambda;
+
+typedef struct s_bound_lambda {
+	s_lambda* lambda;
+	s_expr* capture;
+} s_bound_lambda;
 
 s_term s_alias_term(s_term t);
 void s_dealias_term(s_term t);

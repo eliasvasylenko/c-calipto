@@ -76,10 +76,10 @@ int main(int argc, char** argv) {
 	s_init();
 
 	terms = (s_term[]){
-		{ .type=VARIABLE, .variable=0 },
-		{ .type=VARIABLE, .variable=1 },
-		{ .type=VARIABLE, .variable=2 },
-		{ .type=VARIABLE, .variable=3 },
+		{ .type=VARIABLE, .variable={ PARAMETER, 0 } },
+		{ .type=VARIABLE, .variable={ PARAMETER, 1 } },
+		{ .type=VARIABLE, .variable={ PARAMETER, 2 } },
+		{ .type=VARIABLE, .variable={ PARAMETER, 3 } },
 	};
 
 	s_expr args = s_list_of(argc, (void**)argv, read_arg);

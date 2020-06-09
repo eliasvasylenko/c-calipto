@@ -1,6 +1,12 @@
 void s_init();
 void s_close();
 
+typedef enum s_result {
+	S_SUCCESS,
+	S_ATTEMPT_TO_CALL_NON_FUNCTION,
+	S_ARGUMENT_COUNT_MISMATCH
+} s_result;
+
 typedef enum s_expr_type {
 	ERROR,
 	SYMBOL,
@@ -51,7 +57,7 @@ typedef struct s_function_type {
 	UChar* name;
 	s_expr (*represent)(void* d);
 	s_function_info (*inspect)(void* d);
-	bool (*apply)(s_instruction result, s_expr* args, void* d);
+	s_result (*apply)(s_instruction* result, s_expr* args, void* d);
 	void (*free) (void* data);
 } s_function_type;
 

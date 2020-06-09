@@ -274,15 +274,14 @@ typedef struct instruction_slot {
 	s_expr stack_values[ARGS_ON_STACK];
 	uint32_t heap_values_size;
 	s_expr* heap_values;
-	uint32_t value_count;
-	s_expr* values;
+	s_instruction instruction;
 	struct instruction_slot* next;
 } instruction_slot;
 
 void prepare_instruction_slot(instruction_slot* i, uint32_t size) {
-	i->value_count = size;
+	i->instruction.size = size;
 	if (size <= ARGS_ON_STACK) {
-		i->values = i->stack_values;
+		i->instruction.values = i->stack_values;
 	} else {
 		if (size > i->heap_values_size) {
 			if (i->heap_values_size > 0) {
@@ -291,7 +290,7 @@ void prepare_instruction_slot(instruction_slot* i, uint32_t size) {
 			i->heap_values_size = size;
 			i->heap_values = malloc(sizeof(s_expr) * size);
 		}
-		i->values = i->heap_values;
+		i->instruction.values = i->heap_values;
 	}
 }
 
@@ -300,10 +299,10 @@ s_expr represent_param(void* p) {
 }
 
 s_expr represent_lambda(void* d) {
-	s_lambda* l = d;
+	s_bound_lambda* l = d;
 
 	s_expr form[] = {
-		s_list_of(l->param_count, (void**)l->params, represent_param),
+		s_list_of(l->lambda->param_count, (void**)l->lambda->params, represent_param),
 		s_list(0, NULL) // TODO
 	};
 	uint32_t size = sizeof(form) / sizeof(s_expr);
@@ -318,9 +317,23 @@ s_expr represent_lambda(void* d) {
 }
 
 s_function_info inspect_lambda(void* d) {
-	s_lambda* l = d;
+	s_bound_lambda* l = d;
 
-	return (s_function_info){ l->param_count, l->body.term_count };
+	return (s_function_info){ l->lambda->param_count, l->lambda->body.term_count };
+}
+
+s_result apply_lambda(s_instruction* result, s_expr* args, void* d) {
+	s_bound_lambda* l = d;
+	;
+}
+
+void free_lambda(void* d) {
+	s_bound_lambda* l = d;
+	for (int i = 0; i < l->lambda->var_count; i++) {
+		s_dealias(l->capture[i]);
+	}
+	free(l->capture);
+	s_free_lambda(l->lambda);
 }
 
 static s_function_type lambda_function = {
@@ -331,10 +344,19 @@ static s_function_type lambda_function = {
 	free_lambda
 };
 
-void eval_expression(s_expr* result, s_term e, s_expr* closure) {
+void eval_expression(s_expr* result, s_term e, const s_expr* args, const s_expr* closure) {
 	switch (e.type) {
 		case VARIABLE:
-			*result = closure[e.variable];
+			switch (e.variable.type) {
+				case PARAMETER:
+					*result = args[e.variable.index];
+
+				case CAPTURE:
+					*result = closure[e.variable.index];
+
+				default:
+					assert(false);
+			}
 
 		case LAMBDA:
 			;
@@ -347,43 +369,30 @@ void eval_expression(s_expr* result, s_term e, s_expr* closure) {
 	}
 }
 
-void eval_statement(instruction_slot* result, s_statement s, s_expr* closure) {
+void eval_statement(instruction_slot* result, s_statement s, const s_expr* args, const s_expr* closure) {
 	prepare_instruction_slot(result, s.term_count);
 
 	for (int i = 0; i < s.term_count; i++) {
-		eval_expression(&result->values[i], s.terms[i], closure);
+		eval_expression(&result->instruction.values[i], s.terms[i], args, closure);
 	}
 }
 
 s_result execute_instruction(instruction_slot* next, instruction_slot* current) {
-	bool success;
-	if (target.type == FUNCTION) {
-		s_function_data* f = &current->values[0].p->function;
+	if (current->instruction.values[0].type != FUNCTION) {
+		return S_ATTEMPT_TO_CALL_NON_FUNCTION;
+	}
+	
+	s_function_data* f = &current->instruction.values[0].p->function;
 
-		uint32_t max_result_size = f->type->max_result_size(f + 1);
-		prepare_instruction_slot(next, max_result_size);
+	s_function_info i = f->type->inspect(f + 1);
 
-		uint32_t arg_count = f->type->arg_count(f + 1);
-		if (arg_count != instruction_size - 1) {
-			return S_ARGUMENT_COUNT_MISMATCH;
-		}
+	prepare_instruction_slot(next, i.max_result_size);
 
-		success = target.builtin->apply(result, args, target.builtin->data);
-
-	} else {
-		printf("Unable to apply to target: ");
-		s_dump(target);
-		success = false;
-		break;
+	if (i.arg_count != current->instruction.size - 1) {
+		return S_ARGUMENT_COUNT_MISMATCH;
 	}
 
-	s_free(target);
-	for (int i = 0; i < arg_count; i++) {
-		s_free(args[i]);
-	}
-	free(args);
-
-	return success;
+	return f->type->apply(&next->instruction, current->instruction.values, f + 1);
 }
 
 s_result s_eval(const s_statement s, const s_expr* args) {
@@ -401,13 +410,11 @@ s_result s_eval(const s_statement s, const s_expr* args) {
 	b.next = &a;
 
 	instruction_slot* current = &a;
-	s_result r = eval_statement(current, s);
-	while (r == S_SUCCESS && current->value_count > 0) {
-		if (current->values[0].type == FUNCTION) {
-			r = execute_instruction(current->next, current);
-		} else {
-			r = S_ATTEMPT_TO_CALL_NON_FUNCTION;
-		}
+	eval_statement(current, s, args, NULL);
+
+	s_result r = S_SUCCESS;
+	while (r == S_SUCCESS && current->instruction.size > 0) {
+		r = execute_instruction(current->next, current);
 		current = current->next;
 	}
 
