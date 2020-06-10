@@ -21,8 +21,8 @@ static s_expr data_nil;
 static s_expr data_quote;
 static s_expr data_lambda;
 
-s_expr_ref* ref(int32_t payload_size) {
-	s_expr_ref* r = malloc(sizeof(_Atomic(uint32_t)) + payload_size);
+s_expr_ref* ref(uint32_t payload_size) {
+	s_expr_ref* r = malloc(offsetof(s_expr_ref, symbol) + payload_size);
 	r->ref_count = ATOMIC_VAR_INIT(1);
 	return r;
 }
@@ -34,11 +34,6 @@ s_expr s_function(s_function_type* t, uint32_t data_size, void* data) {
 
 	return (s_expr){ FUNCTION, .p=r };
 }
-
-typedef struct s_key {
-	s_expr_ref* qualifier;
-	UChar name[1];
-} s_key;
 
 void* s_get_value(void* key, idtrie_node* owner) {
 	s_expr_ref* r = ref(sizeof(idtrie_node*));
@@ -53,21 +48,24 @@ void s_update_value(void* value, idtrie_node* owner) {
 
 s_expr_ref* s_intern(s_expr_ref* qualifier, strref name) {
 	int32_t maxlen = strref_maxlen(name);
-	s_key* key = malloc(sizeof(s_key) + sizeof(UChar) * (maxlen - 1));
+	s_symbol_info* key = malloc(offsetof(s_symbol_info, name) + sizeof(UChar) * maxlen);
 	int32_t len = strref_cpy(maxlen, key->name, name);
 	if (maxlen != len) {
-		s_key* key2 = malloc(sizeof(s_key) + sizeof(UChar) * (len - 1));
+		s_symbol_info* key2 = malloc(offsetof(s_symbol_info, name) + sizeof(UChar) * len);
 		memcpy(key2->name, key->name, len);
 		free(key);
 		key = key2;
 	}
 
 	key->qualifier = qualifier;
+	if (qualifier != NULL) {
+		s_ref(qualifier);
+	}
 
 	return idtrie_insert(
 			table.trie,
-			sizeof(s_key) + sizeof(UChar) * (len - 1),
-			key);
+			offsetof(s_symbol_info, name) + sizeof(UChar) * len,
+			key).data;
 }
 
 s_expr s_symbol(s_expr_ref* q, strref n) {
@@ -76,9 +74,18 @@ s_expr s_symbol(s_expr_ref* q, strref n) {
 
 s_symbol_info* s_inspect(const s_expr e) {
 	if (e.type != SYMBOL) {
-		return NULL;
+		assert(false);
 	}
-	return idtrie_fetch_key(e.p->symbol);
+	uint32_t size = idtrie_key_size(e.p->symbol);
+	if (size <= 0) {
+		assert(false);
+	} else {
+		s_symbol_info* s = malloc(size + sizeof(UChar));
+		idtrie_fetch_key(s, e.p->symbol);
+		UChar* end = (UChar*)((uint8_t*)s + size);
+		*end = u'\0';
+		return s;
+	}
 }
 
 s_expr s_character(UChar32 cp) {
@@ -87,10 +94,10 @@ s_expr s_character(UChar32 cp) {
 
 s_expr s_string(strref s) {
 	int32_t maxlen = strref_maxlen(s);
-	s_expr_ref* r = ref(sizeof(s_string_data) + sizeof(UChar) * maxlen);
+	s_expr_ref* r = ref(offsetof(s_string_data, string) + sizeof(UChar) * (maxlen + 1));
 	int32_t len = strref_cpy(maxlen, r->string.string, s);
 	if (maxlen != len) {
-		s_expr_ref* r2 = ref(sizeof(s_string_data) + sizeof(UChar) * len);
+		s_expr_ref* r2 = ref(offsetof(s_string_data, string) + sizeof(UChar) * (len + 1));
 		memcpy(r2->string.string, r->string.string, len);
 		free(r);
 		r = r2;
@@ -138,10 +145,23 @@ s_expr s_car(const s_expr e) {
 				: U16_GET_SUPPLEMENTARY(e.p->string.string[0], e.p->string.string[1]);
 			return s_character(cp);
 
+		case ERROR:
+			//assert(false);
+			return (s_expr){ ERROR };
+		
+		case FUNCTION:
+			printf("Cannot destruct function yet");
+			return (s_expr){ ERROR };
+
+		case CHARACTER:
+			printf("Cannot destruct character yet");
+			return (s_expr){ ERROR };
+
 		default:
-			printf("Cannot destruct atom ");
-			s_dump(e);
-			assert(false);
+			printf("Cannot destruct atom %i ", e.type);
+			return (s_expr){ ERROR };
+			//s_dump(e);
+			//assert(false);
 	}
 }
 
@@ -159,16 +179,29 @@ s_expr s_cdr(const s_expr e) {
 			if (len == 0) {
 				return s_alias(data_nil);
 			}
-			s_expr_ref* r = ref(sizeof(s_string_data) + sizeof(UChar) * len);
+			s_expr_ref* r = ref(offsetof(s_string_data, string) + sizeof(UChar) * len);
 			u_strncpy(r->string.string, e.p->string.string, len);
 			r->string.string[len] = u'\0';
 
 			return (s_expr){ STRING, .p=r };
 
+		case ERROR:
+			//assert(false);
+			return (s_expr){ ERROR };
+		
+		case FUNCTION:
+			printf("Cannot destruct function yet");
+			return (s_expr){ ERROR };
+
+		case CHARACTER:
+			printf("Cannot destruct character yet");
+			return (s_expr){ ERROR };
+		
 		default:
-			printf("Cannot destruct atom ");
-			s_dump(e);
-			assert(false);
+			printf("Cannot destruct atom %i ", e.type);
+			return (s_expr){ ERROR };
+			//s_dump(e);
+			//assert(false);
 	}
 }
 
@@ -227,35 +260,43 @@ void s_elem_dump(const s_expr s) {
 	UChar *string_payload;
 
 	switch (s.type) {
-	case STRING:;
-		u_printf_u(u"\"%S\"", s.p->string.string);
-		break;
-	case CHARACTER:
-		u_printf_u(u"unicode:%04x", s.character);
-		break;
-	case INTEGER:
-		printf("%li", s.integer);
-		break;
-	default:
-		if (s_atom(s)) {
-			if (s_eq(s, data_nil)) {
-				printf("()");
+		case ERROR:
+			printf("!|ERROR|!");
+		case STRING:
+			;
+			u_printf_u(u"\"%S\"", s.p->string.string);
+			break;
+		case CHARACTER:
+			u_printf_u(u"unicode:%04x", s.character);
+			break;
+		case INTEGER:
+			printf("%li", s.integer);
+			break;
+		default:
+			if (s_atom(s)) {
+				if (s_eq(s, data_nil)) {
+					printf("()");
+				} else {
+					s_symbol_info* i = s_inspect(s);
+					if (i->qualifier == NULL) {
+						u_printf_u(u"%S", i->name);
+					} else {
+						s_expr q = { SYMBOL, .p=i->qualifier };
+						s_elem_dump(q);
+						u_printf_u(u":%S", i->name);
+					}
+					free(i);
+				}
 			} else {
-				s_symbol_info* i = s_inspect(s);
-				s_elem_dump(i->qualifier);
-				u_printf_u(u":%S", i->name);
-				free(i);
+				s_expr car = s_car(s);
+				s_expr cdr = s_cdr(s);
+				printf("(");
+				s_elem_dump(car);
+				s_tail_dump(cdr);
+				s_dealias(car);
+				s_dealias(cdr);
 			}
-		} else {
-			s_expr car = s_car(s);
-			s_expr cdr = s_cdr(s);
-			printf("(");
-			s_elem_dump(car);
-			s_tail_dump(cdr);
-			s_dealias(car);
-			s_dealias(cdr);
-		}
-		break;
+			break;
 	}
 }
 
@@ -319,7 +360,7 @@ void s_free(s_expr_type t, s_expr_ref* r) {
 }
 
 void s_init() {
-	table = (s_table){ { NULL, s_get_value, s_update_value } };
+	table = (s_table){ { NULL, s_get_value, s_update_value, free } };
 	s_expr data = s_symbol(NULL, u_strref(u"data"));
 	data_nil = s_symbol(data.p, u_strref(u"nil"));
 	data_quote = s_symbol(data.p, u_strref(u"quote"));

@@ -161,7 +161,7 @@ void s_free_lambda(s_lambda* l) {
 
 bool compile_expression(s_term* result, s_expr e, compile_context c) {
 	if (s_atom(e)) {
-		uint32_t* index_into_parent = idtrie_fetch(c.variables.variables, sizeof(s_expr_ref*), e.p);
+		uint32_t* index_into_parent = idtrie_fetch(c.variables.variables, sizeof(s_expr_ref*), e.p).data;
 		*result = (s_term){ .type=VARIABLE, .variable=*index_into_parent };
 		return true;
 	}
@@ -226,7 +226,7 @@ bool compile_statement(s_statement* result, s_expr s, compile_context c) {
 }
 
 void capture_variable(idtrie p, variable_bindings* b, s_expr_ref* symbol) {
-	if (idtrie_fetch(b->variables, sizeof(s_expr_ref*), &symbol) == NULL) {
+	if (idtrie_fetch(b->variables, sizeof(s_expr_ref*), &symbol).data == NULL) {
 		variable_binding v = { symbol, { true, b->capture_count++ } };
 		idtrie_insert(b->variables, sizeof(s_expr_ref*), &v);
 
@@ -237,7 +237,7 @@ void capture_variable(idtrie p, variable_bindings* b, s_expr_ref* symbol) {
 			free(old_captures);
 		}
 
-		s_variable* capture = idtrie_fetch(p, sizeof(s_expr_ref*), &symbol);
+		s_variable* capture = idtrie_fetch(p, sizeof(s_expr_ref*), &symbol).data;
 		if (capture == NULL) {
 			// TODO ERROR
 		}
@@ -247,10 +247,13 @@ void capture_variable(idtrie p, variable_bindings* b, s_expr_ref* symbol) {
 
 s_result s_compile(s_statement* result, const s_expr e, const uint32_t param_count, const s_expr_ref** params) {
 	compile_context c;
-	c.variables.variables.get_value = get_variable_binding;
-	c.variables.variables.update_value = update_variable_binding;
-	c.variables.variables.free_value = free_variable_binding;
-	c.variables.param_count = param_count;
+	c.variables.variables = (idtrie){
+		NULL,
+		get_variable_binding,
+		update_variable_binding,
+		free_variable_binding
+	};
+	c.variables.param_count;
 	for (int i = 0; i < param_count; i++) {
 		variable_binding v = { params[i], { PARAMETER, i } };
 		idtrie_insert(c.variables.variables, sizeof(s_expr_ref*), &v);

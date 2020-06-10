@@ -22,15 +22,20 @@ typedef struct idtrie_node {
 			bool
 				hasleaf: 1,
 				hasbranch: 1;
-			uint64_t
-				size : 62;
+			uint32_t
+				size : 30;
 		};
-		uint64_t layout;
+		uint32_t layout;
 	};
 	// followed by 'index' bytes of key data
+	// if 'hasleaf' then followed by idtrie_leaf
 	// if 'hasbranch' then followed by idtrie_branch
-	// if 'hasleaf' then followed by void*
 } idtrie_node;
+
+typedef struct idtrie_leaf {
+	uint32_t size;
+	void* data;
+} idtrie_leaf;
 
 typedef struct idtrie_branch {
 	uint64_t population[4]; // for popcount compression
@@ -46,10 +51,12 @@ typedef struct idtrie {
 
 void idtrie_clear(idtrie t);
 
-void* idtrie_insert(idtrie t, uint64_t l, void* key);
+idtrie_leaf idtrie_insert(idtrie t, uint32_t l, void* key);
 
-void* idtrie_fetch(idtrie t, uint64_t l, void* key);
+idtrie_leaf idtrie_fetch(idtrie t, uint32_t l, void* key);
 
 void idtrie_remove(idtrie_node* n);
 
-void* idtrie_fetch_key(idtrie_node* n);
+uint32_t idtrie_fetch_key(void* dest, idtrie_node* n);
+
+uint32_t idtrie_key_size(idtrie_node* n);

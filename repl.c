@@ -65,7 +65,7 @@ void run(s_expr e, s_expr args) {
 }
 
 s_expr read_arg(void* arg) {
-	return s_string(c_strref(char_conv, *(char**)arg));
+	return s_string(c_strref(char_conv, (char*)arg));
 }
 
 int main(int argc, char** argv) {
@@ -91,6 +91,7 @@ int main(int argc, char** argv) {
 
 	s_expr e;
 	if (read(r, &e)) {
+		s_dump(e);
 		run(e, args);
 
 		s_dealias(e);

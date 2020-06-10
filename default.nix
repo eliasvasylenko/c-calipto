@@ -6,5 +6,6 @@ stdenv.mkDerivation {
   buildInputs = [
     cmake
     icu
+    valgrind
   ];
 }

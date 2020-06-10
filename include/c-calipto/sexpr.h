@@ -39,7 +39,7 @@ typedef struct s_table {
 } s_table;
 
 typedef struct s_symbol_info {
-	s_expr qualifier;
+	s_expr_ref* qualifier;
 	UChar name[1];
 } s_symbol_info;
 
