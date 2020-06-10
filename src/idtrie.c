@@ -29,51 +29,50 @@ void addpop(uint64_t* p, uint8_t slot) {
 	p[3] = slot_bit << (slot - 192) | p[3];
 }
 
-typedef struct cursor {
-	idtrie_node node;
-	idtrie_node** pointer;
-
-	uint8_t* data_start;
+typedef struct node_layout {
+	uint8_t* data;
 	union {
-		void* data_end;
+		uint8_t* data_end;
 		idtrie_leaf* leaf;
 	};
 	idtrie_branch* branch;
-	void* end;
-} cursor;
+	idtrie_node** children;
+	union {
+		idtrie_node** children_end;
+		void* end;
+	};
+} node_layout;
 
 size_t sizeof_branch(uint8_t population) {
 	return offsetof(idtrie_branch, children) + sizeof(idtrie_node*) * population;
 }
 
-void update_cursor(cursor* c) {
-	c->node = **c->pointer;
-	c->data_start = (uint8_t*)(*c->pointer + 1);
-	c->data_end = c->data_start + c->node.size;
-	c->branch =  + c->node.hasleaf ? sizeof(idtrie_leaf) + c->data_end : c->data_end;
-	c->end = c->node.hasbranch
-		? sizeof_branch(pop(c->branch->population)) + c->branch
-		: c->branch;
+node_layout layout_of_node(idtrie_node* n) {
+	node_layout l;
+	l.data = (uint8_t*)(n + 1);
+	l.leaf = (idtrie_leaf*)(l.data + n->size);
+	l.branch = n->hasleaf
+		? (idtrie_branch*)(l.leaf + 1)
+		: (idtrie_branch*)l.leaf;
+	l.children = (idtrie_node**)((uint8_t*)l.branch + offsetof(idtrie_branch, children));
+	l.end = n->hasbranch
+		? (void*)(l.children + pop(l.branch->population))
+		: (void*)l.branch;
 }
 
-cursor make_cursor(idtrie_node** n) {
-	cursor c;
-	c.pointer = n;
-	update_cursor(&c);
-	return c;
-}
+idtrie_node* make_split(idtrie* t, idtrie_node* n, uint32_t index, idtrie_node* parent) {
+	node_layout l = layout_of_node(n);
 
-idtrie_node* make_split(idtrie* t, cursor c, uint32_t index, idtrie_node* parent) {
-	idtrie_node* after = malloc(c.end - (void*)*c.pointer - index);
+	idtrie_node* after = malloc(l.end - (void*)n - index);
 	after->parent = parent;
-	after->layout = c.node.layout;
+	after->layout = n->layout;
 	after->size -= index;
-	memcpy(after + sizeof(idtrie_node), c.data_start + index, (uint8_t*)c.end - c.data_start - index);
-	for (idtrie_node** child = &c.branch->children[0]; child < (idtrie_node**)c.end; child++) {
+	memcpy(after + 1, l.data + index, l.data_end - l.data - index);
+	for (idtrie_node** child = l.children; child < l.children_end; child++) {
 		(**child).parent = after;
 	}
-	if (c.node.hasleaf) {
-		t->update_value(c.leaf, after);
+	if (n->hasleaf) {
+		t->update_value(l.leaf, after);
 	}
 
 	return after;
@@ -94,22 +93,25 @@ idtrie_node* make_leaf(idtrie* t, idtrie_node* p, uint32_t len, uint8_t* data, u
 	return leaf;
 }
 
-idtrie_leaf insert_leaf(idtrie* t, cursor c, uint32_t index, uint32_t ksize, void* k) {
+idtrie_leaf insert_leaf(idtrie* t, idtrie_node** np, uint32_t index, uint32_t ksize, void* k) {
+	idtrie_node* n = *np;
+
 	idtrie_node* before = malloc(sizeof(idtrie_node) + index + sizeof(idtrie_leaf) + sizeof_branch(1));
-	before->parent = c.node.parent;
+	before->parent = n->parent;
 	before->hasleaf = true;
 	before->hasbranch = true;
 	before->size = index;
-	memcpy(before + sizeof(idtrie_node), c.data_start, index);
+	memcpy(before + 1, n + 1, index);
 
-	idtrie_node* after = make_split(t, c, index, before);
+	idtrie_node* after = make_split(t, n, index, before);
 
 	// free previous
-	*c.pointer = before;
-	update_cursor(&c);
+	*np = before;
 
-	addpop(c.branch->population, *(c.data_start + index));
-	c.branch->children[0] = after;
+	idtrie_branch* branch = (idtrie_branch*)((uint8_t*)(before + 1) + index + sizeof(idtrie_leaf));
+
+	addpop(branch->population, *(c.data_start + index));
+	branch->children[0] = after;
 
 	c.leaf->data = t->get_value(k, before);
 	c.leaf->size = ksize;
@@ -117,24 +119,25 @@ idtrie_leaf insert_leaf(idtrie* t, cursor c, uint32_t index, uint32_t ksize, voi
 	return *c.leaf;
 }
 
-idtrie_leaf insert_branch(idtrie* t, cursor c, uint32_t index, uint32_t len, uint8_t* data, uint32_t ksize, void* k) {
+idtrie_leaf insert_branch(idtrie* t, idtrie_node** np, uint32_t index, uint32_t len, uint8_t* data, uint32_t ksize, void* k) {
+	idtrie_node* n = *np;
+
 	idtrie_node* before = malloc(sizeof(idtrie_node) + index + sizeof_branch(2));
-	before->parent = c.node.parent;
+	before->parent = n->parent;
 	before->hasleaf = false;
 	before->hasbranch = true;
 	before->size = index;
-	memcpy(before + sizeof(idtrie_node), c.data_start, index);
+	memcpy(before + 1, n + 1, index);
 
 	idtrie_node* leaf = make_leaf(t, before, len, data, ksize, k);
 
 	idtrie_node* after = make_split(t, c, index, before);
 
-	*c.pointer = before;
-	update_cursor(&c);
+	*np = before;
 
-	addpop(c.branch->population, *(c.data_start + index));
+	addpop(c.branch->population, *(uint8_t*)(after + 1));
 	addpop(c.branch->population, *data);
-	if (*data > *(c.data_start + index)) {
+	if (*data > *(uint8_t*)(after + 1)) {
 		c.branch->children[0] = after;
 		c.branch->children[1] = leaf;
 	} else {
