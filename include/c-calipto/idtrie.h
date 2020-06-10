@@ -43,7 +43,7 @@ typedef struct idtrie_branch {
 } idtrie_branch;
 
 typedef struct idtrie {
-	idtrie_node** root;
+	idtrie_node* root;
 	void* (*get_value)(void* key, idtrie_node* owner);
 	void (*update_value)(void* value, idtrie_node* owner);
 	void (*free_value)(void* value);
@@ -51,9 +51,9 @@ typedef struct idtrie {
 
 void idtrie_clear(idtrie t);
 
-idtrie_leaf idtrie_insert(idtrie t, uint32_t l, void* key);
+idtrie_leaf idtrie_insert(idtrie* t, uint32_t l, void* key);
 
-idtrie_leaf idtrie_fetch(idtrie t, uint32_t l, void* key);
+idtrie_leaf idtrie_fetch(idtrie* t, uint32_t l, void* key);
 
 void idtrie_remove(idtrie_node* n);
 

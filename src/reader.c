@@ -142,6 +142,7 @@ bool read_symbol(reader* r, s_expr* e) {
 	s_expr symbol = { SYMBOL, .p=NULL };
 
 	do {
+		discard_buffer(r->scanner);
 		int32_t len = scan_name(r->scanner);
 		if (len <= 0) {
 			if (symbol.p) {

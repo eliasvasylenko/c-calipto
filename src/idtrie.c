@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
+#include <assert.h>
 
 #include "c-calipto/idtrie.h"
 #include "c-calipto/libpopcnt.h"
@@ -62,7 +63,7 @@ cursor make_cursor(idtrie_node** n) {
 	return c;
 }
 
-idtrie_node* make_split(idtrie t, cursor c, uint32_t index, idtrie_node* parent) {
+idtrie_node* make_split(idtrie* t, cursor c, uint32_t index, idtrie_node* parent) {
 	idtrie_node* after = malloc(c.end - (void*)*c.pointer - index);
 	after->parent = parent;
 	after->layout = c.node.layout;
@@ -72,13 +73,13 @@ idtrie_node* make_split(idtrie t, cursor c, uint32_t index, idtrie_node* parent)
 		(**child).parent = after;
 	}
 	if (c.node.hasleaf) {
-		t.update_value(c.leaf, after);
+		t->update_value(c.leaf, after);
 	}
 
 	return after;
 }
 
-idtrie_node* make_leaf(idtrie t, idtrie_node* p, uint32_t len, uint8_t* data, uint32_t ksize, void* k) {
+idtrie_node* make_leaf(idtrie* t, idtrie_node* p, uint32_t len, uint8_t* data, uint32_t ksize, void* k) {
 	idtrie_node* leaf = malloc(sizeof(idtrie_node) + len + sizeof(idtrie_leaf));
 	leaf->parent = p;
 	leaf->hasleaf = true;
@@ -87,13 +88,13 @@ idtrie_node* make_leaf(idtrie t, idtrie_node* p, uint32_t len, uint8_t* data, ui
 	memcpy((uint8_t*)leaf + sizeof(idtrie_node), data, len);
 
 	idtrie_leaf* l = (idtrie_leaf*)((uint8_t*)(leaf + 1) + len);
-	l->data = t.get_value(k, leaf);
+	l->data = t->get_value(k, leaf);
 	l->size = ksize;
 
 	return leaf;
 }
 
-idtrie_leaf insert_leaf(idtrie t, cursor c, uint32_t index, uint32_t ksize, void* k) {
+idtrie_leaf insert_leaf(idtrie* t, cursor c, uint32_t index, uint32_t ksize, void* k) {
 	idtrie_node* before = malloc(sizeof(idtrie_node) + index + sizeof(idtrie_leaf) + sizeof_branch(1));
 	before->parent = c.node.parent;
 	before->hasleaf = true;
@@ -110,13 +111,13 @@ idtrie_leaf insert_leaf(idtrie t, cursor c, uint32_t index, uint32_t ksize, void
 	addpop(c.branch->population, *(c.data_start + index));
 	c.branch->children[0] = after;
 
-	c.leaf->data = t.get_value(k, before);
+	c.leaf->data = t->get_value(k, before);
 	c.leaf->size = ksize;
 
 	return *c.leaf;
 }
 
-idtrie_leaf insert_branch(idtrie t, cursor c, uint32_t index, uint32_t len, uint8_t* data, uint32_t ksize, void* k) {
+idtrie_leaf insert_branch(idtrie* t, cursor c, uint32_t index, uint32_t len, uint8_t* data, uint32_t ksize, void* k) {
 	idtrie_node* before = malloc(sizeof(idtrie_node) + index + sizeof_branch(2));
 	before->parent = c.node.parent;
 	before->hasleaf = false;
@@ -144,7 +145,7 @@ idtrie_leaf insert_branch(idtrie t, cursor c, uint32_t index, uint32_t len, uint
 	return *(idtrie_leaf*)((uint8_t*)(leaf + 1) + len);
 }
 
-idtrie_leaf idtrie_insert_recur(idtrie t, cursor c, uint32_t l, uint8_t* d, uint32_t ksize, void* k) {
+idtrie_leaf idtrie_insert_recur(idtrie* t, cursor c, uint32_t l, uint8_t* d, uint32_t ksize, void* k) {
 	if (l <= c.node.size) {
 		for (int i = 0; i < l; i++) {
 			if (c.data_start[i] != d[i]) {
@@ -166,7 +167,9 @@ idtrie_leaf idtrie_insert_recur(idtrie t, cursor c, uint32_t l, uint8_t* d, uint
 				return insert_branch(t, c, i, l - i, d + i, ksize, k);
 			}
 		}
-		// find branch and recur into it, or add branch
+
+		assert(false);
+		// TODO find branch and recur into it, or add branch
 	}
 }
 
@@ -174,13 +177,12 @@ void idtrie_clear(idtrie t) {
 	;
 }
 
-idtrie_leaf idtrie_insert(idtrie t, uint32_t l, void* d) {
-	if (t.root == NULL ) {
-		t.root = malloc(sizeof(idtrie_node*));
-		*t.root = make_leaf(t, NULL, l, d, l, d);
-		return *(idtrie_leaf*)((uint8_t*)(*t.root + 1) + l);
+idtrie_leaf idtrie_insert(idtrie* t, uint32_t l, void* d) {
+	if (t->root == NULL ) {
+		t->root = make_leaf(t, NULL, l, d, l, d);
+		return *(idtrie_leaf*)((uint8_t*)(t->root + 1) + l);
 	} else {
-		return idtrie_insert_recur(t, make_cursor(t.root), l, d, l, d);
+		return idtrie_insert_recur(t, make_cursor(&t->root), l, d, l, d);
 	}
 }
 
@@ -212,7 +214,7 @@ uint32_t idtrie_key_size(idtrie_node* n) {
 	return ((idtrie_leaf*)((uint8_t*)(n + 1) + n->size))->size;
 }
 
-idtrie_leaf idtrie_fetch_recur(idtrie t, cursor c, uint32_t l, uint8_t* d) {
+idtrie_leaf idtrie_fetch_recur(idtrie* t, cursor c, uint32_t l, uint8_t* d) {
 	if (l <= c.node.size) {
 		for (int i = 0; i < l; i++) {
 			if (c.data_start[i] != d[i]) {
@@ -236,7 +238,7 @@ idtrie_leaf idtrie_fetch_recur(idtrie t, cursor c, uint32_t l, uint8_t* d) {
 	}
 }
 
-idtrie_leaf idtrie_fetch(idtrie t, uint32_t l, void* d) {
-	return idtrie_fetch_recur(t, make_cursor(t.root), l, d);
+idtrie_leaf idtrie_fetch(idtrie* t, uint32_t l, void* d) {
+	return idtrie_fetch_recur(t, make_cursor(&t->root), l, d);
 }
 

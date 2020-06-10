@@ -63,7 +63,7 @@ s_expr_ref* s_intern(s_expr_ref* qualifier, strref name) {
 	}
 
 	return idtrie_insert(
-			table.trie,
+			&table.trie,
 			offsetof(s_symbol_info, name) + sizeof(UChar) * len,
 			key).data;
 }
