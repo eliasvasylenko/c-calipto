@@ -65,9 +65,7 @@ node_layout layout_of(idtrie_node* n) {
 	node_layout l;
 	l.data = (uint8_t*)(n + 1);
 	l.leaf = (idtrie_leaf*)(l.data + n->size);
-	l.branch = n->hasleaf
-		? (idtrie_branch*)(l.leaf + 1)
-		: (idtrie_branch*)l.leaf;
+	l.branch = (idtrie_branch*)(l.leaf + n->hasleaf);
 	l.children = (idtrie_node**)((uint8_t*)l.branch + offsetof(idtrie_branch, children));
 	l.end = n->hasbranch
 		? (void*)(l.children + popcount(l.branch->population))
