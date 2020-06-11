@@ -312,7 +312,6 @@ static inline int get_cpuid()
     flags |= bit_POPCNT;
 
 #if defined(HAVE_AVX2) || \
-
     defined(HAVE_AVX512)
 
   int osxsave_mask = (1 << 27);
