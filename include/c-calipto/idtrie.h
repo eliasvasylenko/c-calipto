@@ -15,6 +15,10 @@
  * key needs to be reconstituted by walking up the tree.
  */
 
+/*
+ * Internal structure
+ */
+
 typedef struct idtrie_node {
 	struct idtrie_node* parent;
 	union {
@@ -33,8 +37,8 @@ typedef struct idtrie_node {
 } idtrie_node;
 
 typedef struct idtrie_leaf {
-	uint32_t size;
-	void* data;
+	uint32_t key_size;
+	void* value;
 } idtrie_leaf;
 
 typedef struct idtrie_branch {
@@ -42,21 +46,38 @@ typedef struct idtrie_branch {
 	idtrie_node* children[1]; // variable length equal to popcount
 } idtrie_branch;
 
+/*
+ * API surface
+ */
+
+typedef struct idtrie_key {
+	uint32_t size;
+	uint8_t* data;
+} idtrie_key;
+
+typedef struct idtrie_value {
+	idtrie_node* node;
+	void* data;
+} idtrie_value;
+
 typedef struct idtrie {
 	idtrie_node* root;
-	void* (*get_value)(void* key, idtrie_node* owner);
+	void* (*get_value)(idtrie_key key, idtrie_node* owner);
 	void (*update_value)(void* value, idtrie_node* owner);
 	void (*free_value)(void* value);
 } idtrie;
 
-void idtrie_clear(idtrie t);
+idtrie_key idtrie_defkey(uint32_t size, void* data);
 
-idtrie_leaf idtrie_insert(idtrie* t, uint32_t l, void* key);
+idtrie_value idtrie_insert(idtrie* t, idtrie_key key);
 
-idtrie_leaf idtrie_fetch(idtrie* t, uint32_t l, void* key);
+idtrie_value idtrie_find(idtrie* t, idtrie_key key);
 
-void idtrie_remove(idtrie_node* n);
+void idtrie_delete(idtrie_node* n);
 
-uint32_t idtrie_fetch_key(void* dest, idtrie_node* n);
+idtrie_key idtrie_key_data(void* dest, idtrie_node* n);
 
 uint32_t idtrie_key_size(idtrie_node* n);
+
+void idtrie_clear(idtrie t);
+

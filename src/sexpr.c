@@ -35,7 +35,7 @@ s_expr s_function(s_function_type* t, uint32_t data_size, void* data) {
 	return (s_expr){ FUNCTION, .p=r };
 }
 
-void* s_get_value(void* key, idtrie_node* owner) {
+void* s_get_value(idtrie_key key, idtrie_node* owner) {
 	s_expr_ref* r = ref(sizeof(idtrie_node*));
 	r->symbol = owner;
 	return r;
@@ -62,10 +62,12 @@ s_expr_ref* s_intern(s_expr_ref* qualifier, strref name) {
 		s_ref(qualifier);
 	}
 
-	return idtrie_insert(
-			&table.trie,
-			offsetof(s_symbol_info, name) + sizeof(UChar) * len,
-			key).data;
+	uint32_t keysize = offsetof(s_symbol_info, name) + sizeof(UChar) * len;
+	s_expr_ref* r = idtrie_insert(&table.trie, idtrie_defkey(keysize, key)).data;
+
+	free(key);
+
+	return r;
 }
 
 s_expr s_symbol(s_expr_ref* q, strref n) {
@@ -81,7 +83,7 @@ s_symbol_info* s_inspect(const s_expr e) {
 		assert(false);
 	} else {
 		s_symbol_info* s = malloc(size + sizeof(UChar));
-		idtrie_fetch_key(s, e.p->symbol);
+		idtrie_key_data(s, e.p->symbol);
 		UChar* end = (UChar*)((uint8_t*)s + size);
 		*end = u'\0';
 		return s;
@@ -342,7 +344,7 @@ void s_free(s_expr_type t, s_expr_ref* r) {
 		case ERROR:
 			break;
 		case SYMBOL:
-			idtrie_remove(r->symbol);
+			idtrie_delete(r->symbol);
 			break;
 		case CONS:
 			s_dealias(r->cons.car);
