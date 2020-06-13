@@ -83,6 +83,11 @@ idtrie_value value_of(idtrie_node* leaf) {
 	return (idtrie_value){ leaf, ((idtrie_leaf*)(data_of(leaf) + leaf->size))->value };
 }
 
+typedef struct key {
+	uint32_t size;
+	uint8_t* data;
+} key;
+
 idtrie_node* make_split(idtrie* t, idtrie_node* n, uint32_t index, idtrie_node* parent) {
 	node_layout l = layout_of(n);
 
@@ -103,7 +108,7 @@ idtrie_node* make_split(idtrie* t, idtrie_node* n, uint32_t index, idtrie_node* 
 	return after;
 }
 
-idtrie_node* make_leaf(idtrie* t, idtrie_key key, idtrie_key tail, idtrie_node* parent) {
+idtrie_node* make_leaf(idtrie* t, key k, key tail, idtrie_node* parent) {
 	idtrie_node* leaf = malloc(sizeof(idtrie_node) + tail.size + sizeof(idtrie_leaf));
 	leaf->parent = parent;
 	leaf->hasleaf = true;
@@ -112,13 +117,13 @@ idtrie_node* make_leaf(idtrie* t, idtrie_key key, idtrie_key tail, idtrie_node* 
 	memcpy(data_of(leaf), tail.data, tail.size);
 
 	idtrie_leaf* l = (idtrie_leaf*)(data_of(leaf) + tail.size);
-	l->value = t->get_value(key, leaf);
-	l->key_size = key.size;
+	l->value = t->get_value(k.size, k.data, leaf);
+	l->key_size = k.size;
 
 	return leaf;
 }
 
-idtrie_value split_with_leaf(idtrie* t, idtrie_key key, idtrie_node** np, uint32_t index) {
+idtrie_value split_with_leaf(idtrie* t, key k, idtrie_node** np, uint32_t index) {
 	idtrie_node* n = *np;
 
 	idtrie_node* before = malloc(sizeof(idtrie_node) + index + sizeof(idtrie_leaf) + sizeof_branch(1));
@@ -140,13 +145,13 @@ idtrie_value split_with_leaf(idtrie* t, idtrie_key key, idtrie_node** np, uint32
 	popadd(branch->population, *data_of(after));
 	branch->children[0] = after;
 
-	leaf->value = t->get_value(key, before);
-	leaf->key_size = key.size;
+	leaf->value = t->get_value(k.size, k.data, before);
+	leaf->key_size = k.size;
 
 	return (idtrie_value){ before, leaf->value };
 }
 
-idtrie_value split_with_branch(idtrie* t, idtrie_key key, idtrie_node** np, uint32_t index, idtrie_key tail) {
+idtrie_value split_with_branch(idtrie* t, key k, idtrie_node** np, uint32_t index, key tail) {
 	idtrie_node* n = *np;
 
 	idtrie_node* before = malloc(sizeof(idtrie_node) + index + sizeof_branch(2));
@@ -156,7 +161,7 @@ idtrie_value split_with_branch(idtrie* t, idtrie_key key, idtrie_node** np, uint
 	before->size = index;
 	memcpy(data_of(before), data_of(n), index);
 
-	idtrie_node* leaf = make_leaf(t, key, tail, before);
+	idtrie_node* leaf = make_leaf(t, k, tail, before);
 	idtrie_node* after = make_split(t, n, index, before);
 
 	free(*np);
@@ -178,68 +183,65 @@ idtrie_value split_with_branch(idtrie* t, idtrie_key key, idtrie_node** np, uint
 	return value_of(leaf);
 }
 
-idtrie_key key_tail(idtrie_key key, uint32_t head) {
-	key.size -= head;
-	key.data = (uint8_t*)key.data + head;
-	return key;
+key key_tail(key k, uint32_t head) {
+	k.size -= head;
+	k.data = (uint8_t*)k.data + head;
+	return k;
 }
 
-idtrie_value insert_recur(idtrie* t, idtrie_key key, idtrie_node** np, idtrie_key tail) {
+idtrie_value insert_recur(idtrie* t, key k, idtrie_node** np, key tail) {
 	idtrie_node* n = *np;
 
-	if (tail.size <= n->size) {
+	if (tail.size < n->size) {
 		for (int i = 0; i < tail.size; i++) {
 			if (data_of(n)[i] != tail.data[i]) {
-				return split_with_branch(t, key, np, i, key_tail(tail, i));
+				return split_with_branch(t, k, np, i, key_tail(tail, i));
 			}
 		}
 
-		if (tail.size < n->size) {
-			return split_with_leaf(t, key, np, tail.size);
+		return split_with_leaf(t, k, np, tail.size);
+	}
 
+	for (int i = 0; i < n->size; i++) {
+		if (data_of(n)[i] != tail.data[i]) {
+			return split_with_branch(t, k, np, i, key_tail(tail, i));
 		}
+	}
 
+	if (tail.size == n->size) {
 		n->hasleaf = true;
 		return value_of(n);
+	}
 
-	} else {
-		for (int i = 0; i < n->size; i++) {
-			if (data_of(n)[i] != tail.data[i]) {
-				return split_with_branch(t, key, np, i, key_tail(tail, i));
-			}
-		}
+	if (!n->hasbranch) {
+		insert_branch();
 
-		if (!n->hasbranch) {
-			// TODO add a new branch with our leaf
+		assert(false);
+	}
 
-			assert(false);
-		}
+	node_layout layout = layout_of(n);
+	tail = key_tail(tail, n->size);
 
-		node_layout layout = layout_of(n);
-		tail = key_tail(tail, n->size);
-
-		printf(" pop count: %i\n", popcount(layout.branch->population));
-		uint8_t pi = popindex(layout.branch->population, tail.data[0]);
-		printf(" pop index: %i\n", (uint32_t) pi);
-
-		idtrie_node** child = &layout.branch->children[pi];
+	uint8_t pi = popindex(layout.branch->population, tail.data[0]);
+	idtrie_node** child = &layout.branch->children[pi];
 			
-		if (data_of(*child)[0] != tail.data[0]) {
-			insert_branch();
+	if (data_of(*child)[0] != tail.data[0]) {
+		insert_branch();
 
-			assert(false);
-		} else {
-			return insert_recur(t, key, child, tail);
-		}
+		assert(false);
+	} else {
+		return insert_recur(t, k, child, tail);
 	}
 }
 
-idtrie_value idtrie_insert(idtrie* t, idtrie_key key) {
+idtrie_value idtrie_insert(idtrie* t, uint32_t key_size, void* key_data) {
+	key k = { key_size, key_data };
+
 	if (t->root == NULL ) {
-		t->root = make_leaf(t, key, key, NULL);
+		t->root = make_leaf(t, k, k, NULL);
 		return value_of(t->root);
 	} else {
-		return insert_recur(t, key, &t->root, key);
+		return insert_recur(t, k, &t->root, k);
 	}
 }
 
@@ -255,12 +257,12 @@ void key_data_recur(uint32_t size, uint8_t* dest, idtrie_node* n) {
 	memcpy(dest + size, n + 1, n->size);
 }
 
-idtrie_key idtrie_key_data(void* dest, idtrie_node* n) {
+uint32_t idtrie_key(void* dest, idtrie_node* n) {
 	uint32_t size = idtrie_key_size(n);
 	if (size > 0) {
 		key_data_recur(size, dest, n);
 	}
-	return (idtrie_key){ size, dest };
+	return size;
 }
 
 uint32_t idtrie_key_size(idtrie_node* n) {
@@ -270,42 +272,36 @@ uint32_t idtrie_key_size(idtrie_node* n) {
 	return ((idtrie_leaf*)(data_of(n) + n->size))->key_size;
 }
 
-idtrie_value find_recur(idtrie* t, idtrie_key tail, idtrie_node* n) {
-	if (tail.size <= n->size) {
-		for (int i = 0; i < tail.size; i++) {
-			if (data_of(n)[i] != tail.data[i]) {
-				return (idtrie_value){ NULL, NULL };
-			}
-		}
-
-		if (tail.size < n->size || !n->hasleaf) {
-			return (idtrie_value){ NULL, NULL };
-		}
-
-		return value_of(n);
-
-	} else {
-		for (int i = 0; i < n->size; i++) {
-			if (data_of(n)[i] != tail.data[i]) {
-				return (idtrie_value){ NULL, NULL };
-			}
-		}
-
-		if (!n->hasbranch) {
-			return (idtrie_value){ NULL, NULL };
-		}
-
-		node_layout layout = layout_of(n);
-		tail = key_tail(tail, n->size);
-
-		uint8_t pi = popindex(layout.branch->population, tail.data[0]);
-		idtrie_node* child = layout.branch->children[pi];
-
-		return find_recur(t, tail, child);
+idtrie_value find_recur(idtrie* t, key tail, idtrie_node* n) {
+	if (tail.size < n->size) {
+		return (idtrie_value){ NULL, NULL };
 	}
+
+	for (int i = 0; i < n->size; i++) {
+		if (data_of(n)[i] != tail.data[i]) {
+			return (idtrie_value){ NULL, NULL };
+		}
+	}
+
+	if (tail.size == n->size) {
+		return value_of(n);
+	}
+
+	if (!n->hasbranch) {
+		return (idtrie_value){ NULL, NULL };
+	}
+
+	node_layout layout = layout_of(n);
+	tail = key_tail(tail, n->size);
+
+	uint8_t pi = popindex(layout.branch->population, tail.data[0]);
+	idtrie_node* child = layout.branch->children[pi];
+
+	return find_recur(t, tail, child);
 }
 
-idtrie_value idtrie_find(idtrie* t, idtrie_key k) {
+idtrie_value idtrie_find(idtrie* t, uint32_t key_size, void* key_data) {
+	key k = { key_size, key_data };
 	return find_recur(t, k, t->root);
 }
 
@@ -313,6 +309,3 @@ void idtrie_clear(idtrie t) {
 	;
 }
 
-idtrie_key idtrie_defkey(uint32_t size, void* data) {
-	return (idtrie_key){ size, data };
-}

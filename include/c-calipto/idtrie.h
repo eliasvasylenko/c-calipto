@@ -50,11 +50,6 @@ typedef struct idtrie_branch {
  * API surface
  */
 
-typedef struct idtrie_key {
-	uint32_t size;
-	uint8_t* data;
-} idtrie_key;
-
 typedef struct idtrie_value {
 	idtrie_node* node;
 	void* data;
@@ -62,20 +57,18 @@ typedef struct idtrie_value {
 
 typedef struct idtrie {
 	idtrie_node* root;
-	void* (*get_value)(idtrie_key key, idtrie_node* owner);
+	void* (*get_value)(uint32_t key_size, void* key_data, idtrie_node* owner);
 	void (*update_value)(void* value, idtrie_node* owner);
 	void (*free_value)(void* value);
 } idtrie;
 
-idtrie_key idtrie_defkey(uint32_t size, void* data);
+idtrie_value idtrie_insert(idtrie* t, uint32_t key_size, void* key_data);
 
-idtrie_value idtrie_insert(idtrie* t, idtrie_key key);
-
-idtrie_value idtrie_find(idtrie* t, idtrie_key key);
+idtrie_value idtrie_find(idtrie* t, uint32_t key_size, void* key_data);
 
 void idtrie_delete(idtrie_node* n);
 
-idtrie_key idtrie_key_data(void* dest, idtrie_node* n);
+uint32_t idtrie_key(void* dest, idtrie_node* n);
 
 uint32_t idtrie_key_size(idtrie_node* n);
 

@@ -35,7 +35,7 @@ s_expr s_function(s_function_type* t, uint32_t data_size, void* data) {
 	return (s_expr){ FUNCTION, .p=r };
 }
 
-void* s_get_value(idtrie_key key, idtrie_node* owner) {
+void* s_get_value(uint32_t key_size, void* key_data, idtrie_node* owner) {
 	s_expr_ref* r = ref(sizeof(idtrie_node*));
 	r->symbol = owner;
 	return r;
@@ -63,7 +63,7 @@ s_expr_ref* s_intern(s_expr_ref* qualifier, strref name) {
 	}
 
 	uint32_t keysize = offsetof(s_symbol_info, name) + sizeof(UChar) * len;
-	s_expr_ref* r = idtrie_insert(&table.trie, idtrie_defkey(keysize, key)).data;
+	s_expr_ref* r = idtrie_insert(&table.trie, keysize, key).data;
 
 	free(key);
 
@@ -83,7 +83,7 @@ s_symbol_info* s_inspect(const s_expr e) {
 		assert(false);
 	} else {
 		s_symbol_info* s = malloc(size + sizeof(UChar));
-		idtrie_key_data(s, e.p->symbol);
+		idtrie_key(s, e.p->symbol);
 		UChar* end = (UChar*)((uint8_t*)s + size);
 		*end = u'\0';
 		return s;

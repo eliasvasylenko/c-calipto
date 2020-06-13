@@ -25,9 +25,9 @@ typedef struct variable_binding {
 	s_variable variable;
 } variable_binding;
 
-void* get_variable_binding(idtrie_key key, idtrie_node* owner) {
+void* get_variable_binding(uint32_t key_size, void* key_data, idtrie_node* owner) {
 	s_variable* value = malloc(sizeof(s_variable*));
-	*value = ((variable_binding*)key.data)->variable;
+	*value = ((variable_binding*)key_data)->variable;
 	return value;
 }
 
@@ -163,7 +163,8 @@ bool compile_expression(s_term* result, s_expr e, compile_context c) {
 	if (s_atom(e)) {
 		uint32_t* index_into_parent = idtrie_find(
 				&c.variables.variables,
-				idtrie_defkey(sizeof(s_expr_ref*), e.p)).data;
+				sizeof(s_expr_ref*),
+				e.p).data;
 		*result = (s_term){ .type=VARIABLE, .variable=*index_into_parent };
 		return true;
 	}
@@ -228,9 +229,9 @@ bool compile_statement(s_statement* result, s_expr s, compile_context c) {
 }
 
 void capture_variable(idtrie p, variable_bindings* b, s_expr_ref* symbol) {
-	if (idtrie_find(&b->variables, idtrie_defkey(sizeof(s_expr_ref*), &symbol)).data == NULL) {
+	if (idtrie_find(&b->variables, sizeof(s_expr_ref*), &symbol).data == NULL) {
 		variable_binding v = { symbol, { true, b->capture_count++ } };
-		idtrie_insert(&b->variables, idtrie_defkey(sizeof(s_expr_ref*), &v));
+		idtrie_insert(&b->variables, sizeof(s_expr_ref*), &v);
 
 		s_variable* old_captures = b->captures;
 		b->captures = malloc(sizeof(s_variable*) * b->capture_count);
@@ -239,7 +240,7 @@ void capture_variable(idtrie p, variable_bindings* b, s_expr_ref* symbol) {
 			free(old_captures);
 		}
 
-		s_variable* capture = idtrie_find(&p, idtrie_defkey(sizeof(s_expr_ref*), &symbol)).data;
+		s_variable* capture = idtrie_find(&p, sizeof(s_expr_ref*), &symbol).data;
 		if (capture == NULL) {
 			// TODO ERROR
 		}
@@ -258,7 +259,7 @@ s_result s_compile(s_statement* result, const s_expr e, const uint32_t param_cou
 	c.variables.param_count;
 	for (int i = 0; i < param_count; i++) {
 		variable_binding v = { params[i], { PARAMETER, i } };
-		idtrie_insert(&c.variables.variables, idtrie_defkey(sizeof(s_expr_ref*), &v));
+		idtrie_insert(&c.variables.variables, sizeof(s_expr_ref*), &v);
 	}
 
 	s_expr data = s_symbol(NULL, u_strref(u"data"));
