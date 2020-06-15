@@ -10,13 +10,16 @@ project(c-calipto VERSION 0.1
 
 configure_file(src/c-calipto.h.in c-calipto.h)
 
-# add the executable
-add_executable(calipto repl.c src/idtrie.c src/stringref.c src/reader.c src/scanner.c src/stream.c src/sexpr.c src/interpreter.c src/builtins.c)
+add_subdirectory(src)
 
-set_property(TARGET calipto PROPERTY C_STANDARD 11)
+if(TARGET_GROUP STREQUAL release)
+  # release only
+elseif(TARGET_GROUP STREQUAL test)
+  include(CTest)
 
-target_include_directories(calipto PUBLIC include)
-target_include_directories(calipto PUBLIC "${PROJECT_BINARY_DIR}")
+  add_subdirectory(unity) 
+  # add_subdirectory(test) 
+else() 
+  message(FATAL_ERROR "I don't know the TARGET_GROUP you gave me!")
+endif()
 
-find_package(ICU 61.0 COMPONENTS uc data io REQUIRED)
-target_link_libraries(calipto ICU::uc ICU::data ICU::io)
