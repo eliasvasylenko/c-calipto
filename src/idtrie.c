@@ -247,7 +247,7 @@ idtrie_value insert_recur(idtrie* t, key k, idtrie_node** np, key tail) {
 	uint8_t pi = popindex(l.branch->population, tail.data[0]);
 	idtrie_node** child = &l.branch->children[pi];
 			
-	if (data_of(*child)[0] != tail.data[0]) {
+	if (child == l.children_end || data_of(*child)[0] != tail.data[0]) {
 		return insert_child(t, k, np, l, pi, tail);
 	} else {
 		return insert_recur(t, k, child, tail);

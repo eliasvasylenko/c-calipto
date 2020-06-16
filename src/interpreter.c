@@ -202,16 +202,20 @@ bool compile_expression(s_term* result, s_expr e, compile_context c) {
 
 bool compile_statement(s_statement* result, s_expr s, compile_context c) {
 	s_expr* expressions;
-	uint32_t count = s_delist(s, &expressions);
+	int32_t count = s_delist(s, &expressions);
 	if (count <= 0) {
 		printf("Syntax error in statement: ");
 		s_dump(s);
 		return false;
 	}
 
+	printf("count %i\n", count);
+
 	s_term* terms = malloc(sizeof(s_term) * count);
 	bool success = true;
 	for (int i = 0; i < count; i++) {
+		printf("%p\n", &terms[i]);
+		printf("%i\n", expressions[i].type);
 		if (compile_expression(&terms[i], expressions[i], c)) {
 			s_dealias(expressions[i]);
 		} else {
@@ -249,24 +253,34 @@ void capture_variable(idtrie p, variable_bindings* b, s_expr_ref* symbol) {
 }
 
 s_result s_compile(s_statement* result, const s_expr e, const uint32_t param_count, const s_expr_ref** params) {
-	compile_context c;
-	c.variables.variables = (idtrie){
+	idtrie variables = (idtrie){
 		NULL,
 		get_variable_binding,
 		update_variable_binding,
 		free_variable_binding
 	};
-	c.variables.param_count;
+
+	variable_bindings b = {
+		0,
+		param_count,
+		NULL,
+		variables
+	};
 	for (int i = 0; i < param_count; i++) {
 		variable_binding v = { params[i], { PARAMETER, i } };
-		idtrie_insert(&c.variables.variables, sizeof(s_expr_ref*), &v);
+		idtrie_insert(&variables, sizeof(s_expr_ref*), &v);
 	}
 
 	s_expr data = s_symbol(NULL, u_strref(u"data"));
-	c.data_quote = s_symbol(data.p, u_strref(u"quote"));
-	c.data_lambda = s_symbol(data.p, u_strref(u"lambda"));
+	compile_context c = {
+		b,
+		s_symbol(data.p, u_strref(u"quote")),
+		s_symbol(data.p, u_strref(u"lambda"))
+	};
 	s_dealias(data);
+
 	compile_statement(result, e, c);
+
 	s_dealias(c.data_quote);
 	s_dealias(c.data_lambda);
 
