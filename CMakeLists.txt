@@ -18,7 +18,7 @@ elseif(TARGET_GROUP STREQUAL test)
   include(CTest)
 
   add_subdirectory(unity) 
-  # add_subdirectory(test) 
+  add_subdirectory(test) 
 else() 
   message(FATAL_ERROR "I don't know the TARGET_GROUP you gave me!")
 endif()
