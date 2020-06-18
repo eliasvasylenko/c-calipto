@@ -10,6 +10,8 @@ project(c-ohvu VERSION 0.1
 
 configure_file(src/c-ohvu.h.in c-ohvu.h)
 
+SET(TARGET_GROUP release CACHE STRING "The type of build, accepts 'release' or 'test'.")
+
 add_subdirectory(src)
 
 if(TARGET_GROUP STREQUAL release)
@@ -17,9 +19,7 @@ if(TARGET_GROUP STREQUAL release)
   # release only
 elseif(TARGET_GROUP STREQUAL test)
   include(CTest)
-
-  add_subdirectory(unity) 
-  add_subdirectory(test) 
+  add_subdirectory(lib/unity)
 else() 
   message(FATAL_ERROR "I don't know the TARGET_GROUP you gave me!")
 endif()
