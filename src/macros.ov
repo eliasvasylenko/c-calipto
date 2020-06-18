@@ -1,0 +1,44 @@
+; macro to hide stack & effect system as hidden first parameter
+
+(define effect-transform (lambda ()))
+
+(define stackify-statement (lambda (statement return)
+  (des statement
+    (lambda (receiver arguments)
+      (stackify-expression receiver (lambda (receiver)
+        (map effect-stack-transform-expression arguments (lambda (arguments)
+          (cons (quote effect:stack) arguments (lambda (arguments)
+            (cons reciver arguments returna))))))))
+    (lambda () (return statement)))))
+
+(define stackify-expression (lambda (expression return)
+  (des expression
+    (lambda (type form)
+      (eq type (quote lambda)
+        (lambda ()
+          (des form
+            (lambda (arguments body)
+              (cons effect:stack arguments (lambda (arguments)
+                (stackify-statement body (lambda (body)
+                  (cons arguments body (lambda (form)
+                    (cons type form (lambda (expression)
+                      (return expression))))))))))
+            (lambda () (return expression))))
+        (lambda () (return expression)))
+    (lambda () return expression))))
+
+
+
+
+; macro to perform cps transform
+
+(define cps-transform (lambda (statements)
+  (des statements
+    (lambda (statement rest)
+      ())
+    (lambda ()
+      (perform fail)))))
+
+(define test-macro (lambda (continue)
+  (perform 'read-step-out (lambda ()
+    ()))))

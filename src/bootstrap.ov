@@ -1,0 +1,100 @@
+((data:lambda (fail succeed)
+   (system:out "Lindsey is incredible!" fail succeed))
+  (data:lambda () (system:err "Error!" system:exit system:exit))
+  system:exit)
+
+def (odd? x)
+  match x { #(gt 0) (even? .. inc x)
+            #(lt 0) (even? .. dec x)
+            _       false }
+
+def (even? x)
+  match x { #(gt 0) (odd? .. inc x)
+            #(lt 0) (odd? .. dec x)
+            _       true }
+
+def (even? x)
+  (match x #(gt 0) (odd? .. inc x)
+           #(lt 0) (odd? .. dec x)
+           _ true)
+
+def (even? x)
+  match x
+    #(greater? 0) (odd? .. inc x)
+    #(lesser? 0) (odd? .. dec x)
+    _ true
+
+
+
+; The bootstrap file is read and evaluated by the runtime before anything else happens.
+; This means that the platform must include some functionality, i.e. to read and evaluate
+; Calipto source files, before that functionality has actually been defined in Calipto.
+;
+; The responsibility of the bootstrap file is to reimplement all of that functionality
+; other than those parts which are given as primitives, and also provide a hook to load
+; and evaluate further source files. This makes the implementation almost completely
+; self-hosted.
+;
+; The bootstrap file is evaluated in a lexical context where symbols of primitive
+; functions and special forms are bound to themselves, and program:args is bound to a
+; list of program argument strings.
+;
+; Implementing a reader means also implementing string utilities, a scanner, etc.
+; Maybe the responsibility shouldn't solely be on this single bootstrap file. Maybe the
+; built-in reader should be used to read in a *set of* bootstrap files.
+;
+; We have no built-in module system, so how do we link together these bootstrap files?
+; How do we define a module system early? Including limiting the scanner to fail on
+; reading non-exported symbols of other packages. We need the macro system first.
+
+
+
+
+
+; OOTB Calipto simply reads and evaluates the first s expression it finds.
+; Since we're using CPS, each expression gets to decide what the runtime does next.
+; For instance they can call ``continue`` to read and evaluate the next instruction.
+; Or ``exit`` to stop reading and evaluating.
+;
+; Is there any state shared between expressions evaluated in this manner? Perhaps
+; the "continue" function takes a map of bindings.
+;
+; But each evaluating expression has access to the reader and scanner, making it trivial
+; to take over reading and evaluating the rest of the file.
+
+
+
+; Can we have 'export' and 'import' predefined?
+
+
+
+
+; Custom resolvers for symbols from different namespaces?
+
+; For instance we could have the macros `define` and `lookup`
+
+(hash:define context 'is-even (lambda (x cont)
+  (des x (lambda (a b) (is-odd b (lambda (odd) (not odd cont))))
+         (lambda () (cont true)))) continue)
+
+(hash:define context 'is-odd (lambda (x cont)
+  (des x (lambda (a b) (is-even b (lambda (even) (not even cont))))
+         (lambda () (cont true)))) continue)
+
+; each passes a modified context to continue
+
+(hash:lookup context 'is-even continue)
+; passes to continue the following:
+  hash:|reference is-even a4wtgh897q35htobarve89f4wjfe|
+
+(hash:lookup context 'is-odd continue)
+; passes to continue the following:
+  hash:|reference is-odd 3q5yj0hm56m0qw4g0ffackg59034|
+
+; Then at runtime when we encounter one of those hashes it resolve
+; to the correct function, with mutually recursive references
+; substituted with the correct hash:reference symbol.
+
+; To resolve a value in the "hash" namespace we look up "resolve:hash"
+; in the lexical scope and pass the symbol to it.
+
