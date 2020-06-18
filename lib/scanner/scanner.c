@@ -11,8 +11,8 @@
 #include <unicode/umachine.h>
 #include <unicode/ustdio.h>
 
-#include "c-calipto/stream.h"
-#include "c-calipto/scanner.h"
+#include "c-ohvu/stream.h"
+#include "c-ohvu/scanner.h"
 
 const UChar32 MALFORMED = 0xE000;
 const UChar32 EOS = 0xE001;

@@ -4,15 +4,16 @@ if(${CMAKE_VERSION} VERSION_LESS 3.12)
 endif()
 
 # set the project name
-project(c-calipto VERSION 0.1
-	DESCRIPTION "A simple interpreter for the Calipto language, implemented in C"
+project(c-ohvu VERSION 0.1
+	DESCRIPTION "A simple interpreter for the Ohvu programming language, implemented in C"
 	LANGUAGES C)
 
-configure_file(src/c-calipto.h.in c-calipto.h)
+configure_file(src/c-ohvu.h.in c-ohvu.h)
 
 add_subdirectory(src)
 
 if(TARGET_GROUP STREQUAL release)
+  add_subdirectory(src)
   # release only
 elseif(TARGET_GROUP STREQUAL test)
   include(CTest)

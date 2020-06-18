@@ -7,8 +7,8 @@
 
 #include <stdio.h>
 
-#include "c-calipto/idtrie.h"
-#include "c-calipto/libpopcnt.h"
+#include "c-ohvu/idtrie.h"
+#include "c-ohvu/libpopcnt.h"
 
 static const uint64_t slot_bit = 1;
 static const uint64_t slot_mask = (int64_t) -1;

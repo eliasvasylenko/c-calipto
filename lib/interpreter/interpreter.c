@@ -8,10 +8,10 @@
 #include <unicode/utypes.h>
 #include <unicode/ucnv.h>
 
-#include "c-calipto/stringref.h"
-#include "c-calipto/idtrie.h"
-#include "c-calipto/sexpr.h"
-#include "c-calipto/interpreter.h"
+#include "c-ohvu/stringref.h"
+#include "c-ohvu/idtrie.h"
+#include "c-ohvu/sexpr.h"
+#include "c-ohvu/interpreter.h"
 
 typedef struct variable_bindings {
 	uint32_t capture_count;

@@ -10,12 +10,12 @@
 #include <unicode/ucnv.h>
 #include <unicode/ustdio.h>
 
-#include "c-calipto/stringref.h"
-#include "c-calipto/idtrie.h"
-#include "c-calipto/sexpr.h"
-#include "c-calipto/stream.h"
-#include "c-calipto/scanner.h"
-#include "c-calipto/reader.h"
+#include "c-ohvu/stringref.h"
+#include "c-ohvu/idtrie.h"
+#include "c-ohvu/sexpr.h"
+#include "c-ohvu/stream.h"
+#include "c-ohvu/scanner.h"
+#include "c-ohvu/reader.h"
 
 reader* open_reader(scanner* s) {
 	reader* r = malloc(sizeof(reader));

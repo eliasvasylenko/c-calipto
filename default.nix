@@ -2,7 +2,7 @@
 
 with pkgs;
 stdenv.mkDerivation {
-  name = "c-calipto-env";
+  name = "c-ohvu-env";
   buildInputs = [
     cmake
     icu

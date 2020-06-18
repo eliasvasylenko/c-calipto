@@ -5,9 +5,9 @@
 #include <unicode/ucnv.h>
 #include <unicode/ustdio.h>
 
-#include "c-calipto/idtrie.h"
-#include "c-calipto/stringref.h"
-#include "c-calipto/sexpr.h"
+#include "c-ohvu/idtrie.h"
+#include "c-ohvu/stringref.h"
+#include "c-ohvu/sexpr.h"
 
 s_expr no_represent(void* d) { return s_list(0, NULL); }
 

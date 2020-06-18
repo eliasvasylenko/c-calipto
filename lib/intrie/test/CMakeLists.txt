@@ -1,5 +1,5 @@
-add_executable(test-calipto test.c)
+add_executable(test-intrie test.c)
  
-target_link_libraries(test-calipto calipto unity)
+target_link_libraries(test-intrie intrie unity)
  
-add_test(test_1 test-calipto)
+add_test(test_1 test-intrie)

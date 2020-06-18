@@ -12,9 +12,9 @@
 #include <unicode/umachine.h>
 #include <unicode/ucnv.h>
 
-#include "c-calipto/stringref.h"
-#include "c-calipto/idtrie.h"
-#include "c-calipto/sexpr.h"
+#include "c-ohvu/stringref.h"
+#include "c-ohvu/idtrie.h"
+#include "c-ohvu/sexpr.h"
 
 static s_table table;
 static s_expr data_nil;
