@@ -1,0 +1,3 @@
+// the configured options and settings for c-ohvu
+#define VERSION_MAJOR @c-ohvu_VERSION_MAJOR@
+#define VERSION_MINOR @c-ohvu_VERSION_MINOR@

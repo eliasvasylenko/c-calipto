@@ -1,3 +1,0 @@
-// the configured options and settings for c-calipto
-#define VERSION_MAJOR @c-calipto_VERSION_MAJOR@
-#define VERSION_MINOR @c-calipto_VERSION_MINOR@

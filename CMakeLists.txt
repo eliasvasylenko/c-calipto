@@ -1,25 +1,31 @@
-cmake_minimum_required(VERSION 3.1...3.15)
-if(${CMAKE_VERSION} VERSION_LESS 3.12)
-    cmake_policy(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION})
-endif()
+cmake_minimum_required(VERSION 3.14...3.15)
 
 # set the project name
-project(c-calipto VERSION 0.1
-	DESCRIPTION "A simple interpreter for the Calipto language, implemented in C"
+project(c-ohvu VERSION 0.1
+	DESCRIPTION "A simple interpreter for the Ohvu programming language, implemented in C"
 	LANGUAGES C)
 
-configure_file(src/c-calipto.h.in c-calipto.h)
+include(FetchContent)
+FetchContent_Declare(libpopcnt GIT_REPOSITORY https://github.com/kimwalisch/libpopcnt GIT_TAG e3e3233ddd16eb2e609ab46deb75754f58034c9a)
+FetchContent_Declare(Unity GIT_REPOSITORY https://github.com/ThrowTheSwitch/Unity/ GIT_TAG 0126e4804cf5edf87412044f841d7d7023a7c0c3)
 
-add_subdirectory(src)
+SET(TARGET_GROUP release CACHE STRING "The type of build, accepts 'release' or 'test'.")
 
-if(TARGET_GROUP STREQUAL release)
-  # release only
-elseif(TARGET_GROUP STREQUAL test)
+FetchContent_MakeAvailable(libpopcnt)
+add_subdirectory(libs/data)
+add_subdirectory(libs/runtime)
+add_subdirectory(libs/io)
+
+add_executable(ohvu-shell apps/shell.c)
+set_property(TARGET ohvu-shell PROPERTY C_STANDARD 11)
+target_include_directories(ohvu-shell PUBLIC include)
+target_link_libraries(ohvu-shell data runtime io)
+
+find_package(ICU 61.0 COMPONENTS uc data io REQUIRED)
+target_link_libraries(ohvu-shell ICU::uc ICU::data ICU::io)
+
+if(BUILD_TESTING)
   include(CTest)
-
-  add_subdirectory(unity) 
-  add_subdirectory(test) 
-else() 
-  message(FATAL_ERROR "I don't know the TARGET_GROUP you gave me!")
+  FetchContent_MakeAvailable(Unity)
 endif()
 
