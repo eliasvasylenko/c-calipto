@@ -12,7 +12,10 @@
 
 #include "c-ohvu/io/stream.h"
 
-void close_stream(stream* s) {
+typedef ovio_stream stream;
+typedef ovio_block block;
+
+void ovio_close_stream(stream* s) {
 	s->close(s);
 }
 
@@ -117,7 +120,7 @@ void close_file_stream(stream* s) {
 	free(s);
 }
 
-stream* open_file_stream(UFILE* f) {
+stream* ovio_open_file_stream(UFILE* f) {
 	stream* s = malloc(sizeof(stream) + sizeof(file_stream));
 	file_stream* fs = (file_stream*)(s + 1);
 

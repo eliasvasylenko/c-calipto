@@ -1,12 +1,12 @@
-typedef struct block {
+typedef struct ovio_block {
 	const UChar* start;
 	const UChar* end;
-} block;
+} ovio_block;
 
 /**
  * An interface to a stream of data. So long as there is data
  * remaining in the stream, calls to next_block should return a
- * non-empty block filled with the next available bytes of the.
+ * non-empty block filled with the next available bytes.
  *
  * When the stream is complete, next_block should return NULL.
  *
@@ -19,17 +19,17 @@ typedef struct block {
  * stream, this may occur before they have reached the end of
  * the stream.
  */
-typedef struct stream {
-	block* (*next_block)(struct stream* b);
-	void (*free_block)(struct stream* b, block* p);
-	void (*close)(struct stream* b);
-} stream;
+typedef struct ovio_stream {
+	ovio_block* (*next_block)(struct ovio_stream* b);
+	void (*free_block)(struct ovio_stream* b, ovio_block* p);
+	void (*close)(struct ovio_stream* b);
+} ovio_stream;
 
-stream* open_file_stream(UFILE* f);
-stream* open_string_stream(const char* s);
-stream* open_nstring_stream(const char* s, int64_t l);
-stream* open_ustring_stream(const UChar* s);
-stream* open_nustring_stream(const UChar* s, int64_t l);
-stream* open_stdin_stream();
+ovio_stream* ovio_open_file_stream(UFILE* f);
+ovio_stream* ovio_open_string_stream(const char* s);
+ovio_stream* ovio_open_nstring_stream(const char* s, int64_t l);
+ovio_stream* ovio_open_ustring_stream(const UChar* s);
+ovio_stream* ovio_open_nustring_stream(const UChar* s, int64_t l);
+ovio_stream* ovio_open_stdin_stream();
 
-void close_stream(stream* s);
+void ovio_close_stream(ovio_stream* s);

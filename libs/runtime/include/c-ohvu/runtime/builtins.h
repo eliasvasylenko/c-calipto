@@ -1,12 +1,12 @@
-s_expr cal_exit();
+ovs_expr ovru_exit();
 
-s_expr cal_cons();
+ovs_expr ovru_cons();
 
-s_expr cal_des();
+ovs_expr ovru_des();
 
-s_expr cal_eq();
+ovs_expr ovru_eq();
 
-s_expr cal_open_scanner(UFILE* file, s_expr file_name);
+ovs_expr ovru_open_scanner(UFILE* file, ovs_expr file_name);
 
-s_expr cal_open_printer(UFILE* file, s_expr file_name);
+ovs_expr ovru_open_printer(UFILE* file, ovs_expr file_name);
 

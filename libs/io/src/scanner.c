@@ -17,7 +17,11 @@
 const UChar32 MALFORMED = 0xE000;
 const UChar32 EOS = 0xE001;
 
-scanner* open_scanner(stream* s) {
+typedef ovio_scanner scanner;
+typedef ovio_stream stream;
+typedef ovio_page page;
+
+scanner* ovio_open_scanner(stream* s) {
 	scanner* sc = malloc(sizeof(scanner));
 
 	sc->stream = s;
@@ -39,11 +43,11 @@ scanner* open_scanner(stream* s) {
 	return sc;
 }
 
-int64_t input_position(scanner* s) {
+int64_t ovio_input_position(scanner* s) {
 	return s->input.position;
 }
 
-int64_t buffer_position(scanner* s) {
+int64_t ovio_buffer_position(scanner* s) {
 	return s->buffer.position;
 }
 
@@ -112,7 +116,7 @@ void advance_next_character(scanner* s) {
 	s->input = s->next;
 }
 
-int64_t advance_input_while(scanner* s, bool (*condition)(UChar32 c, const void* v), const void* context) {
+int64_t ovio_advance_input_while(scanner* s, bool (*condition)(UChar32 c, const void* v), const void* context) {
 	int64_t from = s->input.position;
 	prepare_next_character(s);
 	while (s->next_character != EOS &&
@@ -124,7 +128,7 @@ int64_t advance_input_while(scanner* s, bool (*condition)(UChar32 c, const void*
 	return s->input.position - from;
 }
 
-bool advance_input_if(scanner* s, bool (*condition)(UChar32 c, const void* v), const void* context) {
+bool ovio_advance_input_if(scanner* s, bool (*condition)(UChar32 c, const void* v), const void* context) {
 	prepare_next_character(s);
 	if (s->next_character != EOS &&
 			s->next_character != MALFORMED &&
@@ -152,7 +156,7 @@ bool advance_buffer_page(scanner* s) {
 	return true;
 }
 
-int64_t take_buffer_to(scanner* s, int64_t p, UChar* b) {
+int64_t ovio_take_buffer_to(scanner* s, int64_t p, UChar* b) {
 	int64_t size = p - s->buffer.position;
 	if (p > s->input.position) {
 		p = s->input.position;
@@ -177,15 +181,15 @@ int64_t take_buffer_to(scanner* s, int64_t p, UChar* b) {
 	return size;
 }
 
-int64_t take_buffer_length(scanner* s, int64_t l, UChar* b) {
-	return take_buffer_to(s, buffer_position(s) + l, b);
+int64_t ovio_take_buffer_length(scanner* s, int64_t l, UChar* b) {
+	return ovio_take_buffer_to(s, ovio_buffer_position(s) + l, b);
 }
 
-int64_t take_buffer(scanner* s, UChar* b) {
-	return take_buffer_to(s, input_position(s), b);
+int64_t ovio_take_buffer(scanner* s, UChar* b) {
+	return ovio_take_buffer_to(s, ovio_input_position(s), b);
 }
 
-int64_t discard_buffer_to(scanner* s, int64_t p) {
+int64_t ovio_discard_buffer_to(scanner* s, int64_t p) {
 	int64_t size = p - s->buffer.position;
 	if (p > s->input.position) {
 		p = s->input.position;
@@ -205,19 +209,19 @@ int64_t discard_buffer_to(scanner* s, int64_t p) {
 	return size;
 }
 
-int64_t discard_buffer_length(scanner* s, int64_t l) {
-	return discard_buffer_to(s, buffer_position(s) + l);
+int64_t ovio_discard_buffer_length(scanner* s, int64_t l) {
+	return ovio_discard_buffer_to(s, ovio_buffer_position(s) + l);
 }
 
-int64_t discard_buffer(scanner* s) {
+int64_t ovio_discard_buffer(scanner* s) {
 	int64_t size = s->input.position - s->buffer.position;
 	while (advance_buffer_page(s));
 	s->buffer = s->input;
 	return size;
 }
 
-void close_scanner(scanner* s) {
-	discard_buffer(s);
+void ovio_close_scanner(scanner* s) {
+	ovio_discard_buffer(s);
 	if (s->input.page != NULL) {
 		if (s->input.page->block != NULL) {
 			s->stream->free_block(s->stream, s->input.page->block);

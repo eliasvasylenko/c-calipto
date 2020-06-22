@@ -1,55 +1,61 @@
-typedef enum s_variable_type {
-	PARAMETER,
-	CAPTURE
-} s_variable_type;
+typedef enum ovru_result {
+	OVRU_SUCCESS,
+	OVRU_ATTEMPT_TO_CALL_NON_FUNCTION,
+	OVRU_ARGUMENT_COUNT_MISMATCH
+} ovru_result;
 
-typedef struct s_variable {
-	s_variable_type type : 1;
+typedef enum ovru_variable_type {
+	OVRU_PARAMETER,
+	OVRU_CAPTURE
+} ovru_variable_type;
+
+typedef struct ovru_variable {
+	ovru_variable_type type : 1;
 	uint32_t index : 31;
-} s_variable;
+} ovru_variable;
 
-typedef enum s_term_type {
-	LAMBDA = -1,
-	VARIABLE = -2,
-	// anything else is an s_expr_type and represents a QUOTE
-} s_term_type;
+typedef enum ovru_term_type {
+	OVRU_LAMBDA = -1,
+	OVRU_VARIABLE = -2,
+	// anything else is an ovs_expr_type and represents a QUOTE
+} ovru_term_type;
 
-struct s_lambda;
+struct ovru_lambda;
 
-typedef union s_term {
+typedef union ovru_term {
 	struct {
-		s_term_type type;
+		ovru_term_type type;
 		union {
-			s_variable variable;
-			struct s_lambda* lambda;
+			ovru_variable variable;
+			struct ovru_lambda* lambda;
 		};
 	};
-	s_expr quote;
-} s_term;
+	ovs_expr quote;
+} ovru_term;
 
-typedef struct s_statement {
+typedef struct ovru_statement {
 	uint32_t term_count;
-	s_term* terms; // borrowed, always QUOTE | LAMBDA | VARIABLE
-} s_statement;
+	ovru_term* terms; // borrowed, always QUOTE | LAMBDA | VARIABLE
+} ovru_statement;
 
-typedef struct s_lambda {
+typedef struct ovru_lambda {
 	_Atomic(uint32_t) ref_count;
 	uint32_t param_count;
-	s_expr_ref** params; // always SYMBOL
+	ovs_expr_ref** params; // always SYMBOL
 	uint32_t var_count;
 	uint32_t* vars; // indices into vars of lexical context
-	s_statement body;
-} s_lambda;
+	ovru_statement body;
+} ovru_lambda;
 
-typedef struct s_bound_lambda {
-	s_lambda* lambda;
-	s_expr* capture;
-} s_bound_lambda;
+typedef struct ovru_bound_lambda {
+	ovru_lambda* lambda;
+	ovs_expr* capture;
+} ovru_bound_lambda;
 
-s_term s_alias_term(s_term t);
-void s_dealias_term(s_term t);
-s_lambda* s_ref_lambda(s_lambda* r);
-void s_free_lambda(s_lambda* r);
+ovru_term ovru_alias_term(ovru_term t);
+void ovru_dealias_term(ovru_term t);
+ovru_lambda* ovru_ref_lambda(ovru_lambda* r);
+void ovru_free_lambda(ovru_lambda* r);
 
-s_result s_compile(s_statement* s, const s_expr e, const uint32_t param_count, const s_expr_ref** params);
-s_result s_eval(const s_statement s, const s_expr* args);
+ovru_result ovru_compile(ovru_statement* s, const ovs_expr e, const uint32_t param_count, const ovs_expr_ref** params);
+ovru_result ovru_eval(const ovru_statement s, const ovs_expr* args);

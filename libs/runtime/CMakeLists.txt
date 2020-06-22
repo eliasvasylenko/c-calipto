@@ -6,7 +6,10 @@ target_link_libraries(runtime data io)
 
 target_include_directories(runtime PUBLIC include)
 
-if(TARGET_GROUP STREQUAL test)
+configure_file(c-ohvu.h.in c-ohvu.h)
+target_include_directories(runtime PUBLIC "${PROJECT_BINARY_DIR}")
+
+if(BUILD_TESTING)
 #  add_subdirectory(test)
 endif()
 

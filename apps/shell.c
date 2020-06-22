@@ -13,59 +13,58 @@
 #include <unicode/ucnv.h>
 #include <unicode/ustdio.h>
 
-#include "c-ohvu/stringref.h"
-#include "c-ohvu/idtrie.h"
-#include "c-ohvu/sexpr.h"
-#include "c-ohvu/stream.h"
-#include "c-ohvu/scanner.h"
-#include "c-ohvu/reader.h"
-#include "c-ohvu/interpreter.h"
-#include "c-ohvu/builtins.h"
+#include "c-ohvu/io/stringref.h"
+#include "c-ohvu/io/stream.h"
+#include "c-ohvu/io/scanner.h"
+#include "c-ohvu/data/bdtrie.h"
+#include "c-ohvu/data/sexpr.h"
+#include "c-ohvu/data/reader.h"
+#include "c-ohvu/runtime/interpreter.h"
+#include "c-ohvu/runtime/builtins.h"
 
-static s_term* terms;
 static UConverter* char_conv;
 
-void run(s_expr e, s_expr args) {
-	s_expr_ref* data = s_symbol(NULL, u_strref(u"data")).p;
-	s_expr_ref* system = s_symbol(NULL, u_strref(u"system")).p;
-	const s_expr_ref* parameters[] = {
-		s_symbol(system, u_strref(u"args")).p,
-		s_symbol(system, u_strref(u"exit")).p,
-		s_symbol(data, u_strref(u"cons")).p,
-		s_symbol(data, u_strref(u"des")).p,
-		s_symbol(data, u_strref(u"eq")).p,
-		s_symbol(system, u_strref(u"in")).p,
-		s_symbol(system, u_strref(u"out")).p,
-		s_symbol(system, u_strref(u"err")).p
+void run(ovs_expr e, ovs_expr args) {
+	ovs_expr_ref* data = ovs_symbol(NULL, ovio_u_strref(u"data")).p;
+	ovs_expr_ref* system = ovs_symbol(NULL, ovio_u_strref(u"system")).p;
+	const ovs_expr_ref* parameters[] = {
+		ovs_symbol(system, ovio_u_strref(u"args")).p,
+		ovs_symbol(system, ovio_u_strref(u"exit")).p,
+		ovs_symbol(data, ovio_u_strref(u"cons")).p,
+		ovs_symbol(data, ovio_u_strref(u"des")).p,
+		ovs_symbol(data, ovio_u_strref(u"eq")).p,
+		ovs_symbol(system, ovio_u_strref(u"in")).p,
+		ovs_symbol(system, ovio_u_strref(u"out")).p,
+		ovs_symbol(system, ovio_u_strref(u"err")).p
 	};
-	s_free(SYMBOL, data);
-	s_free(SYMBOL, system);
+	ovs_free(OVS_SYMBOL, data);
+	ovs_free(OVS_SYMBOL, system);
 
-	s_statement s;
-	s_compile(&s, e, sizeof(parameters) / sizeof(s_expr_ref*), parameters);
+	ovru_statement s;
+	ovru_compile(&s, e, sizeof(parameters) / sizeof(ovs_expr_ref*), parameters);
 
-	const s_expr arguments[] = {
+	const ovs_expr arguments[] = {
 		args,
-		cal_exit(),
-		cal_cons(),
-		cal_des(),
-		cal_eq(),
-		cal_open_scanner(
+		ovru_exit(),
+		ovru_cons(),
+		ovru_des(),
+		ovru_eq(),
+		ovru_open_scanner(
 				u_finit(stdin, NULL, NULL),
-				s_string(u_strref(u"stdin"))),
-		cal_open_printer(
+				ovs_string(ovio_u_strref(u"stdin"))),
+		ovru_open_printer(
 				u_finit(stdout, NULL, NULL),
-				s_string(u_strref(u"stdout"))),
-		cal_open_printer(
+				ovs_string(ovio_u_strref(u"stdout"))),
+		ovru_open_printer(
 				u_finit(stderr, NULL, NULL),
-				s_string(u_strref(u"stderr")))
+				ovs_string(ovio_u_strref(u"stderr")))
 	};
 
-	s_eval(s, arguments);
+	ovru_eval(s, arguments);
 }
 
-s_expr read_arg(void* arg) {
-	return s_string(c_strref(char_conv, (char*)arg));
+ovs_expr read_arg(void* arg) {
+	return ovs_string(ovio_c_strref(char_conv, (char*)arg));
 }
 
 int main(int argc, char** argv) {
@@ -73,40 +72,33 @@ int main(int argc, char** argv) {
 	UErrorCode error = 0;
 	char_conv = ucnv_open(NULL, &error);
 
-	s_init();
+	ovs_init();
 
-	terms = (s_term[]){
-		{ .type=VARIABLE, .variable={ PARAMETER, 0 } },
-		{ .type=VARIABLE, .variable={ PARAMETER, 1 } },
-		{ .type=VARIABLE, .variable={ PARAMETER, 2 } },
-		{ .type=VARIABLE, .variable={ PARAMETER, 3 } },
-	};
-
-	s_expr args = s_list_of(argc, (void**)argv, read_arg);
+	ovs_expr args = ovs_list_of(argc, (void**)argv, read_arg);
 
 	UFILE* f = u_fopen("./bootstrap.cal", "r", NULL, NULL);
-	stream* st = open_file_stream(f);
-	scanner* sc = open_scanner(st);
-	reader* r = open_reader(sc);
+	ovio_stream* st = ovio_open_file_stream(f);
+	ovio_scanner* sc = ovio_open_scanner(st);
+	ovda_reader* r = ovda_open_reader(sc);
 
-	s_expr e;
-	if (read(r, &e)) {
-		s_dump(e);
+	ovs_expr e;
+	if (ovda_read(r, &e)) {
+		ovs_dump(e);
 		run(e, args);
 
-		s_dealias(e);
+		ovs_dealias(e);
 	} else {
 		printf("Failed to read bootstrap file!");
 	}
 
-	close_reader(r);
-	close_scanner(sc);
-	close_stream(st);
+	ovda_close_reader(r);
+	ovio_close_scanner(sc);
+	ovio_close_stream(st);
 	u_fclose(f);
 
-	s_dealias(args);
+	ovs_dealias(args);
 
-	s_close();
+	ovs_close();
 
 	ucnv_close(char_conv);
 	return 0;

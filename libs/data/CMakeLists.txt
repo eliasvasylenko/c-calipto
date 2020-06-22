@@ -9,7 +9,7 @@ target_link_libraries(data io ICU::uc ICU::data ICU::io)
 target_include_directories(data PRIVATE "${libpopcnt_SOURCE_DIR}")
 target_include_directories(data PUBLIC include)
 
-if(TARGET_GROUP STREQUAL test)
+if(BUILD_TESTING)
   add_subdirectory(test)
 endif()
 

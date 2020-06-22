@@ -16,23 +16,16 @@ add_subdirectory(libs/data)
 add_subdirectory(libs/runtime)
 add_subdirectory(libs/io)
 
-if(TARGET_GROUP STREQUAL release)
-  file(GLOB SOURCES src/*.c)
-  add_executable(ohvu ${SOURCES})
-  set_property(TARGET ohvu PROPERTY C_STANDARD 11)
+add_executable(ohvu-shell apps/shell.c)
+set_property(TARGET ohvu-shell PROPERTY C_STANDARD 11)
+target_include_directories(ohvu-shell PUBLIC include)
+target_link_libraries(ohvu-shell data runtime io)
 
-  configure_file(src/c-ohvu.h.in c-ohvu.h)
-  target_include_directories(ohvu PUBLIC include)
-  target_include_directories(ohvu PUBLIC "${PROJECT_BINARY_DIR}")
+find_package(ICU 61.0 COMPONENTS uc data io REQUIRED)
+target_link_libraries(ohvu-shell ICU::uc ICU::data ICU::io)
 
-  find_package(ICU 61.0 COMPONENTS uc data io REQUIRED)
-  target_link_libraries(ohvu ICU::uc ICU::data ICU::io)
-
-elseif(TARGET_GROUP STREQUAL test)
+if(BUILD_TESTING)
   include(CTest)
   FetchContent_MakeAvailable(Unity)
-
-else() 
-  message(FATAL_ERROR "I don't know the TARGET_GROUP you gave me!")
 endif()
 

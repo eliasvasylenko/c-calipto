@@ -19,7 +19,7 @@ void no_free(void* d) {}
  * exit
  */
 
-int32_t exit_apply(ovs_instruction* r, ovs_expr* args, void* d) {
+ovru_result exit_apply(ovs_instruction* r, ovs_expr* args, void* d) {
 	r->size = 0;
 	return OVRU_SUCCESS;
 }
@@ -36,7 +36,7 @@ static ovs_function_type exit_function = {
 	no_free
 };
 
-ovs_expr ovru_exit() {
+ovs_expr cal_exit() {
 	return ovs_function(&exit_function, 0, NULL);
 }
 
@@ -59,7 +59,7 @@ ovs_function_info scanner_inspect(void* d) {
 	return (ovs_function_info){ 2, 2 };
 }
 
-int32_t scanner_apply(ovs_instruction* i, ovs_expr* args, void* d) {
+ovru_result scanner_apply(s_instruction* i, ovs_expr* args, void* d) {
 	ovs_expr fail = args[0];
 	ovs_expr cont = args[1];
 
@@ -94,7 +94,7 @@ static ovs_function_type scanner_function = {
 	scanner_free
 };
 
-ovs_expr ovru_open_scanner(UFILE* f, ovs_expr name) {
+ovs_expr cal_open_scanner(UFILE* f, ovs_expr name) {
 	scanner_data data = { f, name, NULL, NULL };
 	return ovs_function(&scanner_function, sizeof(scanner_data), &data);
 }
@@ -118,7 +118,7 @@ ovs_function_info printer_inspect(void* d) {
 	return (ovs_function_info){ 3, 1 };
 }
 
-int32_t printer_apply(ovs_instruction* i, ovs_expr* args, void* d) {
+ovru_result printer_apply(s_instruction* i, ovs_expr* args, void* d) {
 	ovs_expr string = args[0];
 	ovs_expr fail = args[1];
 	ovs_expr cont = args[2];
@@ -126,7 +126,7 @@ int32_t printer_apply(ovs_instruction* i, ovs_expr* args, void* d) {
 	printer_data data = *(printer_data*)d;
 
 	i->size = 1;
-	if (string.type != OVS_STRING) {
+	if (string.type != STRING) {
 		i->values[0] = fail;
 
 	} else if (data.next == NULL) {
@@ -165,7 +165,7 @@ static ovs_function_type printer_function = {
 	printer_free
 };
 
-ovs_expr ovru_open_printer(UFILE* f, ovs_expr name) {
+ovs_expr cal_open_printer(UFILE* f, ovs_expr name) {
 	printer_data data = { f, name, NULL, NULL };
 	return ovs_function(&printer_function, sizeof(printer_data), &data);
 }
@@ -175,10 +175,10 @@ ovs_expr ovru_open_printer(UFILE* f, ovs_expr name) {
  */
 
 ovs_function_info cons_inspect(void* d) {
-	return (ovs_function_info){ 3, 2 };
+	return (s_function_info){ 3, 2 };
 }
 
-int32_t cons_apply(ovs_instruction* i, ovs_expr* args, void* d) {
+ovru_result cons_apply(s_instruction* i, ovs_expr* args, void* d) {
 	ovs_expr car = args[0];
 	ovs_expr cdr = args[1];
 	ovs_expr cont = args[2];
@@ -198,7 +198,7 @@ static ovs_function_type cons_function = {
 	no_free
 };
 
-ovs_expr ovru_cons() {
+ovs_expr cal_cons() {
 	return ovs_function(&cons_function, 0, NULL);
 }
 
@@ -207,15 +207,15 @@ ovs_expr ovru_cons() {
  */
 
 ovs_function_info des_inspect(void* d) {
-	return (ovs_function_info){ 3, 3 };
+	return (s_function_info){ 3, 3 };
 }
 
-int32_t des_apply(ovs_instruction* i, ovs_expr* args, void* d) {
+ovru_result des_apply(s_instruction* i, ovs_expr* args, void* d) {
 	ovs_expr e = args[0];
 	ovs_expr fail = args[1];
 	ovs_expr cont = args[2];
 
-	if (ovs_atom(e)) {
+	if (s_atom(e)) {
 		i->size = 1;
 		i->values[0] = fail;
 
@@ -237,7 +237,7 @@ static ovs_function_type des_function = {
 	no_free
 };
 
-ovs_expr ovru_des() {
+ovs_expr cal_des() {
 	return ovs_function(&des_function, 0, NULL);
 }
 
@@ -246,10 +246,10 @@ ovs_expr ovru_des() {
  */
 
 ovs_function_info eq_inspect(void* d) {
-	return (ovs_function_info){ 4, 1 };
+	return (s_function_info){ 4, 1 };
 }
 
-int32_t eq_apply(ovs_instruction* i, ovs_expr* args, void* d) {
+ovru_result eq_apply(s_instruction* i, ovs_expr* args, void* d) {
 	ovs_expr e_a = args[0];
 	ovs_expr e_b = args[1];
 	ovs_expr f = args[2];
@@ -269,6 +269,6 @@ static ovs_function_type eq_function = {
 	no_free
 };
 
-ovs_expr ovru_eq() {
+ovs_expr cal_eq() {
 	return ovs_function(&eq_function, 0, NULL);
 }

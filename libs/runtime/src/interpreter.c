@@ -9,29 +9,29 @@
 #include <unicode/ucnv.h>
 
 #include "c-ohvu/io/stringref.h"
-#include "c-ohvu/data/intrie.h"
+#include "c-ohvu/data/bdtrie.h"
 #include "c-ohvu/data/sexpr.h"
 #include "c-ohvu/runtime/interpreter.h"
 
 typedef struct variable_bindings {
 	uint32_t capture_count;
 	uint32_t param_count;
-	s_variable* captures;
-	idtrie variables;
+	ovru_variable* captures;
+	bdtrie variables;
 } variable_bindings;
 
 typedef struct variable_binding {
-	const s_expr_ref* symbol;
-	s_variable variable;
+	const ovs_expr_ref* symbol;
+	ovru_variable variable;
 } variable_binding;
 
-void* get_variable_binding(uint32_t key_size, void* key_data, idtrie_node* owner) {
-	s_variable* value = malloc(sizeof(s_variable*));
+void* get_variable_binding(uint32_t key_size, void* key_data, bdtrie_node* owner) {
+	ovru_variable* value = malloc(sizeof(ovru_variable*));
 	*value = ((variable_binding*)key_data)->variable;
 	return value;
 }
 
-void update_variable_binding(void* value, idtrie_node* owner) {}
+void update_variable_binding(void* value, bdtrie_node* owner) {}
 
 void free_variable_binding(void* value) {
 	free(value);
@@ -39,81 +39,81 @@ void free_variable_binding(void* value) {
 
 typedef struct compile_context {
 	variable_bindings variables;
-	s_expr data_quote;
-	s_expr data_lambda;
+	ovs_expr data_quote;
+	ovs_expr data_lambda;
 } compile_context;
 
-bool compile_quote(s_term* result, int32_t part_count, s_expr* parts, compile_context c) {
+bool compile_quote(ovru_term* result, int32_t part_count, ovs_expr* parts, compile_context c) {
 	if (part_count != 1) {
 		return false;
 	}
 
-	*result = (s_term){ .quote=parts[0] };
+	*result = (ovru_term){ .quote=parts[0] };
 
 	return true;
 }
 
-bool compile_statement(s_statement* result, s_expr s, compile_context c);
+bool compile_statement(ovru_statement* result, ovs_expr s, compile_context c);
 
-s_term s_alias_term(s_term t) {
+ovru_term ovs_alias_term(ovru_term t) {
 	switch (t.type) {
-		case LAMBDA:
-			s_ref_lambda(t.lambda);
+		case OVRU_LAMBDA:
+			ovru_ref_lambda(t.lambda);
 			break;
-		case VARIABLE:
+		case OVRU_VARIABLE:
 			break;
 		default:
-			s_alias(t.quote);
+			ovs_alias(t.quote);
 			break;
 	}
 	return t;
 }
 
-void s_dealias_term(s_term t) {
+void ovs_dealias_term(ovru_term t) {
 	switch (t.type) {
-		case LAMBDA:
-			s_free_lambda(t.lambda);
+		case OVRU_LAMBDA:
+			ovru_free_lambda(t.lambda);
 			break;
-		case VARIABLE:
+		case OVRU_VARIABLE:
 			break;
 		default:
-			s_dealias(t.quote);
+			ovs_dealias(t.quote);
 			break;
 	}
 }
 
-void* get_ref(s_expr e) {
+void* get_ref(ovs_expr e) {
 	return e.p;
 }
 
-bool compile_lambda(s_term* result, int32_t part_count, s_expr* parts, compile_context c) {
+bool compile_lambda(ovru_term* result, int32_t part_count, ovs_expr* parts, compile_context c) {
 	if (part_count != 2) {
 		return false;
 	}
 
-	s_expr params_decl = parts[0];
-	s_expr body_decl = parts[1];
+	ovs_expr params_decl = parts[0];
+	ovs_expr body_decl = parts[1];
 
-	s_expr_ref** params;
-	int32_t param_count = s_delist_of(params_decl, (void***)&params, get_ref);
+	ovs_expr_ref** params;
+	int32_t param_count = ovs_delist_of(params_decl, (void***)&params, get_ref);
 	if (param_count < 0) {
 		return false;
 	}
 
-	s_statement body;
+	ovru_statement body;
 	bool success = compile_statement(&body, body_decl, c);
 
 	uint32_t var_count = 0;
 	uint32_t* vars = NULL;
 
 	if (success) {
-		s_lambda* l = malloc(sizeof(s_lambda));
+		ovru_lambda* l = malloc(sizeof(ovru_lambda));
 		l->ref_count = ATOMIC_VAR_INIT(1);
 		l->param_count = param_count;
 		if (param_count > 0) {
-			l->params = malloc(sizeof(s_expr_ref*) * param_count);
+			l->params = malloc(sizeof(ovs_expr_ref*) * param_count);
 			for (int i = 0; i < param_count; i++) {
-				s_ref(params[i]);
+				ovs_ref(params[i]);
 				l->params[i] = params[i];
 			}
 		} else {
@@ -129,21 +129,21 @@ bool compile_lambda(s_term* result, int32_t part_count, s_expr* parts, compile_c
 			l->vars = NULL;
 		}
 		l->body = body;
-		*result = (s_term){ .type=LAMBDA, .lambda=l };
+		*result = (ovru_term){ .type=OVRU_LAMBDA, .lambda=l };
 	}
 
 	return success;
 }
 
-s_lambda* s_ref_lambda(s_lambda* l) {
+ovru_lambda* ovru_ref_lambda(ovru_lambda* l) {
 	atomic_fetch_add(&l->ref_count, 1);
 }
 
-void s_free_lambda(s_lambda* l) {
+void ovru_free_lambda(ovru_lambda* l) {
 	if (atomic_fetch_add(&l->ref_count, -1) > 1) {
 		if (l->param_count > 0) {
 			for (int i = 0; i < l->param_count; i++) {
-				s_free(SYMBOL, l->params[i]);
+				ovs_free(OVS_SYMBOL, l->params[i]);
 			}
 			free(l->params);
 		}
@@ -152,40 +152,40 @@ void s_free_lambda(s_lambda* l) {
 		}
 		if (l->body.term_count > 0) {
 			for (int i = 0; i < l->body.term_count; i++) {
-				s_dealias_term(l->body.terms[i]);
+				ovs_dealias_term(l->body.terms[i]);
 			}
 			free(l->body.terms);
 		}
 	}
 }
 
-bool compile_expression(s_term* result, s_expr e, compile_context c) {
-	if (s_atom(e)) {
-		uint32_t* index_into_parent = idtrie_find(
+bool compile_expression(ovru_term* result, ovs_expr e, compile_context c) {
+	if (ovs_atom(e)) {
+		uint32_t* index_into_parent = bdtrie_find(
 				&c.variables.variables,
-				sizeof(s_expr_ref*),
+				sizeof(ovs_expr_ref*),
 				e.p).data;
-		*result = (s_term){ .type=VARIABLE, .variable=*index_into_parent };
+		*result = (ovru_term){ .type=OVRU_VARIABLE, .variable=*index_into_parent };
 		return true;
 	}
 
-	s_expr* parts;
-	uint32_t count = s_delist(e, &parts);
+	ovs_expr* parts;
+	uint32_t count = ovs_delist(e, &parts);
 	if (count <= 0) {
 		printf("Syntax error in expression: ");
-		s_dump(e);
+		ovs_dump(e);
 		return false;
 	}
 
-	s_expr kind = parts[0];
+	ovs_expr kind = parts[0];
 	int32_t term_count = count - 1;
-	s_expr* terms = parts + 1;
+	ovs_expr* terms = parts + 1;
 
 	bool success;
-	if (s_eq(kind, c.data_quote)) {
+	if (ovs_eq(kind, c.data_quote)) {
 		success = compile_quote(result, term_count, terms, c);
 
-	} else if (s_eq(kind, c.data_lambda)) {
+	} else if (ovs_eq(kind, c.data_lambda)) {
 		success = compile_lambda(result, term_count, terms, c);
 
 	} else {
@@ -193,31 +193,31 @@ bool compile_expression(s_term* result, s_expr e, compile_context c) {
 	}
 
 	for (int i = 0; i < count; i++) {
-		s_dealias(parts[i]);
+		ovs_dealias(parts[i]);
 	}
 	free(parts);
 	
 	return success;
 }
 
-bool compile_statement(s_statement* result, s_expr s, compile_context c) {
-	s_expr* expressions;
-	int32_t count = s_delist(s, &expressions);
+bool compile_statement(ovru_statement* result, ovs_expr s, compile_context c) {
+	ovs_expr* expressions;
+	int32_t count = ovs_delist(s, &expressions);
 	if (count <= 0) {
 		printf("Syntax error in statement: ");
-		s_dump(s);
+		ovs_dump(s);
 		return false;
 	}
 
 	printf("count %i\n", count);
 
-	s_term* terms = malloc(sizeof(s_term) * count);
+	ovru_term* terms = malloc(sizeof(ovru_term) * count);
 	bool success = true;
 	for (int i = 0; i < count; i++) {
 		printf("%p\n", &terms[i]);
 		printf("%i\n", expressions[i].type);
 		if (compile_expression(&terms[i], expressions[i], c)) {
-			s_dealias(expressions[i]);
+			ovs_dealias(expressions[i]);
 		} else {
 			success = false;
 			break;
@@ -226,25 +226,25 @@ bool compile_statement(s_statement* result, s_expr s, compile_context c) {
 	free(expressions);
 
 	if (success) {
-		*result = (s_statement){ count, terms };
+		*result = (ovru_statement){ count, terms };
 	}
 
 	return success;
 }
 
-void capture_variable(idtrie p, variable_bindings* b, s_expr_ref* symbol) {
-	if (idtrie_find(&b->variables, sizeof(s_expr_ref*), &symbol).data == NULL) {
+void capture_variable(bdtrie p, variable_bindings* b, ovs_expr_ref* symbol) {
+	if (bdtrie_find(&b->variables, sizeof(ovs_expr_ref*), &symbol).data == NULL) {
 		variable_binding v = { symbol, { true, b->capture_count++ } };
-		idtrie_insert(&b->variables, sizeof(s_expr_ref*), &v);
+		bdtrie_insert(&b->variables, sizeof(ovs_expr_ref*), &v);
 
-		s_variable* old_captures = b->captures;
-		b->captures = malloc(sizeof(s_variable*) * b->capture_count);
+		ovru_variable* old_captures = b->captures;
+		b->captures = malloc(sizeof(ovru_variable*) * b->capture_count);
 		if (old_captures != NULL) {
 			memcpy(b->captures, old_captures, sizeof(uint32_t*) * (b->capture_count - 1));
 			free(old_captures);
 		}
 
-		s_variable* capture = idtrie_find(&p, sizeof(s_expr_ref*), &symbol).data;
+		ovru_variable* capture = bdtrie_find(&p, sizeof(ovs_expr_ref*), &symbol).data;
 		if (capture == NULL) {
 			// TODO ERROR
 		}
@@ -252,8 +252,8 @@ void capture_variable(idtrie p, variable_bindings* b, s_expr_ref* symbol) {
 	}
 }
 
-s_result s_compile(s_statement* result, const s_expr e, const uint32_t param_count, const s_expr_ref** params) {
-	idtrie variables = (idtrie){
+ovru_result ovru_compile(ovru_statement* result, const ovs_expr e, const uint32_t param_count, const ovs_expr_ref** params) {
+	bdtrie variables = (bdtrie){
 		NULL,
 		get_variable_binding,
 		update_variable_binding,
@@ -267,34 +267,34 @@ s_result s_compile(s_statement* result, const s_expr e, const uint32_t param_cou
 		variables
 	};
 	for (int i = 0; i < param_count; i++) {
-		variable_binding v = { params[i], { PARAMETER, i } };
-		idtrie_insert(&variables, sizeof(s_expr_ref*), &v);
+		variable_binding v = { params[i], { OVRU_PARAMETER, i } };
+		bdtrie_insert(&variables, sizeof(ovs_expr_ref*), &v);
 	}
 
-	s_expr data = s_symbol(NULL, u_strref(u"data"));
+	ovs_expr data = ovs_symbol(NULL, ovio_u_strref(u"data"));
 	compile_context c = {
 		b,
-		s_symbol(data.p, u_strref(u"quote")),
-		s_symbol(data.p, u_strref(u"lambda"))
+		ovs_symbol(data.p, ovio_u_strref(u"quote")),
+		ovs_symbol(data.p, ovio_u_strref(u"lambda"))
 	};
-	s_dealias(data);
+	ovs_dealias(data);
 
 	compile_statement(result, e, c);
 
-	s_dealias(c.data_quote);
-	s_dealias(c.data_lambda);
+	ovs_dealias(c.data_quote);
+	ovs_dealias(c.data_lambda);
 
-	return S_SUCCESS;
+	return OVRU_SUCCESS;
 }
 
 #define ARGS_ON_STACK 16
 #define ARGS_ON_HEAP 32
 
 typedef struct instruction_slot {
-	s_expr stack_values[ARGS_ON_STACK];
+	ovs_expr stack_values[ARGS_ON_STACK];
 	uint32_t heap_values_size;
-	s_expr* heap_values;
-	s_instruction instruction;
+	ovs_expr* heap_values;
+	ovs_instruction instruction;
 	struct instruction_slot* next;
 } instruction_slot;
 
@@ -308,55 +308,55 @@ void prepare_instruction_slot(instruction_slot* i, uint32_t size) {
 				free(i->heap_values);
 			}
 			i->heap_values_size = size;
-			i->heap_values = malloc(sizeof(s_expr) * size);
+			i->heap_values = malloc(sizeof(ovs_expr) * size);
 		}
 		i->instruction.values = i->heap_values;
 	}
 }
 
-s_expr represent_param(void* p) {
-	return (s_expr){ SYMBOL, .p=*(s_expr_ref**)p };
+ovs_expr represent_param(void* p) {
+	return (ovs_expr){ OVS_SYMBOL, .p=*(ovs_expr_ref**)p };
 }
 
-s_expr represent_lambda(void* d) {
-	s_bound_lambda* l = d;
+ovs_expr represent_lambda(void* d) {
+	ovru_bound_lambda* l = d;
 
-	s_expr form[] = {
-		s_list_of(l->lambda->param_count, (void**)l->lambda->params, represent_param),
-		s_list(0, NULL) // TODO
+	ovs_expr form[] = {
+		ovs_list_of(l->lambda->param_count, (void**)l->lambda->params, represent_param),
+		ovs_list(0, NULL) // TODO
 	};
-	uint32_t size = sizeof(form) / sizeof(s_expr);
+	uint32_t size = sizeof(form) / sizeof(ovs_expr);
 
-	s_expr r = s_list(2, form);
+	ovs_expr r = ovs_list(2, form);
 
 	for (int i = 0; i < size; i++) {
-		s_dealias(form[i]);
+		ovs_dealias(form[i]);
 	}
 
 	return r;
 }
 
-s_function_info inspect_lambda(void* d) {
-	s_bound_lambda* l = d;
+ovs_function_info inspect_lambda(void* d) {
+	ovru_bound_lambda* l = d;
 
-	return (s_function_info){ l->lambda->param_count, l->lambda->body.term_count };
+	return (ovs_function_info){ l->lambda->param_count, l->lambda->body.term_count };
 }
 
-s_result apply_lambda(s_instruction* result, s_expr* args, void* d) {
-	s_bound_lambda* l = d;
+int32_t apply_lambda(ovs_instruction* result, ovs_expr* args, void* d) {
+	ovru_bound_lambda* l = d;
 	;
 }
 
 void free_lambda(void* d) {
-	s_bound_lambda* l = d;
+	ovru_bound_lambda* l = d;
 	for (int i = 0; i < l->lambda->var_count; i++) {
-		s_dealias(l->capture[i]);
+		ovs_dealias(l->capture[i]);
 	}
 	free(l->capture);
-	s_free_lambda(l->lambda);
+	ovru_free_lambda(l->lambda);
 }
 
-static s_function_type lambda_function = {
+static ovs_function_type lambda_function = {
 	u"lambda",
 	represent_lambda,
 	inspect_lambda,
@@ -364,32 +364,32 @@ static s_function_type lambda_function = {
 	free_lambda
 };
 
-void eval_expression(s_expr* result, s_term e, const s_expr* args, const s_expr* closure) {
+void eval_expression(ovs_expr* result, ovru_term e, const ovs_expr* args, const ovs_expr* closure) {
 	switch (e.type) {
-		case VARIABLE:
+		case OVRU_VARIABLE:
 			switch (e.variable.type) {
-				case PARAMETER:
+				case OVRU_PARAMETER:
 					*result = args[e.variable.index];
 
-				case CAPTURE:
+				case OVRU_CAPTURE:
 					*result = closure[e.variable.index];
 
 				default:
 					assert(false);
 			}
 
-		case LAMBDA:
+		case OVRU_LAMBDA:
 			;
-			s_lambda l = {
+			ovru_lambda l = {
 			};
-			*result = s_function(&lambda_function, sizeof(s_lambda), &l);
+			*result = ovs_function(&lambda_function, sizeof(ovru_lambda), &l);
 
 		default:
-			*result = s_alias(e.quote);
+			*result = ovs_alias(e.quote);
 	}
 }
 
-void eval_statement(instruction_slot* result, s_statement s, const s_expr* args, const s_expr* closure) {
+void eval_statement(instruction_slot* result, ovru_statement s, const ovs_expr* args, const ovs_expr* closure) {
 	prepare_instruction_slot(result, s.term_count);
 
 	for (int i = 0; i < s.term_count; i++) {
@@ -397,25 +397,25 @@ void eval_statement(instruction_slot* result, s_statement s, const s_expr* args,
 	}
 }
 
-s_result execute_instruction(instruction_slot* next, instruction_slot* current) {
-	if (current->instruction.values[0].type != FUNCTION) {
-		return S_ATTEMPT_TO_CALL_NON_FUNCTION;
+ovru_result execute_instruction(instruction_slot* next, instruction_slot* current) {
+	if (current->instruction.values[0].type != OVS_FUNCTION) {
+		return OVRU_ATTEMPT_TO_CALL_NON_FUNCTION;
 	}
 	
-	s_function_data* f = &current->instruction.values[0].p->function;
+	ovs_function_data* f = &current->instruction.values[0].p->function;
 
-	s_function_info i = f->type->inspect(f + 1);
+	ovs_function_info i = f->type->inspect(f + 1);
 
 	prepare_instruction_slot(next, i.max_result_size);
 
 	if (i.arg_count != current->instruction.size - 1) {
-		return S_ARGUMENT_COUNT_MISMATCH;
+		return OVRU_ARGUMENT_COUNT_MISMATCH;
 	}
 
 	return f->type->apply(&next->instruction, current->instruction.values, f + 1);
 }
 
-s_result s_eval(const s_statement s, const s_expr* args) {
+ovru_result ovru_eval(const ovru_statement s, const ovs_expr* args) {
 	/*
 	 * We have two instruction slots, the current instruction which is
 	 * executing, and the next instruction which is being written. We
@@ -432,8 +432,8 @@ s_result s_eval(const s_statement s, const s_expr* args) {
 	instruction_slot* current = &a;
 	eval_statement(current, s, args, NULL);
 
-	s_result r = S_SUCCESS;
-	while (r == S_SUCCESS && current->instruction.size > 0) {
+	ovru_result r = OVRU_SUCCESS;
+	while (r == OVRU_SUCCESS && current->instruction.size > 0) {
 		r = execute_instruction(current->next, current);
 		current = current->next;
 	}

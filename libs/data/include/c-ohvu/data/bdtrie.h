@@ -19,8 +19,8 @@
  * Internal structure
  */
 
-typedef struct idtrie_node {
-	struct idtrie_node* parent;
+typedef struct bdtrie_node {
+	struct bdtrie_node* parent;
 	union {
 		struct {
 			bool
@@ -32,45 +32,45 @@ typedef struct idtrie_node {
 		uint32_t layout;
 	};
 	// followed by 'index' bytes of key data
-	// if 'hasleaf' then followed by idtrie_leaf
-	// if 'hasbranch' then followed by idtrie_branch
-} idtrie_node;
+	// if 'hasleaf' then followed by bdtrie_leaf
+	// if 'hasbranch' then followed by bdtrie_branch
+} bdtrie_node;
 
-typedef struct idtrie_leaf {
+typedef struct bdtrie_leaf {
 	uint32_t key_size;
 	void* value;
-} idtrie_leaf;
+} bdtrie_leaf;
 
-typedef struct idtrie_branch {
+typedef struct bdtrie_branch {
 	uint64_t population[4]; // for popcount compression
-	idtrie_node* children[1]; // variable length equal to popcount
-} idtrie_branch;
+	bdtrie_node* children[1]; // variable length equal to popcount
+} bdtrie_branch;
 
 /*
  * API surface
  */
 
-typedef struct idtrie_value {
-	idtrie_node* node;
+typedef struct bdtrie_value {
+	bdtrie_node* node;
 	void* data;
-} idtrie_value;
+} bdtrie_value;
 
-typedef struct idtrie {
-	idtrie_node* root;
-	void* (*get_value)(uint32_t key_size, void* key_data, idtrie_node* owner);
-	void (*update_value)(void* value, idtrie_node* owner);
+typedef struct bdtrie {
+	bdtrie_node* root;
+	void* (*get_value)(uint32_t key_size, void* key_data, bdtrie_node* owner);
+	void (*update_value)(void* value, bdtrie_node* owner);
 	void (*free_value)(void* value);
-} idtrie;
+} bdtrie;
 
-idtrie_value idtrie_insert(idtrie* t, uint32_t key_size, void* key_data);
+bdtrie_value bdtrie_insert(bdtrie* t, uint32_t key_size, void* key_data);
 
-idtrie_value idtrie_find(idtrie* t, uint32_t key_size, void* key_data);
+bdtrie_value bdtrie_find(bdtrie* t, uint32_t key_size, void* key_data);
 
-void idtrie_delete(idtrie_node* n);
+void bdtrie_delete(bdtrie_node* n);
 
-uint32_t idtrie_key(void* dest, idtrie_node* n);
+uint32_t bdtrie_key(void* dest, bdtrie_node* n);
 
-uint32_t idtrie_key_size(idtrie_node* n);
+uint32_t bdtrie_key_size(bdtrie_node* n);
 
-void idtrie_clear(idtrie t);
+void bdtrie_clear(bdtrie t);
 

@@ -14,25 +14,31 @@
 #include "c-ohvu/io/stream.h"
 #include "c-ohvu/io/scanner.h"
 
-#include "c-ohvu/data/intrie.h"
+#include "c-ohvu/data/bdtrie.h"
 #include "c-ohvu/data/sexpr.h"
 #include "c-ohvu/data/reader.h"
 
-reader* open_reader(scanner* s) {
+typedef ovio_scanner scanner;
+typedef ovio_strref strref;
+typedef ovda_reader reader;
+typedef ovda_cursor_stack cursor_stack;
+typedef ovs_expr expr;
+
+reader* ovda_open_reader(scanner* s) {
 	reader* r = malloc(sizeof(reader));
 	r->scanner = s;
 	r->cursor.position = 0;
 	r->cursor.stack = NULL;
 
-	s_expr data = s_symbol(NULL, u_strref(u"data"));
-	r->data_quote = s_symbol(data.p, u_strref(u"quote"));
-	r->data_nil = s_symbol(data.p, u_strref(u"nil"));
-	s_dealias(data);
+	expr data = ovs_symbol(NULL, ovio_u_strref(u"data"));
+	r->data_quote = ovs_symbol(data.p, ovio_u_strref(u"quote"));
+	r->data_nil = ovs_symbol(data.p, ovio_u_strref(u"nil"));
+	ovs_dealias(data);
 
 	return r;
 }
 
-void close_reader(reader* r) {
+void ovda_close_reader(reader* r) {
 	cursor_stack* s = r->cursor.stack;
 	while (s != NULL) {
 		cursor_stack* p = s;
@@ -42,7 +48,7 @@ void close_reader(reader* r) {
 	free(r);
 }
 
-int64_t cursor_position(reader* r, int32_t depth) {
+int64_t ovda_cursor_position(reader* r, int32_t depth) {
 	cursor_stack s = r->cursor;
 	for (int32_t i = 0; i < depth; i++) {
 		s = *s.stack;
@@ -50,7 +56,7 @@ int64_t cursor_position(reader* r, int32_t depth) {
 	return s.position;
 }
 
-int32_t cursor_depth(reader* r) {
+int32_t ovda_cursor_depth(reader* r) {
 	int32_t d = 0;
 	cursor_stack s = r->cursor;
 	while (s.stack != NULL) {
@@ -88,7 +94,7 @@ bool is_whitespace(UChar32 c, const void* v) {
 	return U' ' == c || U'\t' == c || U'\n' == c;
 }
 
-bool is_symbol_character(UChar32 c, const void* v) {
+bool isymbol_character(UChar32 c, const void* v) {
 	if (c == U':' ||
 	    c == U'(' ||
 	    c == U')' ||
@@ -98,8 +104,8 @@ bool is_symbol_character(UChar32 c, const void* v) {
 	return true;
 }
 
-bool is_symbol_leading_character(UChar32 c, const void* v) {
-	return is_symbol_character(c, v);
+bool isymbol_leading_character(UChar32 c, const void* v) {
+	return isymbol_character(c, v);
 }
 
 bool is_equal(UChar32 c, const void* to) {
@@ -115,169 +121,187 @@ bool is_not_equal(UChar32 c, const void* to) {
  */
 
 void skip_whitespace(scanner* s) {
-	advance_input_while(s, is_whitespace, NULL);
-	discard_buffer(s);
+	ovio_advance_input_while(s, is_whitespace, NULL);
+	ovio_discard_buffer(s);
 }
 
 int32_t scan_name(scanner* s) {
-	int32_t start = input_position(s);
-	if (advance_input_if(s, is_symbol_leading_character, NULL)) {
-		advance_input_while(s, is_symbol_character, NULL);
-		return input_position(s) - start;
+	int32_t start = ovio_input_position(s);
+	if (ovio_advance_input_if(s, isymbol_leading_character, NULL)) {
+		ovio_advance_input_while(s, isymbol_character, NULL);
+		return ovio_input_position(s) - start;
 	}
 	return -1;
 }
 
-bool read_list(reader* r, s_expr* e) {
-	if (read_step_in(r)) {
+ovda_result ovda_read_list(reader* r, expr* e) {
+	if (ovda_read_step_in(r) == OVDA_SUCCESS) {
 		skip_whitespace(r->scanner);
 
-		return read_step_out(r, e);
+		return ovda_read_step_out(r, e);
 	}
-	return false;
+	return OVDA_SUCCESS;
 }
 
-bool read_symbol(reader* r, s_expr* e) {
+ovda_result ovda_read_symbol(reader* r, expr* e) {
 	skip_whitespace(r->scanner);
        
-	s_expr symbol = { SYMBOL, .p=NULL };
+	expr symbol = { OVS_SYMBOL, .p=NULL };
 
 	do {
-		discard_buffer(r->scanner);
+		ovio_discard_buffer(r->scanner);
 		int32_t len = scan_name(r->scanner);
 		if (len <= 0) {
 			if (symbol.p) {
-				// TODO error
+				return OVDA_INVALID;
 			}
-			return false;
+			return OVDA_UNEXPECTED_TYPE;
 		}
 		UChar* n = malloc(sizeof(UChar) * len);
-		take_buffer_length(r->scanner, len, n);
+		ovio_take_buffer_length(r->scanner, len, n);
 
-		symbol = s_symbol(symbol.p, u_strnref(len, n));
+		symbol = ovs_symbol(symbol.p, ovio_u_strnref(len, n));
 
 		free(n);
-	} while (advance_input_if(r->scanner, is_equal, &colon));
+	} while (ovio_advance_input_if(r->scanner, is_equal, &colon));
 
 	*e = symbol;
 
-	return true;
+	return OVDA_SUCCESS;
 }
 
-bool read_string(reader* r, s_expr* e) {
-	if (!advance_input_if(r->scanner, is_equal, &double_quote)) {
-		return false;
+ovda_result read_string(reader* r, expr* e) {
+	if (!ovio_advance_input_if(r->scanner, is_equal, &double_quote)) {
+		return OVDA_UNEXPECTED_TYPE;
 	}
 
-	discard_buffer(r->scanner);
-	advance_input_while(r->scanner, is_not_equal, &double_quote);
+	ovio_discard_buffer(r->scanner);
+	ovio_advance_input_while(r->scanner, is_not_equal, &double_quote);
 
-	int32_t len = input_position(r->scanner) - buffer_position(r->scanner);
+	int32_t len = ovio_input_position(r->scanner) - ovio_buffer_position(r->scanner);
 
-	if (!advance_input_if(r->scanner, is_equal, &double_quote)) {
-		// TODO error
-		return false;
+	if (!ovio_advance_input_if(r->scanner, is_equal, &double_quote)) {
+		return OVDA_INVALID;
 	}
 
 	UChar* c = malloc(sizeof(UChar) * len);
-	take_buffer_length(r->scanner, len, c);
-	s_expr string = s_string(u_strnref(len, c));
+	ovio_take_buffer_length(r->scanner, len, c);
+	expr string = ovs_string(ovio_u_strnref(len, c));
 
-	s_expr list[] = { r->data_quote, string };
-	*e = s_list(2, list);
+	expr list[] = { r->data_quote, string };
+	*e = ovs_list(2, list);
 
-	s_dealias(string);
+	ovs_dealias(string);
 	free(c);
 
-	return true;
+	return OVDA_SUCCESS;
 }
 
-bool read_quote(reader* r, s_expr* e) {
-	if (!advance_input_if(r->scanner, is_equal, &single_quote)) {
-		return false;
+ovda_result read_quote(reader* r, expr* e) {
+	if (!ovio_advance_input_if(r->scanner, is_equal, &single_quote)) {
+		return OVDA_UNEXPECTED_TYPE;
 	}
 
-	discard_buffer(r->scanner);
+	ovio_discard_buffer(r->scanner);
 
-	s_expr data;
-	if (!read(r, &data)) {
-		// TODO error
-		return false;
+	expr data;
+	if (ovda_read(r, &data) != OVDA_SUCCESS) {
+		return OVDA_INVALID;
 	}
 
-	s_expr list[] = { r->data_quote, data };
-	*e = s_list(2, list);
+	expr list[] = { r->data_quote, data };
+	*e = ovs_list(2, list);
 
-	s_dealias(data);
+	ovs_dealias(data);
 
-	return true;
+	return OVDA_SUCCESS;
 }
 
-bool read_next(reader* r, s_expr* e) {
-	return read_string(r, e) || read_quote(r, e) || read_symbol(r, e) || read_list(r, e);
+ovda_result read_next(reader* r, expr* e) {
+	ovda_result res;
+	res = read_string(r, e);
+	if (res != OVDA_UNEXPECTED_TYPE) {
+		return res;
+	}
+
+	res = read_quote(r, e);
+	if (res != OVDA_UNEXPECTED_TYPE) {
+		return res;
+	}
+
+	res = ovda_read_symbol(r, e);
+	if (res != OVDA_UNEXPECTED_TYPE) {
+		return res;
+	}
+
+	res = ovda_read_list(r, e);
+	if (res != OVDA_UNEXPECTED_TYPE) {
+		return res;
+	}
+	return OVDA_INVALID;
 }
 
-bool read(reader* r, s_expr* e) {
+ovda_result ovda_read(reader* r, expr* e) {
 	skip_whitespace(r->scanner);
 	return read_next(r, e);
 }
 
-bool read_step_in(reader* r) {
+ovda_result ovda_read_step_in(reader* r) {
 	skip_whitespace(r->scanner);
-	bool success = advance_input_if(r->scanner, is_equal, &open_bracket);
-	if (success) {
+	ovda_result res = ovio_advance_input_if(r->scanner, is_equal, &open_bracket);
+	if (res == OVDA_SUCCESS) {
 		push_cursor(r);
 	}
-	return success;
+	return res;
 }
 
-bool read_step_out(reader* r, s_expr* e) {
-	if (cursor_depth(r) <= 0) {
-		return false;
+ovda_result ovda_read_step_out(reader* r, expr* e) {
+	if (ovda_cursor_depth(r) <= 0) {
+		return OVDA_UNEXPECTED_TYPE;
 	}
 
-	if (advance_input_if(r->scanner, is_equal, &close_bracket)) {
-		discard_buffer(r->scanner);
+	if (ovio_advance_input_if(r->scanner, is_equal, &close_bracket)) {
+		ovio_discard_buffer(r->scanner);
 
 		*e = r->data_nil;
-		return true;
+		return OVDA_SUCCESS;
 	}
 
-	s_expr head;
-	s_expr tail;
+	expr head;
+	expr tail;
 	if (!read_next(r, &head)) {
-		return false;
+		return OVDA_INVALID;
 	}
 
 	skip_whitespace(r->scanner);
-	if (advance_input_if(r->scanner, is_equal, &dot)) {
+	if (ovio_advance_input_if(r->scanner, is_equal, &dot)) {
 		if (!read_next(r, &tail)) {
-			s_dealias(head);
-			return false;
+			ovs_dealias(head);
+			return OVDA_INVALID;
 		}
 
 		skip_whitespace(r->scanner);
-		s_expr nil;
-		if (!read_step_out(r, &nil)) {
-			s_dealias(head);
-			return false;
+		expr nil;
+		if (!ovda_read_step_out(r, &nil)) {
+			ovs_dealias(head);
+			return OVDA_INVALID;
 		}
-		if (nil.type == SYMBOL && r->data_nil.p->symbol == nil.p->symbol) {
-			s_dealias(nil);
-			s_dealias(head);
-			return false;
+		if (nil.type == OVS_SYMBOL && r->data_nil.p->symbol == nil.p->symbol) {
+			ovs_dealias(nil);
+			ovs_dealias(head);
+			return OVDA_INVALID;
 		}
-		s_dealias(nil);
-	} else if (!read_step_out(r, &tail)) {
-		s_dealias(head);
-		return false;
+		ovs_dealias(nil);
+	} else if (!ovda_read_step_out(r, &tail)) {
+		ovs_dealias(head);
+		return OVDA_INVALID;
 	}
 
-	s_expr cons = s_cons(head, tail);
+	expr cons = ovs_cons(head, tail);
 
-	s_dealias(head);
-	s_dealias(tail);
+	ovs_dealias(head);
+	ovs_dealias(tail);
 
 	*e = cons;
-	return true;
+	return OVDA_SUCCESS;
 }
