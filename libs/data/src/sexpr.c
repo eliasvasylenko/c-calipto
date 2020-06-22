@@ -372,7 +372,9 @@ ovs_expr ovs_list_of(int32_t count, void** e, ovs_expr (*map)(void* elem)) {
 	ovs_expr l = ovs_alias(data_nil);
 	for (int i = count - 1; i >= 0; i--) {
 		ovs_expr prev = l;
-		l = ovs_cons(map(e[i]), l);
+		ovs_expr head = map(e[i]);
+		l = ovs_cons(head, l);
+		ovs_dealias(head);
 		ovs_dealias(prev);
 	}
 	return l;

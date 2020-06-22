@@ -24,7 +24,7 @@
 
 static UConverter* char_conv;
 
-void run(ovs_expr e, ovs_expr args) {
+int run(ovs_expr e, ovs_expr args) {
 	ovs_expr_ref* data = ovs_symbol(NULL, ovio_u_strref(u"data")).p;
 	ovs_expr_ref* system = ovs_symbol(NULL, ovio_u_strref(u"system")).p;
 	const ovs_expr_ref* parameters[] = {
@@ -60,7 +60,37 @@ void run(ovs_expr e, ovs_expr args) {
 				ovs_string(ovio_u_strref(u"stderr")))
 	};
 
-	ovru_eval(s, arguments);
+	return ovru_eval(s, arguments);
+}
+
+int run_bootstrap(ovs_expr args) {
+	UFILE* f = u_fopen("./bootstrap.ov", "r", NULL, NULL);
+
+	if (f == NULL) {
+		return 1;
+	}
+
+	ovio_stream* st = ovio_open_file_stream(f);
+	ovio_scanner* sc = ovio_open_scanner(st);
+	ovda_reader* r = ovda_open_reader(sc);
+
+	ovs_expr e;
+	int result;
+	if (ovda_read(r, &e) == OVDA_SUCCESS) {
+		ovs_dump(e);
+		result = run(e, args);
+
+		ovs_dealias(e);
+	} else {
+		result = 2;
+	}
+
+	ovda_close_reader(r);
+	ovio_close_scanner(sc);
+	ovio_close_stream(st);
+	u_fclose(f);
+
+	return 0;
 }
 
 ovs_expr read_arg(void* arg) {
@@ -73,31 +103,11 @@ int main(int argc, char** argv) {
 	char_conv = ucnv_open(NULL, &error);
 
 	ovs_init();
-
 	ovs_expr args = ovs_list_of(argc, (void**)argv, read_arg);
 
-	UFILE* f = u_fopen("./bootstrap.cal", "r", NULL, NULL);
-	ovio_stream* st = ovio_open_file_stream(f);
-	ovio_scanner* sc = ovio_open_scanner(st);
-	ovda_reader* r = ovda_open_reader(sc);
-
-	ovs_expr e;
-	if (ovda_read(r, &e)) {
-		ovs_dump(e);
-		run(e, args);
-
-		ovs_dealias(e);
-	} else {
-		printf("Failed to read bootstrap file!");
-	}
-
-	ovda_close_reader(r);
-	ovio_close_scanner(sc);
-	ovio_close_stream(st);
-	u_fclose(f);
+	int result = run_bootstrap(args);
 
 	ovs_dealias(args);
-
 	ovs_close();
 
 	ucnv_close(char_conv);
