@@ -8,6 +8,6 @@ target_link_libraries(io ICU::uc ICU::data ICU::io)
 target_include_directories(io PUBLIC include)
 
 if(BUILD_TESTING)
-#  add_subdirectory(test)
+	#add_subdirectory(test)
 endif()
 

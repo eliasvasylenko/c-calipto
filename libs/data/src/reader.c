@@ -45,6 +45,8 @@ void ovda_close_reader(reader* r) {
 		s = p->stack;
 		free(p);
 	}
+	ovs_dealias(r->data_quote);
+	ovs_dealias(r->data_nil);
 	free(r);
 }
 
@@ -220,30 +222,28 @@ ovda_result read_quote(reader* r, expr* e) {
 ovda_result read_next(reader* r, expr* e) {
 	ovda_result res;
 	res = read_string(r, e);
-	if (res != OVDA_UNEXPECTED_TYPE) {
-		return res;
-	}
 
-	res = read_quote(r, e);
-	if (res != OVDA_UNEXPECTED_TYPE) {
-		return res;
-	}
+	if (res == OVDA_UNEXPECTED_TYPE) {
+		res = read_quote(r, e);
 
-	res = ovda_read_symbol(r, e);
-	if (res != OVDA_UNEXPECTED_TYPE) {
-		return res;
-	}
+		if (res == OVDA_UNEXPECTED_TYPE) {
+			res = ovda_read_symbol(r, e);
 
-	res = ovda_read_list(r, e);
-	if (res != OVDA_UNEXPECTED_TYPE) {
-		return res;
+			if (res == OVDA_UNEXPECTED_TYPE) {
+				res = ovda_read_list(r, e);
+			}
+		}
 	}
-	return OVDA_INVALID;
+	return res;
 }
 
 ovda_result ovda_read(reader* r, expr* e) {
 	skip_whitespace(r->scanner);
-	return read_next(r, e);
+	ovda_result res = read_next(r, e);
+	if (res != OVDA_SUCCESS) {
+		res = OVDA_INVALID;
+	}
+	return res;
 }
 
 ovda_result ovda_read_step_in(reader* r) {
@@ -263,13 +263,14 @@ ovda_result ovda_read_step_out(reader* r, expr* e) {
 	if (ovio_advance_input_if(r->scanner, is_equal, &close_bracket)) {
 		ovio_discard_buffer(r->scanner);
 
+		ovs_alias(r->data_nil);
 		*e = r->data_nil;
 		return OVDA_SUCCESS;
 	}
 
 	expr head;
 	expr tail;
-	if (!read_next(r, &head)) {
+	if (read_next(r, &head) != OVDA_SUCCESS) {
 		return OVDA_INVALID;
 	}
 
@@ -281,18 +282,12 @@ ovda_result ovda_read_step_out(reader* r, expr* e) {
 		}
 
 		skip_whitespace(r->scanner);
-		expr nil;
-		if (!ovda_read_step_out(r, &nil)) {
+		if (!ovio_advance_input_if(r->scanner, is_equal, &close_bracket)) {
 			ovs_dealias(head);
 			return OVDA_INVALID;
 		}
-		if (nil.type == OVS_SYMBOL && r->data_nil.p->symbol == nil.p->symbol) {
-			ovs_dealias(nil);
-			ovs_dealias(head);
-			return OVDA_INVALID;
-		}
-		ovs_dealias(nil);
-	} else if (!ovda_read_step_out(r, &tail)) {
+		
+	} else if (ovda_read_step_out(r, &tail) != OVDA_SUCCESS) {
 		ovs_dealias(head);
 		return OVDA_INVALID;
 	}

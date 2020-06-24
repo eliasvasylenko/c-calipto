@@ -64,7 +64,7 @@ int run(ovs_expr e, ovs_expr args) {
 }
 
 int run_bootstrap(ovs_expr args) {
-	UFILE* f = u_fopen("./bootstrap.ov", "r", NULL, NULL);
+	UFILE* f = u_fopen("./data/bootstrap.ov", "r", NULL, NULL);
 
 	if (f == NULL) {
 		return 1;
@@ -111,5 +111,6 @@ int main(int argc, char** argv) {
 	ovs_close();
 
 	ucnv_close(char_conv);
-	return 0;
+
+	return result;
 }

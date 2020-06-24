@@ -14,16 +14,22 @@ add_subdirectory(libs/data)
 add_subdirectory(libs/runtime)
 add_subdirectory(libs/io)
 
+macro(add_resource_dependencies dependent)
+	add_custom_command(
+		TARGET ${dependent} POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/data/ $<TARGET_FILE_DIR:${dependent}>/data/
+		COMMENT "copy resources from ${CMAKE_SOURCE_DIR}/data"
+	)
+endmacro()
+
 add_executable(ohvu-shell apps/shell.c)
 set_property(TARGET ohvu-shell PROPERTY C_STANDARD 11)
 target_include_directories(ohvu-shell PUBLIC include)
 target_link_libraries(ohvu-shell data runtime io)
+add_resource_dependencies(ohvu-shell)
 
 find_package(ICU 61.0 COMPONENTS uc data io REQUIRED)
 target_link_libraries(ohvu-shell ICU::uc ICU::data ICU::io)
-
-file(GLOB DATA data/*)
-install(FILES ${DATA} DESTINATION data)
 
 if(BUILD_TESTING)
   include(CTest)

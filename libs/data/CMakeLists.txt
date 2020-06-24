@@ -10,6 +10,6 @@ target_include_directories(data PRIVATE "${libpopcnt_SOURCE_DIR}")
 target_include_directories(data PUBLIC include)
 
 if(BUILD_TESTING)
-  add_subdirectory(test)
+	add_subdirectory(test)
 endif()
 
