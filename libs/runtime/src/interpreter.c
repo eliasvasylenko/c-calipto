@@ -43,17 +43,17 @@ typedef struct compile_context {
 	ovs_expr data_lambda;
 } compile_context;
 
-bool compile_quote(ovru_term* result, int32_t part_count, ovs_expr* parts, compile_context c) {
+ovru_result compile_quote(ovru_term* result, int32_t part_count, ovs_expr* parts, compile_context c) {
 	if (part_count != 1) {
-		return false;
+		return OVRU_INVALID_QUOTE_LENGTH;
 	}
 
 	*result = (ovru_term){ .quote=parts[0] };
 
-	return true;
+	return OVRU_SUCCESS;
 }
 
-bool compile_statement(ovru_statement* result, ovs_expr s, compile_context c);
+ovru_result compile_statement(ovru_statement* result, ovs_expr s, compile_context c);
 
 ovru_term ovs_alias_term(ovru_term t) {
 	switch (t.type) {
@@ -86,9 +86,9 @@ void* get_ref(ovs_expr e) {
 	return e.p;
 }
 
-bool compile_lambda(ovru_term* result, int32_t part_count, ovs_expr* parts, compile_context c) {
+ovru_result compile_lambda(ovru_term* result, int32_t part_count, ovs_expr* parts, compile_context c) {
 	if (part_count != 2) {
-		return false;
+		return OVRU_INVALID_LAMBDA_LENGTH;
 	}
 
 	ovs_expr params_decl = parts[0];
@@ -97,16 +97,16 @@ bool compile_lambda(ovru_term* result, int32_t part_count, ovs_expr* parts, comp
 	ovs_expr_ref** params;
 	int32_t param_count = ovs_delist_of(params_decl, (void***)&params, get_ref);
 	if (param_count < 0) {
-		return false;
+		return OVRU_INVALID_PARAMETER_TERMINATOR;
 	}
 
 	ovru_statement body;
-	bool success = compile_statement(&body, body_decl, c);
+	ovru_result success = compile_statement(&body, body_decl, c);
 
 	uint32_t var_count = 0;
 	uint32_t* vars = NULL;
 
-	if (success) {
+	if (success == OVRU_SUCCESS) {
 		ovru_lambda* l = malloc(sizeof(ovru_lambda));
 		l->ref_count = ATOMIC_VAR_INIT(1);
 		l->param_count = param_count;
@@ -159,29 +159,27 @@ void ovru_free_lambda(ovru_lambda* l) {
 	}
 }
 
-bool compile_expression(ovru_term* result, ovs_expr e, compile_context c) {
+ovru_result compile_expression(ovru_term* result, ovs_expr e, compile_context c) {
 	if (ovs_atom(e)) {
 		uint32_t* index_into_parent = bdtrie_find(
 				&c.variables.variables,
 				sizeof(ovs_expr_ref*),
 				e.p).data;
 		*result = (ovru_term){ .type=OVRU_VARIABLE, .variable=*index_into_parent };
-		return true;
+		return OVRU_SUCCESS;
 	}
 
 	ovs_expr* parts;
 	uint32_t count = ovs_delist(e, &parts);
 	if (count <= 0) {
-		printf("Syntax error in expression: ");
-		ovs_dump(e);
-		return false;
+		return count == 0 ? OVRU_EMPTY_EXPRESSION : OVRU_INVALID_EXPRESSION_TERMINATOR;
 	}
 
 	ovs_expr kind = parts[0];
 	int32_t term_count = count - 1;
 	ovs_expr* terms = parts + 1;
 
-	bool success;
+	ovru_result success;
 	if (ovs_eq(kind, c.data_quote)) {
 		success = compile_quote(result, term_count, terms, c);
 
@@ -189,7 +187,7 @@ bool compile_expression(ovru_term* result, ovs_expr e, compile_context c) {
 		success = compile_lambda(result, term_count, terms, c);
 
 	} else {
-		success = false;
+		success = OVRU_INVALID_EXPRESSION_TYPE;
 	}
 
 	for (int i = 0; i < count; i++) {
@@ -200,32 +198,33 @@ bool compile_expression(ovru_term* result, ovs_expr e, compile_context c) {
 	return success;
 }
 
-bool compile_statement(ovru_statement* result, ovs_expr s, compile_context c) {
+ovru_result compile_statement(ovru_statement* result, ovs_expr s, compile_context c) {
 	ovs_expr* expressions;
 	int32_t count = ovs_delist(s, &expressions);
 	if (count <= 0) {
-		printf("Syntax error in statement: ");
-		ovs_dump(s);
-		return false;
+		return count == 0 ? OVRU_EMPTY_STATEMENT : OVRU_INVALID_STATEMENT_TERMINATOR;
 	}
 
 	printf("count %i\n", count);
 
 	ovru_term* terms = malloc(sizeof(ovru_term) * count);
-	bool success = true;
+	ovru_result success;
 	for (int i = 0; i < count; i++) {
 		printf("%p\n", &terms[i]);
 		printf("%i\n", expressions[i].type);
-		if (compile_expression(&terms[i], expressions[i], c)) {
-			ovs_dealias(expressions[i]);
-		} else {
-			success = false;
+		success = compile_expression(&terms[i], expressions[i], c);
+		ovs_dealias(expressions[i]);
+
+		if (success != OVRU_SUCCESS) {
+			for (; i < count; i++) {
+				ovs_dealias(expressions[i]);
+			}
 			break;
 		}
 	}
 	free(expressions);
 
-	if (success) {
+	if (success == OVRU_SUCCESS) {
 		*result = (ovru_statement){ count, terms };
 	}
 
@@ -279,12 +278,12 @@ ovru_result ovru_compile(ovru_statement* result, const ovs_expr e, const uint32_
 	};
 	ovs_dealias(data);
 
-	compile_statement(result, e, c);
+	ovru_result success = compile_statement(result, e, c);
 
 	ovs_dealias(c.data_quote);
 	ovs_dealias(c.data_lambda);
 
-	return OVRU_SUCCESS;
+	return success;
 }
 
 #define ARGS_ON_STACK 16

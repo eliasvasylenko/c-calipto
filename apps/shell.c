@@ -41,26 +41,28 @@ int run(ovs_expr e, ovs_expr args) {
 	ovs_free(OVS_SYMBOL, system);
 
 	ovru_statement s;
-	ovru_compile(&s, e, sizeof(parameters) / sizeof(ovs_expr_ref*), parameters);
+	if (ovru_compile(&s, e, sizeof(parameters) / sizeof(ovs_expr_ref*), parameters) == OVRU_SUCCESS) {
+		const ovs_expr arguments[] = {
+			args,
+			ovru_exit(),
+			ovru_cons(),
+			ovru_des(),
+			ovru_eq(),
+			ovru_open_scanner(
+					u_finit(stdin, NULL, NULL),
+					ovs_string(ovio_u_strref(u"stdin"))),
+			ovru_open_printer(
+					u_finit(stdout, NULL, NULL),
+					ovs_string(ovio_u_strref(u"stdout"))),
+			ovru_open_printer(
+					u_finit(stderr, NULL, NULL),
+					ovs_string(ovio_u_strref(u"stderr")))
+		};
 
-	const ovs_expr arguments[] = {
-		args,
-		ovru_exit(),
-		ovru_cons(),
-		ovru_des(),
-		ovru_eq(),
-		ovru_open_scanner(
-				u_finit(stdin, NULL, NULL),
-				ovs_string(ovio_u_strref(u"stdin"))),
-		ovru_open_printer(
-				u_finit(stdout, NULL, NULL),
-				ovs_string(ovio_u_strref(u"stdout"))),
-		ovru_open_printer(
-				u_finit(stderr, NULL, NULL),
-				ovs_string(ovio_u_strref(u"stderr")))
-	};
-
-	return ovru_eval(s, arguments);
+		return ovru_eval(s, arguments);
+	} else {
+		return 3;
+	}
 }
 
 int run_bootstrap(ovs_expr args) {
@@ -90,7 +92,7 @@ int run_bootstrap(ovs_expr args) {
 	ovio_close_stream(st);
 	u_fclose(f);
 
-	return 0;
+	return result;
 }
 
 ovs_expr read_arg(void* arg) {

@@ -248,11 +248,11 @@ ovda_result ovda_read(reader* r, expr* e) {
 
 ovda_result ovda_read_step_in(reader* r) {
 	skip_whitespace(r->scanner);
-	ovda_result res = ovio_advance_input_if(r->scanner, is_equal, &open_bracket);
-	if (res == OVDA_SUCCESS) {
-		push_cursor(r);
+	if (!ovio_advance_input_if(r->scanner, is_equal, &open_bracket)) {
+		return OVDA_UNEXPECTED_TYPE;
 	}
-	return res;
+	push_cursor(r);
+	return OVDA_SUCCESS;
 }
 
 ovda_result ovda_read_step_out(reader* r, expr* e) {
