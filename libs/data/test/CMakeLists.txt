@@ -1,5 +1,5 @@
-add_executable(test-data test.c)
+add_executable(bdtrie-test bdtrie_test.c)
  
-target_link_libraries(test-data data unity)
+target_link_libraries(bdtrie-test data unity)
  
-add_test(test_1 test-data)
+add_test(bdtrie-test bdtrie-test)

@@ -114,5 +114,7 @@ int main(int argc, char** argv) {
 
 	ucnv_close(char_conv);
 
+	printf("Returning with %i\n", result);
+
 	return result;
 }

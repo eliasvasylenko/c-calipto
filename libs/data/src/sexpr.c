@@ -221,7 +221,7 @@ bool ovs_eq(const ovs_expr a, const ovs_expr b) {
 		case OVS_INTEGER:
 			return a.integer == b.integer;
 	}
-	return true;
+	return false;
 }
 
 void ovs_elem_dump(const ovs_expr s);
