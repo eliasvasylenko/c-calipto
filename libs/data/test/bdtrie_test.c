@@ -13,10 +13,12 @@ typedef struct entry {
 	uint32_t index;
 } entry;
 
-int compare_entries(entry* a, entry* b) {
-	int c = strcmp(a->key, b->key);
+int compare_entries(const void* a, const void* b) {
+	const entry* ea = a;
+	const entry* eb = b;
+	int c = strcmp(ea->key, eb->key);
 	if (!c) {
-		c = b->index - a->index;
+		c = eb->index - ea->index;
 	}
 	return c;
 }
@@ -52,7 +54,16 @@ void test_insert(size_t s, char** k) {
 		e[i] = (entry){ k[i], i };
 	}
 
-	// 
+	qsort(e, s, sizeof(entry), compare_entries);
+	int count = 0;
+	for (int i = 1; i < s; i++) {
+		if (e[i].index < 0 || strcmp(e[count].key, e[i + 1].key)) {
+			count++;
+		}
+		e[count] = e[i - 1];
+	}
+
+	//
 	// associate each key with its index value
 	//
 	// insert each into trie
@@ -61,6 +72,8 @@ void test_insert(size_t s, char** k) {
 	//
 	// check trie iterate in same order!
 	//
+
+	free(e);
 }
 
 void test_insert_and_remove_multiple_keys() {
