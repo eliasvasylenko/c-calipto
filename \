@@ -70,12 +70,8 @@ bdtrie_leaf* leaf_of(bdtrie_node* n) {
 	return (bdtrie_leaf*)(data_of(n) + n->keysize);
 }
 
-bdtrie_value value_of(bdtrie_node* n) {
-	return (bdtrie_value){ n, leaf_of(n)->value };
-}
-
 bdtrie_branch* branch_of(bdtrie_node* n) {
-	return (bdtrie_branch*)(leaf_of(n) + n->hasleaf);
+	return (bdtrie_branch*)(leaf_of(n) + n->leafsize);
 }
 
 bdtrie_node** children_of(bdtrie_node* n) {
@@ -84,21 +80,25 @@ bdtrie_node** children_of(bdtrie_node* n) {
 
 void* end_of(bdtrie_node* n) {
 	return n->branchsize
-		? (void*)children_of(n) + n->branchsize
-		: (void*)branch_of(n);
+		? children_of(n) + n->branchsize
+		: branch_of(n);
 }
 
 node_layout layout_of(bdtrie_node* n) {
 	node_layout l;
 	l.data = (uint8_t*)(n + 1);
 	l.leaf = (bdtrie_leaf*)(l.data + n->keysize);
-	l.branch = (bdtrie_branch*)(l.leaf + n->hasleaf);
+	l.branch = (bdtrie_branch*)(l.leaf + n->leafsize);
 	l.children = (bdtrie_node**)((uint8_t*)l.branch + offsetof(bdtrie_branch, children));
-	l.end = n->branchsize
+	l.end = n->hasbranch
 		? (void*)(l.children + n->branchsize)
 		: (void*)l.branch;
 
 	return l;
+}
+
+bdtrie_value value_of(bdtrie_node* leaf) {
+	return (bdtrie_value){ leaf, ((bdtrie_leaf*)(data_of(leaf) + leaf->size))->value };
 }
 
 typedef struct key {
@@ -114,7 +114,7 @@ bdtrie_node* make_split(bdtrie* t, bdtrie_node* n, uint32_t index, bdtrie_node* 
 	bdtrie_node* after = malloc(size - index);
 	after->parent = parent;
 	after->layout = n->layout;
-	after->keysize -= index;
+	after->size -= index;
 	memcpy(data_of(after), l.data + index, l.data_end - l.data - index);
 	for (bdtrie_node** child = l.children; child < l.children_end; child++) {
 		(**child).parent = after;
@@ -130,8 +130,8 @@ bdtrie_node* make_leaf(bdtrie* t, key k, key tail, bdtrie_node* parent) {
 	bdtrie_node* leaf = malloc(sizeof(bdtrie_node) + tail.size + sizeof(bdtrie_leaf));
 	leaf->parent = parent;
 	leaf->hasleaf = true;
-	leaf->branchsize = 0;
-	leaf->keysize = tail.size;
+	leaf->hasbranch = false;
+	leaf->size = tail.size;
 	memcpy(data_of(leaf), tail.data, tail.size);
 
 	bdtrie_leaf* l = (bdtrie_leaf*)(data_of(leaf) + tail.size);
@@ -147,8 +147,8 @@ bdtrie_value split_with_leaf(bdtrie* t, key k, bdtrie_node** np, uint32_t index)
 	bdtrie_node* before = malloc(sizeof(bdtrie_node) + index + sizeof(bdtrie_leaf) + sizeof_branch(1));
 	before->parent = n->parent;
 	before->hasleaf = true;
-	before->branchsize = 1;
-	before->keysize = index;
+	before->hasbranch = true;
+	before->size = index;
 	memcpy(data_of(before), data_of(n), index);
 
 	bdtrie_node* after = make_split(t, n, index, before);
@@ -175,8 +175,8 @@ bdtrie_value split_with_branch(bdtrie* t, key k, bdtrie_node** np, uint32_t inde
 	bdtrie_node* before = malloc(sizeof(bdtrie_node) + index + sizeof_branch(2));
 	before->parent = n->parent;
 	before->hasleaf = false;
-	before->branchsize = 2;
-	before->keysize = index;
+	before->hasbranch = true;
+	before->size = index;
 	memcpy(data_of(before), data_of(n), index);
 
 	bdtrie_node* leaf = make_leaf(t, k, tail, before);
@@ -223,8 +223,9 @@ bdtrie_value add_first_child(bdtrie* t, key k, bdtrie_node** np, node_layout l, 
 	t->update_value(l.leaf, before);
 
 	bdtrie_branch* b = branch_of(before);
-	popclear(b->population);
-	popadd(b->population, tail.data[0]);
+	l.branch.children[0] = 
+	popclear(l.branch->population);
+	popadd(l.branch->population, index);
 
 	return value_of(*leaf);
 }
@@ -251,7 +252,7 @@ bdtrie_value add_child(bdtrie* t, key k, bdtrie_node** np, node_layout l, uint8_
 	}
 
 	l = layout_of(before);
-	popadd(l.branch->population, tail.data[0]);
+	popadd(l.branch->population, index);
 
 	return value_of(*leaf);
 }
@@ -259,7 +260,7 @@ bdtrie_value add_child(bdtrie* t, key k, bdtrie_node** np, node_layout l, uint8_
 bdtrie_value insert_recur(bdtrie* t, key k, bdtrie_node** np, key tail) {
 	bdtrie_node* n = *np;
 
-	if (tail.size < n->keysize) {
+	if (tail.size < n->size) {
 		for (int i = 0; i < tail.size; i++) {
 			if (data_of(n)[i] != tail.data[i]) {
 				return split_with_branch(t, k, np, i, key_tail(tail, i));
@@ -269,25 +270,25 @@ bdtrie_value insert_recur(bdtrie* t, key k, bdtrie_node** np, key tail) {
 		return split_with_leaf(t, k, np, tail.size);
 	}
 
-	for (int i = 0; i < n->keysize; i++) {
+	for (int i = 0; i < n->size; i++) {
 		if (data_of(n)[i] != tail.data[i]) {
 			return split_with_branch(t, k, np, i, key_tail(tail, i));
 		}
 	}
 
-	if (tail.size == n->keysize) {
+	if (tail.size == n->size) {
 		n->hasleaf = true;
 		return value_of(n);
 	}
 
 	node_layout l = layout_of(n);
-	tail = key_tail(tail, n->keysize);
+	tail = key_tail(tail, n->size);
 
 	printf("  nobranch?\n");
 
-	if (n->branchsize == 0) {
+	if (!n->hasbranch) {
 		printf("  nobranch!\n");
-		return add_first_child(t, k, np, l, tail);
+		return add_first_child(t, k, np, l, 0, tail);
 	}
 
 	uint8_t pi = popindex(l.branch->population, tail.data[0]);
@@ -317,12 +318,12 @@ void bdtrie_delete(bdtrie_node* n) {
 }
 
 void key_data_recur(uint32_t size, uint8_t* dest, bdtrie_node* n) {
-	size -= n->keysize;
+	size -= n->size;
 	if (n->parent != NULL) {
 		key_data_recur(size, dest, n->parent);
 	}
 
-	memcpy(dest + size, n + 1, n->keysize);
+	memcpy(dest + size, n + 1, n->size);
 }
 
 uint32_t bdtrie_key(void* dest, bdtrie_node* n) {
@@ -337,30 +338,30 @@ uint32_t bdtrie_key_size(bdtrie_node* n) {
 	if (!n->hasleaf) {
 		return -1;
 	}
-	return leaf_of(n)->key_size;
+	return ((bdtrie_leaf*)(data_of(n) + n->size))->key_size;
 }
 
 bdtrie_value find_recur(bdtrie* t, key tail, bdtrie_node* n) {
-	if (tail.size < n->keysize) {
+	if (tail.size < n->size) {
 		return (bdtrie_value){ NULL, NULL };
 	}
 
-	for (int i = 0; i < n->keysize; i++) {
+	for (int i = 0; i < n->size; i++) {
 		if (data_of(n)[i] != tail.data[i]) {
 			return (bdtrie_value){ NULL, NULL };
 		}
 	}
 
-	if (tail.size == n->keysize) {
+	if (tail.size == n->size) {
 		return value_of(n);
 	}
 
-	if (n->branchsize == 0) {
+	if (!n->hasbranch) {
 		return (bdtrie_value){ NULL, NULL };
 	}
 
 	node_layout layout = layout_of(n);
-	tail = key_tail(tail, n->keysize);
+	tail = key_tail(tail, n->size);
 
 	uint8_t pi = popindex(layout.branch->population, tail.data[0]);
 	bdtrie_node* child = layout.branch->children[pi];

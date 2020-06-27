@@ -23,17 +23,20 @@ typedef struct bdtrie_node {
 	struct bdtrie_node* parent;
 	union {
 		struct {
-			bool
-				hasleaf: 1,
-				hasbranch: 1;
-			uint32_t
-				size : 30;
+			uint8_t parent_index : 8;
+			uint32_t keysize : 15;
+			bool hasleaf: 1;
+			uint8_t branchsize: 8;
 		};
 		uint32_t layout;
 	};
-	// followed by 'index' bytes of key data
-	// if 'hasleaf' then followed by bdtrie_leaf
-	// if 'hasbranch' then followed by bdtrie_branch
+	/*
+	 * TODO if we need keys > 2^15 bytes we can just chain nodes
+	 */
+
+	// followed by 'keysize' bytes of key data
+	// if 'leafsize' then followed by bdtrie_leaf
+	// if 'branchsize' then followed by bdtrie_branch
 } bdtrie_node;
 
 typedef struct bdtrie_leaf {
@@ -49,6 +52,10 @@ typedef struct bdtrie_branch {
 /*
  * API surface
  */
+
+typedef struct bdtrie_cursor {
+	bdtrie_node* node;
+} bdtrie_cursor;
 
 typedef struct bdtrie_value {
 	bdtrie_node* node;
