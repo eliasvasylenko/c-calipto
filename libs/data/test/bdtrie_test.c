@@ -51,7 +51,7 @@ void setUp() {
 }
 
 void tearDown() {
-	bdtrie_clear(trie);
+	bdtrie_clear(&trie);
 }
 
 size_t sort_updates(size_t s, update* u) {
@@ -146,6 +146,11 @@ void test_insert_8() {
 	test_insert(sizeof(k) / sizeof(char*), k);
 }
 
+void test_insert_9() {
+	char* k[] = { "aaz", "aay", "aax" };
+	test_insert(sizeof(k) / sizeof(char*), k);
+}
+
 int main(void) {
 	UNITY_BEGIN();
 
@@ -157,6 +162,7 @@ int main(void) {
 	RUN_TEST(test_insert_6);
 	RUN_TEST(test_insert_7);
 	RUN_TEST(test_insert_8);
+	RUN_TEST(test_insert_9);
 
 	return UNITY_END();
 }

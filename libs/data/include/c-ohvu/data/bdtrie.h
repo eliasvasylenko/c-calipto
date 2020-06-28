@@ -35,7 +35,7 @@ typedef struct bdtrie_node {
 	 */
 
 	// followed by 'keysize' bytes of key data
-	// if 'leafsize' then followed by bdtrie_leaf
+	// if 'hasleaf' then followed by bdtrie_leaf
 	// if 'branchsize' then followed by bdtrie_branch
 } bdtrie_node;
 
@@ -52,10 +52,6 @@ typedef struct bdtrie_branch {
 /*
  * API surface
  */
-
-typedef struct bdtrie_cursor {
-	bdtrie_node* node;
-} bdtrie_cursor;
 
 typedef struct bdtrie_value {
 	bdtrie_node* node;
@@ -79,5 +75,10 @@ uint32_t bdtrie_key(void* dest, bdtrie_node* n);
 
 uint32_t bdtrie_key_size(bdtrie_node* n);
 
-void bdtrie_clear(bdtrie t);
+void bdtrie_clear(bdtrie* t);
 
+bdtrie_value bdtrie_first(bdtrie* t);
+
+bdtrie_value bdtrie_next(bdtrie_value v);
+
+bool bdtrie_is_present(bdtrie_value v);

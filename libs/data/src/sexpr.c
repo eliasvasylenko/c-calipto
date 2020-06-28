@@ -355,7 +355,7 @@ void ovs_init() {
 }
 
 void ovs_close() {
-	bdtrie_clear(table.trie);
+	bdtrie_clear(&table.trie);
 }
 
 ovs_expr ovs_list(int32_t count, ovs_expr* e) {
