@@ -20,14 +20,9 @@ typedef struct variable_bindings {
 	bdtrie variables;
 } variable_bindings;
 
-typedef struct variable_binding {
-	const ovs_expr_ref* symbol;
-	ovru_variable variable;
-} variable_binding;
-
-void* get_variable_binding(uint32_t key_size, void* key_data, bdtrie_node* owner) {
+void* get_variable_binding(uint32_t key_size, void* key_data, void* value_data, bdtrie_node* owner) {
 	ovru_variable* value = malloc(sizeof(ovru_variable*));
-	*value = ((variable_binding*)key_data)->variable;
+	*value = *((ovru_variable*)value_data);
 	return value;
 }
 
@@ -232,9 +227,11 @@ ovru_result compile_statement(ovru_statement* result, ovs_expr s, compile_contex
 }
 
 void capture_variable(bdtrie p, variable_bindings* b, ovs_expr_ref* symbol) {
-	if (bdtrie_find(&b->variables, sizeof(ovs_expr_ref*), &symbol).data == NULL) {
-		variable_binding v = { symbol, { true, b->capture_count++ } };
-		bdtrie_insert(&b->variables, sizeof(ovs_expr_ref*), &v);
+	ovru_variable v = { OVRU_CAPTURE, b->capture_count };
+	ovru_variable* w = bdtrie_find_or_insert(&b->variables, sizeof(ovs_expr_ref*), symbol, &v).data;
+
+	if (w->index == v.index) {
+		b->capture_count++;
 
 		ovru_variable* old_captures = b->captures;
 		b->captures = malloc(sizeof(ovru_variable*) * b->capture_count);
@@ -266,8 +263,8 @@ ovru_result ovru_compile(ovru_statement* result, const ovs_expr e, const uint32_
 		variables
 	};
 	for (int i = 0; i < param_count; i++) {
-		variable_binding v = { params[i], { OVRU_PARAMETER, i } };
-		bdtrie_insert(&variables, sizeof(ovs_expr_ref*), &v);
+		ovru_variable v = { OVRU_PARAMETER, i };
+		bdtrie_insert(&variables, sizeof(ovs_expr_ref*), params + i, &v);
 	}
 
 	ovs_expr data = ovs_symbol(NULL, ovio_u_strref(u"data"));

@@ -37,7 +37,7 @@ ovs_expr ovs_function(ovs_function_type* t, uint32_t data_size, void* data) {
 	return (ovs_expr){ OVS_FUNCTION, .p=r };
 }
 
-void* ovs_get_value(uint32_t key_size, void* key_data, bdtrie_node* owner) {
+void* ovs_get_value(uint32_t key_size, void* key_data, void* value_data, bdtrie_node* owner) {
 	ovs_expr_ref* r = ref(sizeof(bdtrie_node*));
 	r->symbol = owner;
 	return r;
@@ -65,7 +65,7 @@ ovs_expr_ref* ovs_intern(ovs_expr_ref* qualifier, strref name) {
 	}
 
 	uint32_t keysize = offsetof(ovs_symbol_info, name) + sizeof(UChar) * len;
-	ovs_expr_ref* r = bdtrie_insert(&table.trie, keysize, key).data;
+	ovs_expr_ref* r = bdtrie_find_or_insert(&table.trie, keysize, key, NULL).data;
 
 	free(key);
 

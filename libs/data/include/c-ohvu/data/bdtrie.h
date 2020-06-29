@@ -60,14 +60,16 @@ typedef struct bdtrie_value {
 
 typedef struct bdtrie {
 	bdtrie_node* root;
-	void* (*get_value)(uint32_t key_size, void* key_data, bdtrie_node* owner);
+	void* (*alloc_value)(uint32_t key_size, void* key_data, void* value_data, bdtrie_node* owner);
 	void (*update_value)(void* value, bdtrie_node* owner);
 	void (*free_value)(void* value);
 } bdtrie;
 
-bdtrie_value bdtrie_insert(bdtrie* t, uint32_t key_size, void* key_data);
+bdtrie_value bdtrie_insert(bdtrie* t, uint32_t key_size, void* key_data, void* value_data);
 
 bdtrie_value bdtrie_find(bdtrie* t, uint32_t key_size, void* key_data);
+
+bdtrie_value bdtrie_find_or_insert(bdtrie* t, uint32_t key_size, void* key_data, void* value_data);
 
 void bdtrie_delete(bdtrie_node* n);
 
