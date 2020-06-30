@@ -156,11 +156,15 @@ void ovru_free_lambda(ovru_lambda* l) {
 
 ovru_result compile_expression(ovru_term* result, ovs_expr e, compile_context c) {
 	if (ovs_atom(e)) {
-		uint32_t* index_into_parent = bdtrie_find(
+		bdtrie_value variable_in_parent = bdtrie_find(
 				&c.variables.variables,
 				sizeof(ovs_expr_ref*),
-				e.p).data;
-		*result = (ovru_term){ .type=OVRU_VARIABLE, .variable=*index_into_parent };
+				e.p);
+		if (!bdtrie_is_present(variable_in_parent)) {
+			// TODO error;
+			return 12345;
+		}
+		*result = (ovru_term){ .type=OVRU_VARIABLE, .variable=*(uint32_t*)variable_in_parent.data };
 		return OVRU_SUCCESS;
 	}
 
@@ -200,17 +204,14 @@ ovru_result compile_statement(ovru_statement* result, ovs_expr s, compile_contex
 		return count == 0 ? OVRU_EMPTY_STATEMENT : OVRU_INVALID_STATEMENT_TERMINATOR;
 	}
 
-	printf("count %i\n", count);
-
 	ovru_term* terms = malloc(sizeof(ovru_term) * count);
 	ovru_result success;
 	for (int i = 0; i < count; i++) {
-		printf("%p\n", &terms[i]);
-		printf("%i\n", expressions[i].type);
 		success = compile_expression(&terms[i], expressions[i], c);
 		ovs_dealias(expressions[i]);
 
 		if (success != OVRU_SUCCESS) {
+			i++;
 			for (; i < count; i++) {
 				ovs_dealias(expressions[i]);
 			}
