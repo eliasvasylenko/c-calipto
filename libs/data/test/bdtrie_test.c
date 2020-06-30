@@ -228,6 +228,7 @@ int main(void) {
 	RUN_TEST(test_insert_6);
 	RUN_TEST(test_insert_7);
 	RUN_TEST(test_insert_8);
+	RUN_TEST(test_insert_9);
 	RUN_TEST(test_insert_10);
 	RUN_TEST(test_insert_11);
 	RUN_TEST(test_insert_12);
