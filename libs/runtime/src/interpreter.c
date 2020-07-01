@@ -129,7 +129,7 @@ void ovs_dealias_term(ovru_term t) {
 }
 
 void* get_ref(ovs_expr e) {
-	return e.p;
+	return ovs_ref(e.p);
 }
 
 ovru_result compile_lambda(ovru_term* result, int32_t part_count, ovs_expr* parts, compile_context* c) {

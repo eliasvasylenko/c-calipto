@@ -263,8 +263,7 @@ ovda_result ovda_read_step_out(reader* r, expr* e) {
 	if (ovio_advance_input_if(r->scanner, is_equal, &close_bracket)) {
 		ovio_discard_buffer(r->scanner);
 
-		ovs_alias(r->data_nil);
-		*e = r->data_nil;
+		*e = ovs_alias(r->data_nil);
 		return OVDA_SUCCESS;
 	}
 

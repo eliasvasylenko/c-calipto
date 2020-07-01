@@ -324,23 +324,24 @@ void ovs_free(ovs_expr_type t, ovs_expr_ref* r) {
 	switch (t) {
 		case OVS_CHARACTER:
 		case OVS_INTEGER:
-			return;
+			break;
 		case OVS_SYMBOL:
 			bdtrie_delete(r->symbol);
 			break;
 		case OVS_CONS:
 			ovs_dealias(r->cons.car);
 			ovs_dealias(r->cons.cdr);
+			free(r);
 			break;
 		case OVS_FUNCTION:
 			r->function.type->free(&r->function + 1);
+			free(r);
 			break;
 		case OVS_STRING:
 			break;
 		case OVS_BIG_INTEGER:
 			break;
 	}
-	free(r);
 }
 
 void ovs_init() {
