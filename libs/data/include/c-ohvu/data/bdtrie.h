@@ -84,3 +84,4 @@ bdtrie_value bdtrie_first(bdtrie* t);
 bdtrie_value bdtrie_next(bdtrie_value v);
 
 bool bdtrie_is_present(bdtrie_value v);
+

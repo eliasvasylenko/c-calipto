@@ -63,7 +63,11 @@ int run(ovs_expr e, ovs_expr args) {
 				ovs_string(ovio_u_strref(u"stderr")))
 	};
 
-	return ovru_eval(s, arguments);
+	r = ovru_eval(s, arguments);
+
+	ovru_free(s);
+
+	return r;
 }
 
 int run_bootstrap(ovs_expr args) {

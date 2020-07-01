@@ -338,6 +338,7 @@ void ovs_free(ovs_expr_type t, ovs_expr_ref* r) {
 			free(r);
 			break;
 		case OVS_STRING:
+			free(r);
 			break;
 		case OVS_BIG_INTEGER:
 			break;

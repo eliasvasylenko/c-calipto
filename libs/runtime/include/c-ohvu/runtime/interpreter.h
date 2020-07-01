@@ -25,7 +25,7 @@ typedef struct ovru_variable {
 
 typedef enum ovru_term_type {
 	OVRU_LAMBDA = -1,
-	OVRU_VARIABLE = -2,
+	OVRU_VARIABLE = -2
 	// anything else is an ovs_expr_type and represents a QUOTE
 } ovru_term_type;
 
@@ -61,10 +61,6 @@ typedef struct ovru_bound_lambda {
 	ovs_expr* capture;
 } ovru_bound_lambda;
 
-ovru_term ovru_alias_term(ovru_term t);
-void ovru_dealias_term(ovru_term t);
-ovru_lambda* ovru_ref_lambda(ovru_lambda* r);
-void ovru_free_lambda(ovru_lambda* r);
-
 ovru_result ovru_compile(ovru_statement* s, const ovs_expr e, const uint32_t param_count, const ovs_expr_ref** params);
 ovru_result ovru_eval(const ovru_statement s, const ovs_expr* args);
+void ovru_free(ovru_statement s);
