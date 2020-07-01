@@ -23,14 +23,16 @@ static ovs_expr data_nil;
 static ovs_expr data_quote;
 static ovs_expr data_lambda;
 
-ovs_expr_ref* ref(uint32_t payload_size) {
-	ovs_expr_ref* r = malloc(offsetof(ovs_expr_ref, symbol) + payload_size);
-	r->ref_count = ATOMIC_VAR_INIT(1);
+ovs_expr_ref* ref(uint32_t payload_size, uint32_t refs) {
+	size_t size = offsetof(ovs_expr_ref, symbol) + payload_size;
+	ovs_expr_ref* r = malloc(size);
+	memset(r, 0, size);
+	r->ref_count = ATOMIC_VAR_INIT(refs);
 	return r;
 }
 
 ovs_expr ovs_function(ovs_function_type* t, uint32_t data_size, void* data) {
-	ovs_expr_ref* r = ref(sizeof(ovs_function_data) + data_size);
+	ovs_expr_ref* r = ref(sizeof(ovs_function_data) + data_size, 1);
 	r->function.type = t;
 	memcpy(&r->function + 1, data, data_size);
 
@@ -38,7 +40,8 @@ ovs_expr ovs_function(ovs_function_type* t, uint32_t data_size, void* data) {
 }
 
 void* ovs_get_value(uint32_t key_size, void* key_data, void* value_data, bdtrie_node* owner) {
-	ovs_expr_ref* r = ref(sizeof(bdtrie_node*));
+	ovs_expr_ref* r = ref(sizeof(bdtrie_node*), 0);
+	r->ref_count = ATOMIC_VAR_INIT(0);
 	r->symbol = owner;
 	return r;
 }
@@ -49,15 +52,10 @@ void ovs_update_value(void* value, bdtrie_node* owner) {
 }
 
 ovs_expr_ref* ovs_intern(ovs_expr_ref* qualifier, strref name) {
-	int32_t maxlen = ovio_strref_maxlen(name);
+	uint32_t maxlen = ovio_strref_maxlen(name);
 	ovs_symbol_info* key = malloc(offsetof(ovs_symbol_info, name) + sizeof(UChar) * maxlen);
-	int32_t len = ovio_strref_cpy(maxlen, key->name, name);
-	if (maxlen != len) {
-		ovs_symbol_info* key2 = malloc(offsetof(ovs_symbol_info, name) + sizeof(UChar) * len);
-		memcpy(key2->name, key->name, len);
-		free(key);
-		key = key2;
-	}
+	memset(key, 0, offsetof(ovs_symbol_info, name));
+	uint32_t len = ovio_strref_cpy(maxlen, key->name, name);
 
 	key->qualifier = qualifier;
 	if (qualifier != NULL) {
@@ -66,6 +64,7 @@ ovs_expr_ref* ovs_intern(ovs_expr_ref* qualifier, strref name) {
 
 	uint32_t keysize = offsetof(ovs_symbol_info, name) + sizeof(UChar) * len;
 	ovs_expr_ref* r = bdtrie_find_or_insert(&table.trie, keysize, key, NULL).data;
+	ovs_ref(r);
 
 	free(key);
 
@@ -98,10 +97,10 @@ ovs_expr ovs_character(UChar32 cp) {
 
 ovs_expr ovs_string(strref s) {
 	int32_t maxlen = ovio_strref_maxlen(s);
-	ovs_expr_ref* r = ref(offsetof(ovs_string_data, string) + sizeof(UChar) * (maxlen + 1));
+	ovs_expr_ref* r = ref(offsetof(ovs_string_data, string) + sizeof(UChar) * (maxlen + 1), 1);
 	int32_t len = ovio_strref_cpy(maxlen, r->string.string, s);
 	if (maxlen != len) {
-		ovs_expr_ref* r2 = ref(offsetof(ovs_string_data, string) + sizeof(UChar) * (len + 1));
+		ovs_expr_ref* r2 = ref(offsetof(ovs_string_data, string) + sizeof(UChar) * (len + 1), 1);
 		memcpy(r2->string.string, r->string.string, len);
 		free(r);
 		r = r2;
@@ -116,7 +115,7 @@ ovs_expr ovs_cons(const ovs_expr car, const ovs_expr cdr) {
 		int32_t head = single ? 1 : 2;
 		int32_t len = u_strlen(cdr.p->string.string);
 
-		ovs_expr_ref* r = ref(sizeof(UChar) * (len + head));
+		ovs_expr_ref* r = ref(sizeof(UChar) * (len + head), 1);
 		memcpy(r->string.string + head, cdr.p->string.string, sizeof(UChar) * len);
 		if (single) {
 			r->string.string[0] = car.character;
@@ -127,19 +126,18 @@ ovs_expr ovs_cons(const ovs_expr car, const ovs_expr cdr) {
 		return (ovs_expr){ OVS_STRING, .p=r };
 	}
 
-	ovs_expr_ref* r = ref(sizeof(ovs_cons_data));
+	ovs_expr_ref* r = ref(sizeof(ovs_cons_data), 1);
 	r->cons.car = car;
 	r->cons.cdr = cdr;
-	ovs_alias(r->cons.car);
-	ovs_alias(r->cons.cdr);
+	ovs_alias(car);
+	ovs_alias(cdr);
 	return (ovs_expr){ OVS_CONS, .p=r };
 }
 
 ovs_expr ovs_car(const ovs_expr e) {
 	switch (e.type) {
 		case OVS_CONS:
-			ovs_alias(e.p->cons.car);
-			return e.p->cons.car;
+			return ovs_alias(e.p->cons.car);
 
 		case OVS_STRING:
 			;
@@ -177,7 +175,7 @@ ovs_expr ovs_cdr(const ovs_expr e) {
 			if (len == 0) {
 				return ovs_alias(data_nil);
 			}
-			ovs_expr_ref* r = ref(offsetof(ovs_string_data, string) + sizeof(UChar) * len);
+			ovs_expr_ref* r = ref(offsetof(ovs_string_data, string) + sizeof(UChar) * len, 1);
 			u_strncpy(r->string.string, e.p->string.string, len);
 			r->string.string[len] = u'\0';
 
@@ -405,7 +403,30 @@ int32_t ovs_delist(ovs_expr s, ovs_expr** elems) {
 	return ovs_delist_recur(0, s, elems);
 }
 
-int32_t ovs_delist_of(ovs_expr l, void*** e, void* (*map)(ovs_expr elem)) {
-	;
+int32_t ovs_delist_of_recur(int32_t index, ovs_expr s, void*** elems, void* (*map)(ovs_expr elem)) {
+	if (ovs_eq(s, data_nil)) {
+		*elems = index == 0 ? NULL : malloc(sizeof(void*) * index);
+		return index;
+	}
+
+	if (ovs_atom(s)) {
+		return -1;
+	}
+
+	ovs_expr tail = ovs_cdr(s);
+	int32_t size = ovs_delist_of_recur(index + 1, tail, elems, map);
+	ovs_dealias(tail);
+
+	if (size >= 0) {
+		ovs_expr e = ovs_car(s);
+		(*elems)[index] = map(e);
+		ovs_dealias(e);
+	}
+
+	return size;
+}
+
+int32_t ovs_delist_of(ovs_expr s, void*** elems, void* (*map)(ovs_expr elem)) {
+	return ovs_delist_of_recur(0, s, elems, map);
 }
 

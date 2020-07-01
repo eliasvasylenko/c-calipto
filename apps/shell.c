@@ -41,35 +41,36 @@ int run(ovs_expr e, ovs_expr args) {
 	ovs_free(OVS_SYMBOL, system);
 
 	ovru_statement s;
-	if (ovru_compile(&s, e, sizeof(parameters) / sizeof(ovs_expr_ref*), parameters) == OVRU_SUCCESS) {
-		const ovs_expr arguments[] = {
-			args,
-			ovru_exit(),
-			ovru_cons(),
-			ovru_des(),
-			ovru_eq(),
-			ovru_open_scanner(
-					u_finit(stdin, NULL, NULL),
-					ovs_string(ovio_u_strref(u"stdin"))),
-			ovru_open_printer(
-					u_finit(stdout, NULL, NULL),
-					ovs_string(ovio_u_strref(u"stdout"))),
-			ovru_open_printer(
-					u_finit(stderr, NULL, NULL),
-					ovs_string(ovio_u_strref(u"stderr")))
-		};
-
-		return ovru_eval(s, arguments);
-	} else {
-		return 3;
+	ovru_result r = ovru_compile(&s, e, sizeof(parameters) / sizeof(ovs_expr_ref*), parameters);
+	if (r != OVRU_SUCCESS) {
+		return r;
 	}
+
+	const ovs_expr arguments[] = {
+		args,
+		ovru_exit(),
+		ovru_cons(),
+		ovru_des(),
+		ovru_eq(),
+		ovru_open_scanner(
+				u_finit(stdin, NULL, NULL),
+				ovs_string(ovio_u_strref(u"stdin"))),
+		ovru_open_printer(
+				u_finit(stdout, NULL, NULL),
+				ovs_string(ovio_u_strref(u"stdout"))),
+		ovru_open_printer(
+				u_finit(stderr, NULL, NULL),
+				ovs_string(ovio_u_strref(u"stderr")))
+	};
+
+	return ovru_eval(s, arguments);
 }
 
 int run_bootstrap(ovs_expr args) {
 	UFILE* f = u_fopen("./data/bootstrap.ov", "r", NULL, NULL);
 
 	if (f == NULL) {
-		return 1;
+		return 123456;
 	}
 
 	ovio_stream* st = ovio_open_file_stream(f);
@@ -84,7 +85,7 @@ int run_bootstrap(ovs_expr args) {
 
 		ovs_dealias(e);
 	} else {
-		result = 2;
+		result = 123457;
 	}
 
 	ovda_close_reader(r);

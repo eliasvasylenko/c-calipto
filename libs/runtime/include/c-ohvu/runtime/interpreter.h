@@ -9,7 +9,8 @@ typedef enum ovru_result {
 	OVRU_INVALID_EXPRESSION_TYPE,
 	OVRU_INVALID_QUOTE_LENGTH,
 	OVRU_INVALID_LAMBDA_LENGTH,
-	OVRU_INVALID_PARAMETER_TERMINATOR
+	OVRU_INVALID_PARAMETER_TERMINATOR,
+	OVRU_VARIABLE_NOT_IN_SCOPE
 } ovru_result;
 
 typedef enum ovru_variable_type {
@@ -50,8 +51,8 @@ typedef struct ovru_lambda {
 	_Atomic(uint32_t) ref_count;
 	uint32_t param_count;
 	ovs_expr_ref** params; // always SYMBOL
-	uint32_t var_count;
-	uint32_t* vars; // indices into vars of lexical context
+	uint32_t capture_count;
+	ovru_variable* captures; // indices into vars of lexical context
 	ovru_statement body;
 } ovru_lambda;
 

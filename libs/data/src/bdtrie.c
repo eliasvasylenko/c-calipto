@@ -137,7 +137,7 @@ bdtrie_node* make_split(bdtrie* t, bdtrie_node* n, uint32_t index, bdtrie_node* 
 }
 
 bdtrie_node* make_leaf(bdtrie* t, entry e, key k, bdtrie_node* parent) {
-	bdtrie_node* leaf = malloc(sizeof(bdtrie_node) + k.size + sizeof(bdtrie_leaf));
+	bdtrie_node* leaf = malloc(sizeof_node(k.size, true, false, 0));
 	leaf->parent = parent;
 	leaf->hasleaf = true;
 	leaf->branchsize = 0;
@@ -253,7 +253,7 @@ bdtrie_value add_first_child(bdtrie* t, entry e, bdtrie_node** np, key k) {
 	bdtrie_node* n = *np;
 
 	bdtrie_node* replacement = malloc(sizeof_node(n->keysize, true, true, 1));
-	memcpy(replacement, n, sizeof_node(n->keysize, true, true, 0));
+	memcpy(replacement, n, sizeof_node(n->keysize, true, false, 0));
 
 	free(n);
 	*np = replacement;
@@ -279,8 +279,9 @@ bdtrie_value add_child(bdtrie* t, entry e, bdtrie_node** np, bdtrie_branch* b, u
 	bdtrie_node* replacement = malloc(size);
 
 	size_t size_to_child = sizeof_node(n->keysize, n->hasleaf, true, index);
-	size_t size_to_next_child = size_to_child + sizeof(bdtrie_branch*);
 	memcpy(replacement, n, size_to_child);
+
+	size_t size_to_next_child = size_to_child + sizeof(bdtrie_branch*);
 	memcpy((uint8_t*)replacement + size_to_next_child, (uint8_t*)n + size_to_child, size - size_to_next_child);
 
 	free(n);
