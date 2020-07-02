@@ -27,7 +27,7 @@ static UConverter* char_conv;
 int run(ovs_expr e, ovs_expr args) {
 	ovs_expr_ref* data = ovs_symbol(NULL, ovio_u_strref(u"data")).p;
 	ovs_expr_ref* system = ovs_symbol(NULL, ovio_u_strref(u"system")).p;
-	const ovs_expr_ref* parameters[] = {
+	ovs_expr_ref* parameters[] = {
 		ovs_symbol(system, ovio_u_strref(u"args")).p,
 		ovs_symbol(system, ovio_u_strref(u"exit")).p,
 		ovs_symbol(data, ovio_u_strref(u"cons")).p,
@@ -40,32 +40,43 @@ int run(ovs_expr e, ovs_expr args) {
 	ovs_free(OVS_SYMBOL, data);
 	ovs_free(OVS_SYMBOL, system);
 
+	uint32_t c = sizeof(parameters) / sizeof(ovs_expr_ref*);
+
 	ovru_statement s;
-	ovru_result r = ovru_compile(&s, e, sizeof(parameters) / sizeof(ovs_expr_ref*), parameters);
+	ovru_result r = ovru_compile(&s, e, c, (const ovs_expr_ref**)parameters);
 	if (r != OVRU_SUCCESS) {
+		for (int i = 0; i < c; i++) {
+			ovs_free(OVS_SYMBOL, parameters[i]);
+		}
+
 		return r;
 	}
 
-	const ovs_expr arguments[] = {
-		args,
+	ovs_expr arguments[] = {
+		ovs_alias(args),
 		ovru_exit(),
 		ovru_cons(),
 		ovru_des(),
 		ovru_eq(),
 		ovru_open_scanner(
 				u_finit(stdin, NULL, NULL),
-				ovs_string(ovio_u_strref(u"stdin"))),
+				u"stdin"),
 		ovru_open_printer(
 				u_finit(stdout, NULL, NULL),
-				ovs_string(ovio_u_strref(u"stdout"))),
+				u"stdout"),
 		ovru_open_printer(
 				u_finit(stderr, NULL, NULL),
-				ovs_string(ovio_u_strref(u"stderr")))
+				u"stderr")
 	};
 
 	r = ovru_eval(s, arguments);
 
 	ovru_free(s);
+
+	for (int i = 0; i < c; i++) {
+		ovs_free(OVS_SYMBOL, parameters[i]);
+		ovs_dealias(arguments[i]);
+	}
 
 	return r;
 }

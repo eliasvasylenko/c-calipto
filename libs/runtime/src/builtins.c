@@ -64,13 +64,15 @@ int32_t scanner_apply(ovs_instruction* i, ovs_expr* args, void* d) {
 	ovs_expr cont = args[1];
 
 	i->size = 1;
-	i->values[0] = fail;
+	i->values[0] = ovs_alias(fail);
 
 	return OVRU_SUCCESS;
 }
 
 void scanner_free(void* d) {
 	scanner_data data = *(scanner_data*)d;
+
+	ovs_dealias(data.file_name);
 
 	if (data.next) {
 		ovs_dealias(*data.next);
@@ -82,8 +84,6 @@ void scanner_free(void* d) {
 	} else if (data.file) {
 		u_fclose(data.file);
 	}
-
-	free(d);
 }
 
 static ovs_function_type scanner_function = {
@@ -94,8 +94,8 @@ static ovs_function_type scanner_function = {
 	scanner_free
 };
 
-ovs_expr ovru_open_scanner(UFILE* f, ovs_expr name) {
-	scanner_data data = { f, name, NULL, NULL };
+ovs_expr ovru_open_scanner(UFILE* f, UChar* name) {
+	scanner_data data = { f, ovs_string(ovio_u_strref(name)), NULL, NULL };
 	return ovs_function(&scanner_function, sizeof(scanner_data), &data);
 }
 
@@ -127,11 +127,11 @@ int32_t printer_apply(ovs_instruction* i, ovs_expr* args, void* d) {
 
 	i->size = 1;
 	if (string.type != OVS_STRING) {
-		i->values[0] = fail;
+		i->values[0] = ovs_alias(fail);
 
 	} else if (data.next == NULL) {
 		u_fprintf(data.file, "%S", &string.p->string);
-		i->values[0] = cont;
+		i->values[0] = ovs_alias(cont);
 
 	} else {
 		
@@ -143,6 +143,8 @@ int32_t printer_apply(ovs_instruction* i, ovs_expr* args, void* d) {
 void printer_free(void* d) {
 	printer_data data = *(printer_data*)d;
 
+	ovs_dealias(data.file_name);
+
 	if (data.next) {
 		ovs_dealias(*data.next);
 		free(data.next);
@@ -153,8 +155,6 @@ void printer_free(void* d) {
 	} else if (data.file) {
 		u_fclose(data.file);
 	}
-
-	free(d);
 }
 
 static ovs_function_type printer_function = {
@@ -165,8 +165,8 @@ static ovs_function_type printer_function = {
 	printer_free
 };
 
-ovs_expr ovru_open_printer(UFILE* f, ovs_expr name) {
-	printer_data data = { f, name, NULL, NULL };
+ovs_expr ovru_open_printer(UFILE* f, UChar* name) {
+	printer_data data = { f, ovs_string(ovio_u_strref(name)), NULL, NULL };
 	return ovs_function(&printer_function, sizeof(printer_data), &data);
 }
 
@@ -184,7 +184,7 @@ int32_t cons_apply(ovs_instruction* i, ovs_expr* args, void* d) {
 	ovs_expr cont = args[2];
 
 	i->size = 2;
-	i->values[0] = cont;
+	i->values[0] = ovs_alias(cont);
 	i->values[1] = ovs_cons(car, cdr);
 
 	return OVRU_SUCCESS;
@@ -217,11 +217,11 @@ int32_t des_apply(ovs_instruction* i, ovs_expr* args, void* d) {
 
 	if (ovs_atom(e)) {
 		i->size = 1;
-		i->values[0] = fail;
+		i->values[0] = ovs_alias(fail);
 
 	} else {
 		i->size = 3;
-		i->values[0] = cont;
+		i->values[0] = ovs_alias(cont);
 		i->values[1] = ovs_car(e);
 		i->values[2] = ovs_cdr(e);
 	}
@@ -256,7 +256,7 @@ int32_t eq_apply(ovs_instruction* i, ovs_expr* args, void* d) {
 	ovs_expr t = args[3];
 
 	i->size = 1;
-	i->values[0] = ovs_eq(e_a, e_b) ? t : f;
+	i->values[0] = ovs_alias(ovs_eq(e_a, e_b) ? t : f);
 
 	return OVRU_SUCCESS;
 }

@@ -58,7 +58,7 @@ typedef struct ovru_lambda {
 
 typedef struct ovru_bound_lambda {
 	ovru_lambda* lambda;
-	ovs_expr* capture;
+	ovs_expr* closure;
 } ovru_bound_lambda;
 
 ovru_result ovru_compile(ovru_statement* s, const ovs_expr e, const uint32_t param_count, const ovs_expr_ref** params);

@@ -59,20 +59,11 @@ typedef struct compile_context {
 } compile_context;
 
 ovru_result find_variable(ovru_variable* result, compile_context* c, ovs_expr_ref* symbol) {
-	for (bdtrie_value v = bdtrie_first(&c->bindings.variables); bdtrie_is_present(v); v = bdtrie_next(v)) {
-		ovs_expr_ref* e;
-		bdtrie_key(&e, v.node);
-		printf("%p - ", e);
-		ovs_dump((ovs_expr){OVS_SYMBOL,.p=e});
-	}
-
 	ovru_variable v = { OVRU_CAPTURE, c->bindings.capture_count };
-	ovru_variable w = *(ovru_variable*)bdtrie_find_or_insert(&c->bindings.variables, sizeof(ovs_expr_ref*), symbol, &v).data;
+	ovru_variable w = *(ovru_variable*)bdtrie_find_or_insert(&c->bindings.variables, sizeof(ovs_expr_ref*), &symbol, &v).data;
 
 	if (w.index == v.index && w.type == v.type) {
 		if (c->parent == NULL) {
-			printf("%p ", symbol);
-			ovs_dump((ovs_expr){OVS_SYMBOL,.p=symbol});
 			return OVRU_VARIABLE_NOT_IN_SCOPE;
 		}
 		ovru_variable capture;
@@ -111,6 +102,7 @@ ovru_result compile_statement(ovru_statement* result, ovs_expr s, compile_contex
 
 ovru_lambda* ref_lambda(ovru_lambda* l) {
 	atomic_fetch_add(&l->ref_count, 1);
+	return l;
 }
 
 void free_lambda(ovru_lambda* l) {
@@ -127,6 +119,7 @@ void free_lambda(ovru_lambda* l) {
 		free(l->captures);
 	}
 	ovru_free(l->body);
+	free(l);
 }
 
 void* get_ref(ovs_expr e) {
@@ -162,8 +155,6 @@ ovru_result compile_lambda(ovru_term* result, int32_t part_count, ovs_expr* part
 		l->ref_count = ATOMIC_VAR_INIT(1);
 		l->param_count = param_count;
 		l->params = params;
-		l->capture_count = lambda_context.bindings.capture_count;
-
 		l->capture_count = lambda_context.bindings.capture_count;
 		l->captures = lambda_context.bindings.captures;
 		l->body = body;
@@ -305,6 +296,12 @@ void prepare_instruction_slot(instruction_slot* i, uint32_t size) {
 	}
 }
 
+void clear_instruction_slot(instruction_slot* s) {
+	for (int i = 0; i < s->instruction.size; i++) {
+		ovs_dealias(s->instruction.values[i]);
+	}
+}
+
 ovs_expr represent_param(void* p) {
 	return (ovs_expr){ OVS_SYMBOL, .p=*(ovs_expr_ref**)p };
 }
@@ -333,17 +330,22 @@ ovs_function_info inspect_bound_lambda(void* d) {
 	return (ovs_function_info){ l->lambda->param_count, l->lambda->body.term_count };
 }
 
+void eval_statement(ovs_instruction* result, ovru_statement s, const ovs_expr* args, const ovs_expr* closure);
+
 int32_t apply_bound_lambda(ovs_instruction* result, ovs_expr* args, void* d) {
 	ovru_bound_lambda* l = d;
-	;
+
+	eval_statement(result, l->lambda->body, args, l->closure);
+
+	return OVRU_SUCCESS;
 }
 
 void free_bound_lambda(void* d) {
 	ovru_bound_lambda* l = d;
 	for (int i = 0; i < l->lambda->capture_count; i++) {
-		ovs_dealias(l->capture[i]);
+		ovs_dealias(l->closure[i]);
 	}
-	free(l->capture);
+	free(l->closure);
 	free_lambda(l->lambda);
 }
 
@@ -360,31 +362,51 @@ void eval_expression(ovs_expr* result, ovru_term e, const ovs_expr* args, const 
 		case OVRU_VARIABLE:
 			switch (e.variable.type) {
 				case OVRU_PARAMETER:
-					*result = args[e.variable.index];
+					*result = ovs_alias(args[e.variable.index]);
+					break;
 
 				case OVRU_CAPTURE:
-					*result = closure[e.variable.index];
+					*result = ovs_alias(closure[e.variable.index]);
+					break;
 
 				default:
 					assert(false);
 			}
+			break;
 
 		case OVRU_LAMBDA:
 			;
-			ovru_lambda l = {
-			};
-			*result = ovs_function(&lambda_function, sizeof(ovru_lambda), &l);
+			ovs_expr* c = malloc(sizeof(ovs_expr) * e.lambda->capture_count);
+			ovru_bound_lambda l = { ref_lambda(e.lambda), c };
+
+			for (int i = 0; i < e.lambda->capture_count; i++) {
+				ovru_variable capture = e.lambda->captures[i];
+
+				switch (capture.type) {
+					case OVRU_PARAMETER:
+						c[i] = ovs_alias(args[capture.index]);
+						break;
+
+					case OVRU_CAPTURE:
+						c[i] = ovs_alias(closure[capture.index]);
+						break;
+
+					default:
+						assert(false);
+				}
+			}
+			*result = ovs_function(&lambda_function, sizeof(ovru_bound_lambda), &l);
+			break;
 
 		default:
 			*result = ovs_alias(e.quote);
+			break;
 	}
 }
 
-void eval_statement(instruction_slot* result, ovru_statement s, const ovs_expr* args, const ovs_expr* closure) {
-	prepare_instruction_slot(result, s.term_count);
-
+void eval_statement(ovs_instruction* result, ovru_statement s, const ovs_expr* args, const ovs_expr* closure) {
 	for (int i = 0; i < s.term_count; i++) {
-		eval_expression(&result->instruction.values[i], s.terms[i], args, closure);
+		eval_expression(result->values + i, s.terms[i], args, closure);
 	}
 }
 
@@ -403,7 +425,11 @@ ovru_result execute_instruction(instruction_slot* next, instruction_slot* curren
 		return OVRU_ARGUMENT_COUNT_MISMATCH;
 	}
 
-	return f->type->apply(&next->instruction, current->instruction.values, f + 1);
+	ovru_result r = f->type->apply(&next->instruction, current->instruction.values + 1, f + 1);
+
+	clear_instruction_slot(current);
+
+	return r;
 }
 
 ovru_result ovru_eval(const ovru_statement s, const ovs_expr* args) {
@@ -421,13 +447,16 @@ ovru_result ovru_eval(const ovru_statement s, const ovs_expr* args) {
 	b.next = &a;
 
 	instruction_slot* current = &a;
-	eval_statement(current, s, args, NULL);
+	prepare_instruction_slot(current, s.term_count);
+	eval_statement(&current->instruction, s, args, NULL);
 
 	ovru_result r = OVRU_SUCCESS;
 	while (r == OVRU_SUCCESS && current->instruction.size > 0) {
 		r = execute_instruction(current->next, current);
 		current = current->next;
 	}
+
+	clear_instruction_slot(current);
 
 	if (a.heap_values_size > 0) {
 		free(a.heap_values);
