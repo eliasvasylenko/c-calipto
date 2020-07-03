@@ -1,29 +1,46 @@
 ((data:lambda (fail succeed)
-   (system:out "Lindsey is incredible!" fail succeed))
+   (system:out "\
+               Lindsey is incredible!
+	       " fail succeed))
   (data:lambda () (system:err "Error!" system:exit system:exit))
   system:exit)
 
 def (odd? x)
-  match x { #(gt 0) (even? .. inc x)
-            #(lt 0) (even? .. dec x)
+  match x { %(gt 0) (even? .. inc x)
+            %(lt 0) (even? .. dec x)
             _       false }
 
 def (even? x)
-  match x { #(gt 0) (odd? .. inc x)
-            #(lt 0) (odd? .. dec x)
+  match x { %(gt 0) (odd? .. inc x)
+            %(lt 0) (odd? .. dec x)
             _       true }
 
 def (even? x)
-  (match x #(gt 0) (odd? .. inc x)
-           #(lt 0) (odd? .. dec x)
+  (match x %(gt 0) (odd? .. inc x)
+           %(lt 0) (odd? .. dec x)
            _ true)
 
 def (even? x)
   match x
-    #(greater? 0) (odd? .. inc x)
-    #(lesser? 0) (odd? .. dec x)
+    %(greater? 0) (odd? .. inc x)
+    %(lesser? 0) (odd? .. dec x)
     _ true
 
+
+def (even? x)
+  (match x (\ (i) (# i < 0)) (odd? .. inc x)
+           (\ (i) (# i > 0)) (odd? .. dec x)
+           _ true)
+
+
+def (even? x)
+  (match x negative? (odd? .. inc x)
+           positive? (odd? .. dec x)
+           _ true)
+
+def (positive? x) (# x > 0)
+
+def (negative? x) (# x < 0)
 
 
 ; The bootstrap file is read and evaluated by the runtime before anything else happens.

@@ -1,3 +1,5 @@
+#oshka
+
 ; macro to hide stack & effect system as hidden first parameter
 
 (define effect-transform (lambda ()))
