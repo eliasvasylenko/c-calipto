@@ -8,8 +8,8 @@
 ((data:lambda (open-reader)
    (data:des args system:exit (data:lambda (binary args)
      (data:des args system:exit (data:lambda (source-file args)
-       (system:scan-file source-file system:exit (data:lambda (scan close)
-         (open-reader scan close system:exit (data:lambda (read
+       (system:scan-file source-file system:exit (data:lambda (position advance-while advance-if close)
+         (open-reader position advance-while advance-if close system:exit (data:lambda (read
                                                            read-symbol
                                                            read-step-in
                                                            read-step-out
@@ -17,9 +17,8 @@
                                                            close)
            (read system-exit (data:lambda (source)
 	     (system:eval source system:exit system:exit))))))))))))
-
-  (data:lambda (scan close fail cont)
-    ())))
+  (data:lambda (position advance-while advance-if close fail cont)
+    ()))
 
 
 
@@ -41,11 +40,17 @@ position, advance-while, advance-if, take, discard, close, close-buffer
 
 
 
+
 Basic reader consists of the following functions / data:
 cursor, read, read-symbol, read-head, read-tail, close
 
 Macro reader consists of same, but when it encounters a # it evaluates the following form?
 
+
+
+
+
+#(system:print "hello" error continue)
 
 
 
