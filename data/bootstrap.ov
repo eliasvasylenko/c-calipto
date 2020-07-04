@@ -1,9 +1,65 @@
 ((data:lambda (fail succeed)
-   (system:out "\
+   (system:out "
                Lindsey is incredible!
 	       " fail succeed))
   (data:lambda () (system:err "Error!" system:exit system:exit))
   system:exit)
+
+((data:lambda (open-reader)
+   (data:des args system:exit (data:lambda (binary args)
+     (data:des args system:exit (data:lambda (source-file args)
+       (system:scan-file source-file system:exit (data:lambda (scan close)
+         (open-reader scan close system:exit (data:lambda (read
+                                                           read-symbol
+                                                           read-step-in
+                                                           read-step-out
+                                                           cursor
+                                                           close)
+           (read system-exit (data:lambda (source)
+	     (system:eval source system:exit system:exit))))))))))))
+
+  (data:lambda (scan close fail cont)
+    ())))
+
+
+
+
+Following features are functional and CPS; each call to one of the functions
+in a feature group passes a new version of every other function and piece of
+data in the group to the continuation.
+
+
+
+Basic scanner consists of the following functions / data:
+position, advance-while, advance-if, close
+
+Buffering scanner consists of:
+position, advance-while, advance-if, take, discard, close, close-buffer
+
+
+
+
+
+
+Basic reader consists of the following functions / data:
+cursor, read, read-symbol, read-head, read-tail, close
+
+Macro reader consists of same, but when it encounters a # it evaluates the following form?
+
+
+
+
+
+
+
+(fact 1 > 0)
+(probability 1 > 0)
+
+
+
+
+
+
 
 def (odd? x)
   match x { %(gt 0) (even? .. inc x)
@@ -63,6 +119,9 @@ def (negative? x) (# x < 0)
 ; We have no built-in module system, so how do we link together these bootstrap files?
 ; How do we define a module system early? Including limiting the scanner to fail on
 ; reading non-exported symbols of other packages. We need the macro system first.
+;
+; We don't need a full module system to load other bootstrap files because we can trust
+; them.
 
 
 
