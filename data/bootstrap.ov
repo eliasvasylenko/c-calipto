@@ -8,41 +8,37 @@
 ((data:lambda (open-reader)
    (data:des args system:exit (data:lambda (binary args)
      (data:des args system:exit (data:lambda (source-file args)
-       (system:scan-file source-file system:exit (data:lambda (position advance-while advance-if close)
-         (open-reader position advance-while advance-if close system:exit (data:lambda (read
-                                                           read-symbol
-                                                           read-step-in
-                                                           read-step-out
-                                                           cursor
-                                                           close)
-           (read system-exit (data:lambda (source)
+       (open-reader
+         (data:lambda (cont) (system:scan-file source-file system:exit cont)
+         (data:lambda (cursor next next-symbol step-in step-out close)
+           (next system-exit (data:lambda (source)
 	     (system:eval source system:exit system:exit))))))))))))
-  (data:lambda (position advance-while advance-if close fail cont)
+  (data:lambda (position advance-if advance-while close fail cont)
     ()))
 
 
 
+Design:
 
-Following features are functional and CPS; each call to one of the functions
-in a feature group passes a new version of every other function and piece of
-data in the group to the continuation.
+A unit of state may be composed of a number of related elements, where each
+element is either a datum or a function. The invocation of any of these
+functions will send a new version of each of these elements to the
+continuation.
+
+A unit of state may itself be encapsulated in a single lambda, which upon
+invocation passes each element to the continuation. This allows units of
+state to be composed more cleanly.
+
+Scanner:
+  position, advance-if, advance-while, close
+
+Buffer:
+  scanner, take, discard, close
+
+Reader:
+  cursor, next, next-symbol, step-in, step-out, close
 
 
-
-Basic scanner consists of the following functions / data:
-position, advance-while, advance-if, close
-
-Buffering scanner consists of:
-position, advance-while, advance-if, take, discard, close, close-buffer
-
-
-
-
-
-
-
-Basic reader consists of the following functions / data:
-cursor, read, read-symbol, read-head, read-tail, close
 
 Macro reader consists of same, but when it encounters a # it evaluates the following form?
 
