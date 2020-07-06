@@ -22,11 +22,8 @@
          ;reader
          (data:lambda (reader cursor scanner cont) (cont (data:lambda (cont) (cont
 
-           ; cursor
-           cursor
-
-           ; scanner
-           scanner
+           ; state
+           cursor scanner
 
            ; next
            (data:lambda (error cont) (...))
@@ -54,6 +51,8 @@
            ; step-out
            (data:lambda (error fail cont) ())))))))))
 
+    
+
     ; skip-whitespace
     (data:lambda (scanner cont)
       (scanner (data:lambda (position buffer advance advance-if advance-while close)
@@ -80,95 +79,19 @@
 
 
 
+Bootstrap responsibilities:
+
+- reader (inc. macros)
+
+- text (unicode)
+
+- numerics
+
+- content hashing (we want to do this early because it's a good target for intrinsics)
 
 
 
 
-
-
-
-
-Design:
-
-A unit of state may be composed of a number of related elements, where each
-element is either a datum or a function. The invocation of any of these
-functions will send a new version of each of these elements to the
-continuation.
-
-A unit of state may itself be encapsulated in a single lambda, which upon
-invocation passes each element to the continuation. This allows units of
-state to be composed more cleanly.
-
-Scanner:
-  position -> position, buffer, advance, advance-if, advance-while, close
-
-Buffer:
-  position, scanner -> position, take, discard
-
-Reader:
-  cursor, scanner -> cursor, scanner, next, next-symbol, step-in, step-out, close
-
-
-
-Macro reader consists of same, but when it encounters a # it evaluates the following expression at compile time? Until it hits an expression starting with $?
-
-
-So
-
-(dump-data #(build-path "./resource.ov" (scan-file 
-
-#(system:print "hello" error continue)
-
-
-
-
-
-
-(fact 1 > 0)
-(probability 1 > 0)
-
-
-
-
-
-
-
-def (odd? x)
-  match x { %(gt 0) (even? .. inc x)
-            %(lt 0) (even? .. dec x)
-            _       false }
-
-def (even? x)
-  match x { %(gt 0) (odd? .. inc x)
-            %(lt 0) (odd? .. dec x)
-            _       true }
-
-def (even? x)
-  (match x %(gt 0) (odd? .. inc x)
-           %(lt 0) (odd? .. dec x)
-           _ true)
-
-def (even? x)
-  match x
-    %(greater? 0) (odd? .. inc x)
-    %(lesser? 0) (odd? .. dec x)
-    _ true
-
-
-def (even? x)
-  (match x (\ (i) (# i < 0)) (odd? .. inc x)
-           (\ (i) (# i > 0)) (odd? .. dec x)
-           _ true)
-
-
-def (even? x)
-  (match x negative? (odd? .. inc x)
-           positive? (odd? .. dec x)
-           _ true)
-
-def (positive? x) (# x > 0)
-
-def (negative? x) (# x < 0)
 
 
 ; The bootstrap file is read and evaluated by the runtime before anything else happens.
