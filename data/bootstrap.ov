@@ -17,41 +17,86 @@
 
   ; open-reader
   (data:lambda (scanner cont)
-    ((data:lambda (skip-whitespace advance-if-eq scan-name)
-       ((data:lambda (reader) (reader reader '(0 0) scanner cont))
+    ((data:lambda (cursor-step cursor-step-in cursor-step-out skip-whitespace advance-if-eq scan-name)
+       ((data:lambda (reader) (reader reader '(0) scanner cont))
+
          ;reader
-         (data:lambda (reader cursor scanner cont) (cont (data:lambda (cont) (cont
+         (data:lambda (reader cursor scanner cont)
+           (cont (data:lambda (cont)
+             (cont cursor scanner
 
-           ; state
-           cursor scanner
+               ; next
+               (data:lambda (fail cont)
+                 (reader reader cursor scanner (data:lambda (reader) (reader (data:lambda (cursor scanner next next-symbol step-in step-out)
+                   (next-symbol
+                     (data:lambda ()
+                       (step-in fail (data:lambda (reader) (reader data:lambda (cursor scanner next next-symbol step-in step-out)
+                         (step-out fail cont)))))
+                     cont))))))
 
-           ; next
-           (data:lambda (error cont) (...))
 
-           ; next-symbol
-           (data:lambda (error fail cont)
-             ((data:lambda (next-symbol) (next-symbol next-symbol data:lookup-symbol error fail cont))
-               (data:lambda (next-symbol lookup-symbol error fail cont)
+               ; next-symbol
+               (data:lambda (fail cont)
                  (skip-whitespace scanner (data:lambda (scanner)
-                   (scan-name scanner fail (data:lambda (scanner name)
-                     (advance-if-eq scanner ':'
-                       (data:lambda ()
-                         (data:lookup-symbol name (data:lambda (symbol)
-                           (reader reader cursor###+1 scanner cont))))
-                       (data:lambda (scanner)
-                         (data:lookup-namespace name (data:lambda (lookup-symbol)
-                           (next-symbol next-symbol lookup-symbol error error cont))))))))))))
+                   ((data:lambda (next-symbol) (next-symbol next-symbol scanner data:lookup-symbol))
+                     (data:lambda (next-symbol scanner lookup-symbol)
+                       (scan-name scanner fail (data:lambda (scanner name)
+                         (advance-if-eq scanner ':'
+                           (data:lambda ()
+                             (data:lookup-symbol name (data:lambda (symbol)
+                               (cursor-step cursor fail (data:lambda (cursor)
+                                 (reader reader cursor scanner (data:lambda (reader) (cont reader symbol))))))))
+                           (data:lambda (scanner)
+                             (data:lookup-namespace name (data:lambda (lookup-symbol)
+                               (next-symbol next-symbol scanner lookup-symbol))))))))))))
 
-           ; step-in
-           (data:lambda (error fail cont)
-             (skip-whitespace scanner (data:lambda (scanner)
-               (advance-if-eq scanner '(' fail (data:lambda (scanner)
-                 (reader reader ###cursor+1 scanner cont))))))
+               ; step-in
+               (data:lambda (fail cont)
+                 (skip-whitespace scanner (data:lambda (scanner)
+                   (advance-if-eq scanner '(' fail (data:lambda (scanner)
+                     (cursor-step-in cursor (data:lambda (cursor) (reader reader cursor scanner cont))))))))
 
-           ; step-out
-           (data:lambda (error fail cont) ())))))))))
+               ; step-out
+               (data:lambda (fail cont)
+                 (cursor-step-out (cursor) fail (data:lambda (cursor)
+                   ((data:lambda (step-out) (step-out step-out fail cont))
+                     (data:lambda (step-out fail cont)
+                       (skip-whitespace scanner (data:lambda (scanner)
+                         (advance-if-eq scanner ')'
+                           (data:lambda ()
+                             (reader reader '(0) scanner (data:lambda (reader) (reader (data:lambda (cursor scanner next next-symbol step-in step-out)
+                               (next fail (data:lambda (head)
+                                 (skip-whitespace scanner (data:lambda (scanner)
+                                   (advance-if-eq scanner '.'
+                                     (data:lambda ()
+                                       (step-out step-out fail (data:lambda (reader tail)
+                                         (data:cons head tail (data:lambda (data)
+                                           (cont reader data))))))
+                                     (data:lambda (scanner)
+                                       ; step out again)))))))))))
+                           (data:lambda (scanner)
+                             (scanner (data:lambda (position buffer advance advance-if advance-while close)
+                               (buffer (data:lambda (position take discard)
+                                 (discard (data:lambda (scanner)
+                                   (reader reader cursor scanner (data:lambda (reader) (cont reader ())))))))))))
+                       fail))))))))))
 
-    
+    ; cursor-step
+    (data:lambda (cursor fail cont)
+      (data:des cursor fail (data:lambda (index tail)
+        (inc index fail (data:lambda (index)
+          (data:cons index tail cont))))))
+
+    ; cursor-step-in
+    (data:lambda (cursor cont)
+      (data:cons 0 cursor cont))))))
+
+    ; cursor-step-out
+    (data:lambda (cursor fail cont)
+      (data:des cursor fail (data:lambda (index cursor)
+        (data:des cursor fail (data:lambda (index tail)
+          (inc index fail (data:lambda (index)
+            (data:cons index tail cont))))))
 
     ; skip-whitespace
     (data:lambda (scanner cont)
@@ -74,7 +119,7 @@
             (advance-while text:alphanumeric (data:lambda (scanner length)
               (scanner (data:lambda (position buffer advance advance-if advance-while close)
                 (buffer (data:lambda (position take discard)
-                  (take cont))))))))))))))
+                  (take cont)))))))))))))))
       
 
 
