@@ -51,6 +51,11 @@ void ovs_update_value(void* value, bdtrie_node* owner) {
 	r->symbol = owner;
 }
 
+typedef struct ovs_symbol_data {
+	bdtrie_node* node;
+	bdtrie qualified_symbols;
+} ovs_symbol_data;
+
 ovs_expr_ref* ovs_intern(ovs_expr_ref* qualifier, strref name) {
 	uint32_t maxlen = ovio_strref_maxlen(name);
 	ovs_symbol_info* key = malloc(offsetof(ovs_symbol_info, name) + sizeof(UChar) * maxlen);

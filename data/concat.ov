@@ -1,0 +1,252 @@
+((exit)
+ (exit)
+ "Error!"
+ err))
+
+(((exit)
+  (exit)
+  "Success!")
+ (apply)
+ switch))
+
+"Lindsey is best!"
+out
+
+
+
+
+
+
+define out print if
+
+
+((exit)
+ (exit)
+ "Error!"
+ err))
+
+((exit)
+ (exit)
+ "Success!"
+ out))
+
+"Lindsey is best!"
+out
+
+
+
+
+
+
+((data/lambda (open-reader)
+   (data/des args system/exit (data/lambda (binary args)
+     (data/des args system/exit (data/lambda (source-file args)
+       (open-reader
+         (data/lambda (cont)
+           (system/scan-file source-file system/exit cont)
+         (data/lambda (cursor next next-symbol step-in step-out close)
+           (next system-exit (data/lambda (source)
+             (system/eval source system/exit system/exit)))))))))))
+
+  ; open-reader
+  (data/lambda (scanner cont)
+    ((data/lambda (cursor-step cursor-step-in cursor-step-out skip-whitespace advance-if-eq scan-name)
+       ((data/lambda (reader) (reader reader '(0) scanner cont))
+
+         ;reader
+         (data/lambda (reader cursor scanner cont)
+           (cont (data/lambda (cont)
+             (cont cursor scanner
+
+               ; next
+               (data/lambda (fail cont)
+                 (reader reader cursor scanner (data/lambda (reader)
+                   (reader (data/lambda (cursor scanner next next-symbol step-in step-out)
+                     (next-symbol
+                       (data/lambda ()
+                         (step-in fail (data/lambda (reader)
+                           (reader data/lambda (cursor scanner next next-symbol step-in step-out)
+                             (step-out fail cont)))))
+                       cont))))))
+
+               ; next-symbol
+               (data/lambda (fail cont)
+                 (skip-whitespace scanner (data/lambda (scanner)
+                   ((data/lambda (next-symbol) (next-symbol next-symbol scanner data/lookup-symbol))
+                     (data/lambda (next-symbol scanner lookup-symbol)
+                       (scan-name scanner fail (data/lambda (scanner name)
+                         (advance-if-eq scanner '/'
+                           (data/lambda ()
+                             (data/lookup-symbol name (data/lambda (symbol)
+                               (cursor-step cursor fail (data/lambda (cursor)
+                                 (reader reader cursor scanner (data/lambda (reader) (cont reader symbol))))))))
+                           (data/lambda (scanner)
+                             (data/lookup-namespace name (data/lambda (lookup-symbol)
+                               (next-symbol next-symbol scanner lookup-symbol))))))))))))
+
+               ; step-in
+               (data/lambda (fail cont)
+                 (skip-whitespace scanner (data/lambda (scanner)
+                   (advance-if-eq scanner '(' fail (data/lambda (scanner)
+                     (cursor-step-in cursor (data/lambda (cursor) (reader reader cursor scanner cont))))))))
+
+               ; step-out
+               (data/lambda (fail cont)
+                 (cursor-step-out (cursor) fail (data/lambda (cursor)
+                   ((data/lambda (step-out) (step-out step-out fail cont))
+                     (data/lambda (step-out fail cont)
+                       (skip-whitespace scanner (data/lambda (scanner)
+                         (advance-if-eq scanner ')'
+                           (data/lambda ()
+                             (reader reader '(0) scanner (data/lambda (reader) (reader (data/lambda (cursor scanner next next-symbol step-in step-out)
+                               (next fail (data/lambda (head)
+                                 (skip-whitespace scanner (data/lambda (scanner)
+                                   (advance-if-eq scanner '.'
+                                     (data/lambda ()
+                                       (step-out step-out fail (data/lambda (reader tail)
+                                         (data/cons head tail (data/lambda (data)
+                                           (cont reader data))))))
+                                     (data/lambda (scanner)
+                                       ; step out again)))))))))))
+                           (data/lambda (scanner)
+                             (scanner (data/lambda (position buffer advance advance-if advance-while close)
+                               (buffer (data/lambda (position take discard)
+                                 (discard (data/lambda (scanner)
+                                   (reader reader cursor scanner (data/lambda (reader) (cont reader ())))))))))))
+                       fail))))))))))
+
+    ; cursor-step
+    (data/lambda (cursor fail cont)
+      (data/des cursor fail (data/lambda (index tail)
+        (inc index fail (data/lambda (index)
+          (data/cons index tail cont))))))
+
+    ; cursor-step-in
+    (data/lambda (cursor cont)
+      (data/cons 0 cursor cont))))))
+
+    ; cursor-step-out
+    (data/lambda (cursor fail cont)
+      (data/des cursor fail (data/lambda (index cursor)
+        (data/des cursor fail (data/lambda (index tail)
+          (inc index fail (data/lambda (index)
+            (data/cons index tail cont))))))
+
+    ; skip-whitespace
+    (data/lambda (scanner cont)
+      (scanner (data/lambda (position buffer advance advance-if advance-while close)
+        (advance-while text/whitespace? (data/lambda (scanner length)
+          (scanner (data/lambda (position buffer advance advance-if advance-while close)
+            (buffer (data/lambda (position take discard)
+              (discard cont))))))))))
+
+    ; advance-if-eq
+    (data/lambda (scanner character fail cont)
+      (scanner (data/lambda (position buffer advance advance-if advance-while close)
+        (advance-if (data/lambda (c f t) (eq character c f t))
+          fail
+          (data/lambda (scanner character) (cont scanner))))))
+
+    ; scan-name
+    (data/lambda (scanner fail cont)
+      (scanner (data/lambda (position buffer advance advance-if advance-while close)
+        (advance-if text/alphanumeric? fail (data/lambda (scanner character)
+          (scanner (data/lambda (position buffer advance advance-if advance-while close)
+            (advance-while text/alphanumeric? (data/lambda (scanner length)
+              (scanner (data/lambda (position buffer advance advance-if advance-while close)
+                (buffer (data/lambda (position take discard)
+                  (take cont)))))))))))))))
+      
+
+
+
+Bootstrap responsibilities/
+
+- reader (inc. macros)
+
+- text (unicode)
+
+- numerics
+
+- content hashing (we want to do this early because it's a good target for intrinsics)
+
+
+
+
+
+
+; The bootstrap file is read and evaluated by the runtime before anything else happens.
+; This means that the platform must include some functionality, i.e. to read and evaluate
+; Ohvu source files, before that functionality has actually been defined in Ohvu.
+;
+; The responsibility of the bootstrap file is to reimplement all of that functionality
+; other than those parts which are given as primitives, and also provide a hook to load
+; and evaluate further source files. This makes the implementation almost completely
+; self-hosted.
+;
+; The bootstrap file is evaluated in a lexical context where symbols of primitive
+; functions and special forms are bound to themselves, and program/args is bound to a
+; list of program argument strings.
+;
+; Implementing a reader means also implementing string utilities, a scanner, etc.
+; Maybe the responsibility shouldn't solely be on this single bootstrap file. Maybe the
+; built-in reader should be used to read in a *set of* bootstrap files.
+;
+; We have no built-in module system, so how do we link together these bootstrap files?
+; How do we define a module system early? Including limiting the scanner to fail on
+; reading non-exported symbols of other packages. We need the macro system first.
+;
+; We don't need a full module system to load other bootstrap files because we can trust
+; them.
+
+
+
+
+
+; OOTB Ohvu simply reads and evaluates the first s expression it finds.
+; Since we're using CPS, each expression gets to decide what the runtime does next.
+; For instance they can call ``continue`` to read and evaluate the next instruction.
+; Or ``exit`` to stop reading and evaluating.
+;
+; Is there any state shared between expressions evaluated in this manner? Perhaps
+; the "continue" function takes a map of bindings.
+;
+; But each evaluating expression has access to the reader and scanner, making it trivial
+; to take over reading and evaluating the rest of the file.
+
+
+
+; Can we have 'export' and 'import' predefined?
+
+
+
+
+; Custom resolvers for symbols from different namespaces?
+
+; For instance we could have the macros `define` and `lookup`
+
+(hash/define context 'is-even (lambda (x cont)
+  (des x (lambda (a b) (is-odd b (lambda (odd) (not odd cont))))
+         (lambda () (cont true)))) continue)
+
+(hash/define context 'is-odd (lambda (x cont)
+  (des x (lambda (a b) (is-even b (lambda (even) (not even cont))))
+         (lambda () (cont true)))) continue)
+
+; each passes a modified context to continue
+
+(hash/lookup context 'is-even continue)
+; passes to continue the following/
+  hash/|reference is-even a4wtgh897q35htobarve89f4wjfe|
+
+(hash/lookup context 'is-odd continue)
+; passes to continue the following/
+  hash/|reference is-odd 3q5yj0hm56m0qw4g0ffackg59034|
+
+; Then at runtime when we encounter one of those hashes it resolve
+; to the correct function, with mutually recursive references
+; substituted with the correct hash/reference symbol.
+
+; To resolve a value in the "hash" namespace we look up "resolve/hash"
+; in the lexical scope and pass the symbol to it.
+

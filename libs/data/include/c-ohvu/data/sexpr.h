@@ -1,6 +1,3 @@
-void ovs_init();
-void ovs_close();
-
 typedef enum ovs_expr_type {
 	OVS_SYMBOL,
 	OVS_CONS,
@@ -28,13 +25,21 @@ typedef struct ovs_instruction {
 } ovs_instruction;
 
 typedef struct ovs_table {
+	ovs_expr_ref* qualifier;
 	bdtrie trie;
 } ovs_table;
 
-typedef struct ovs_symbol_info {
-	ovs_expr_ref* qualifier;
-	UChar name[1];
-} ovs_symbol_info;
+typedef struct ovs_context {
+	ovs_table table;
+	ovs_expr_ref* data;
+	ovs_expr_ref* nil;
+	ovs_expr_ref* quote;
+} ovs_context;
+
+typedef struct ovs_symbol_data {
+	bdtrie_node* node;
+	ovs_table* table;
+} ovs_symbol_data;
 
 typedef struct ovs_cons_data {
 	ovs_expr car;
@@ -47,8 +52,7 @@ typedef struct ovs_function_info {
 } ovs_function_info;
 
 typedef struct ovs_function_type {
-	UChar* name;
-	ovs_expr (*represent)(void* d);
+	ovs_expr (*represent)(ovs_context* c, void* d);
 	ovs_function_info (*inspect)(void* d);
 	int32_t (*apply)(ovs_instruction* result, ovs_expr* args, void* d);
 	void (*free) (void* data);
@@ -56,6 +60,7 @@ typedef struct ovs_function_type {
 
 typedef struct ovs_function_data {
 	ovs_function_type* type;
+	ovs_context* context;
 	// variable length data
 } ovs_function_data;
 
@@ -66,29 +71,36 @@ typedef struct ovs_string_data {
 struct ovs_expr_ref {
 	_Atomic(uint32_t) ref_count;
 	union {
-		bdtrie_node* symbol;
+		ovs_symbol_data symbol;
 		ovs_cons_data cons;
 		ovs_function_data function;
 		ovs_string_data string;
 	};
 };
 
-ovs_expr ovs_symbol(ovs_expr_ref* qualifier, ovio_strref name);
-ovs_expr ovs_cons(ovs_expr car, ovs_expr cdr);
+ovs_context ovs_init();
+void ovs_close(ovs_context c);
+
+ovs_expr ovs_symbol(ovs_table* t, ovio_strref name);
+ovs_expr ovs_cons(ovs_table* t, ovs_expr car, ovs_expr cdr);
 ovs_expr ovs_character(UChar32 c);
 ovs_expr ovs_string(ovio_strref s);
-ovs_expr ovs_function(ovs_function_type* t, uint32_t data_size, void* data);
+ovs_expr ovs_function(ovs_context* c, ovs_function_type* t, uint32_t data_size, void* data);
 
-ovs_expr ovs_list(int32_t count, ovs_expr* e);
-ovs_expr ovs_list_of(int32_t count, void** e, ovs_expr (*map)(void* elem));
+ovs_expr ovs_list(ovs_table* t, int32_t count, ovs_expr* e);
+ovs_expr ovs_list_of(ovs_table* t, int32_t count, void** e, ovs_expr (*map)(void* elem));
 int32_t ovs_delist(ovs_expr l, ovs_expr** e); 
 int32_t ovs_delist_of(ovs_expr l, void*** e, void* (*map)(ovs_expr elem)); 
 
-ovs_symbol_info* ovs_inspect(ovs_expr s);
-ovs_expr ovs_car(ovs_expr s);
-ovs_expr ovs_cdr(ovs_expr s);
-bool ovs_atom(ovs_expr e);
-bool ovs_eq(ovs_expr a, ovs_expr b);
+bool ovs_is_atom(ovs_table* t, ovs_expr e);
+bool ovs_is_qualified(ovs_expr e);
+bool ovs_is_symbol(ovs_expr e);
+bool ovs_is_eq(ovs_expr a, ovs_expr b);
+
+ovs_expr ovs_qualifier(ovs_context* c, ovs_expr e);
+UChar* ovs_name(ovs_expr e);
+ovs_expr ovs_car(ovs_expr e);
+ovs_expr ovs_cdr(ovs_expr e);
 
 void ovs_dump(ovs_expr s);
 

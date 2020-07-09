@@ -12,11 +12,10 @@ typedef struct ovda_cursor_stack {
 typedef struct ovda_reader {
 	ovda_cursor_stack cursor;
 	ovio_scanner* scanner;
-	ovs_expr data_quote;
-	ovs_expr data_nil;
+	ovs_context* context;
 } ovda_reader;
 
-ovda_reader* ovda_open_reader(ovio_scanner* s);
+ovda_reader* ovda_open_reader(ovio_scanner* s, ovs_context* c);
 
 void ovda_close_reader(ovda_reader* r);
 

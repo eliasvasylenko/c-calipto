@@ -24,16 +24,12 @@ typedef ovda_reader reader;
 typedef ovda_cursor_stack cursor_stack;
 typedef ovs_expr expr;
 
-reader* ovda_open_reader(scanner* s) {
+reader* ovda_open_reader(scanner* s, ovs_context* c) {
 	reader* r = malloc(sizeof(reader));
 	r->scanner = s;
+	r->context = c;
 	r->cursor.position = 0;
 	r->cursor.stack = NULL;
-
-	expr data = ovs_symbol(NULL, ovio_u_strref(u"data"));
-	r->data_quote = ovs_symbol(data.p, ovio_u_strref(u"quote"));
-	r->data_nil = ovs_symbol(data.p, ovio_u_strref(u"nil"));
-	ovs_dealias(data);
 
 	return r;
 }
@@ -45,8 +41,6 @@ void ovda_close_reader(reader* r) {
 		s = p->stack;
 		free(p);
 	}
-	ovs_dealias(r->data_quote);
-	ovs_dealias(r->data_nil);
 	free(r);
 }
 
@@ -162,7 +156,7 @@ ovda_result ovda_read_symbol(reader* r, expr* e) {
 		UChar* n = malloc(sizeof(UChar) * len);
 		ovio_take_buffer_length(r->scanner, len, n);
 
-		symbol = ovs_symbol(symbol.p, ovio_u_strnref(len, n));
+		symbol = ovs_symbol(symbol.p->symbol.table, ovio_u_strnref(len, n));
 
 		free(n);
 	} while (ovio_advance_input_if(r->scanner, is_equal, &colon));
@@ -190,8 +184,8 @@ ovda_result read_string(reader* r, expr* e) {
 	ovio_take_buffer_length(r->scanner, len, c);
 	expr string = ovs_string(ovio_u_strnref(len, c));
 
-	expr list[] = { r->data_quote, string };
-	*e = ovs_list(2, list);
+	expr list[] = { { OVS_SYMBOL, .p=r->context->quote }, string };
+	*e = ovs_list(r->context, 2, list);
 
 	ovs_dealias(string);
 	free(c);
