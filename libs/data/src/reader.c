@@ -185,7 +185,7 @@ ovda_result read_string(reader* r, expr* e) {
 	expr string = ovs_string(ovio_u_strnref(len, c));
 
 	expr list[] = { { OVS_SYMBOL, .p=r->context->quote }, string };
-	*e = ovs_list(r->context, 2, list);
+	*e = ovs_list(&r->context->table, 2, list);
 
 	ovs_dealias(string);
 	free(c);
@@ -205,8 +205,8 @@ ovda_result read_quote(reader* r, expr* e) {
 		return OVDA_INVALID;
 	}
 
-	expr list[] = { r->data_quote, data };
-	*e = ovs_list(2, list);
+	expr list[] = { { OVS_SYMBOL, .p=r->context->quote }, data };
+	*e = ovs_list(&r->context->table, 2, list);
 
 	ovs_dealias(data);
 
@@ -257,7 +257,7 @@ ovda_result ovda_read_step_out(reader* r, expr* e) {
 	if (ovio_advance_input_if(r->scanner, is_equal, &close_bracket)) {
 		ovio_discard_buffer(r->scanner);
 
-		*e = ovs_alias(r->data_nil);
+		*e = (expr){ OVS_SYMBOL, .p=ovs_ref(r->context->nil) };
 		return OVDA_SUCCESS;
 	}
 
@@ -285,7 +285,7 @@ ovda_result ovda_read_step_out(reader* r, expr* e) {
 		return OVDA_INVALID;
 	}
 
-	expr cons = ovs_cons(head, tail);
+	expr cons = ovs_cons(&r->context->table, head, tail);
 
 	ovs_dealias(head);
 	ovs_dealias(tail);

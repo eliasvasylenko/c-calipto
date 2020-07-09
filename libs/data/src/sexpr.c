@@ -31,44 +31,40 @@ ovs_expr_ref* ref(uint32_t payload_size, uint32_t refs) {
 	return r;
 }
 
-ovs_expr ovs_function(ovs_function_type* t, uint32_t data_size, void* data) {
+ovs_expr ovs_function(ovs_context* c, ovs_function_type* t, uint32_t data_size, void* data) {
 	ovs_expr_ref* r = ref(sizeof(ovs_function_data) + data_size, 1);
 	r->function.type = t;
+	r->function.context = c;
 	memcpy(&r->function + 1, data, data_size);
 
 	return (ovs_expr){ OVS_FUNCTION, .p=r };
 }
 
+void ovs_update_value(void* value, bdtrie_node* owner) {
+	ovs_expr_ref* r = value;
+	r->symbol.node = owner;
+}
+
 void* ovs_get_value(uint32_t key_size, void* key_data, void* value_data, bdtrie_node* owner) {
-	ovs_expr_ref* r = ref(sizeof(bdtrie_node*), 0);
-	r->ref_count = ATOMIC_VAR_INIT(0);
-	r->symbol = owner;
+	ovs_expr_ref* r = ref(sizeof(ovs_symbol_data), 0);
+	r->symbol.node = owner;
+	r->symbol.table = malloc(sizeof(ovs_table));
+	r->symbol.table->qualifier = r;
+	r->symbol.table->trie = (bdtrie) { NULL, ovs_get_value, ovs_update_value, free };
 	return r;
 }
 
-void ovs_update_value(void* value, bdtrie_node* owner) {
-	ovs_expr_ref* r = value;
-	r->symbol = owner;
-}
+ovs_expr_ref* ovs_intern(ovs_table* table, strref name) {
+	uint32_t len = ovio_strref_maxlen(name);
+	UChar* key = malloc(sizeof(UChar) * len);
+	len = ovio_strref_cpy(len, key, name);
 
-typedef struct ovs_symbol_data {
-	bdtrie_node* node;
-	bdtrie qualified_symbols;
-} ovs_symbol_data;
-
-ovs_expr_ref* ovs_intern(ovs_expr_ref* qualifier, strref name) {
-	uint32_t maxlen = ovio_strref_maxlen(name);
-	ovs_symbol_info* key = malloc(offsetof(ovs_symbol_info, name) + sizeof(UChar) * maxlen);
-	memset(key, 0, offsetof(ovs_symbol_info, name));
-	uint32_t len = ovio_strref_cpy(maxlen, key->name, name);
-
-	key->qualifier = qualifier;
-	if (qualifier != NULL) {
-		ovs_ref(qualifier);
+	if (table->qualifier != NULL) {
+		ovs_ref(table->qualifier);
 	}
 
-	uint32_t keysize = offsetof(ovs_symbol_info, name) + sizeof(UChar) * len;
-	ovs_expr_ref* r = bdtrie_find_or_insert(&table.trie, keysize, key, NULL).data;
+	uint32_t keysize = sizeof(UChar) * len;
+	ovs_expr_ref* r = bdtrie_find_or_insert(&table->trie, keysize, key, NULL).data;
 	ovs_ref(r);
 
 	free(key);
@@ -76,20 +72,20 @@ ovs_expr_ref* ovs_intern(ovs_expr_ref* qualifier, strref name) {
 	return r;
 }
 
-ovs_expr ovs_symbol(ovs_expr_ref* q, strref n) {
-	return (ovs_expr){ OVS_SYMBOL, .p=ovs_intern(q, n) };
+ovs_expr ovs_symbol(ovs_table* t, strref n) {
+	return (ovs_expr){ OVS_SYMBOL, .p=ovs_intern(t, n) };
 }
 
-ovs_symbol_info* ovs_inspect(const ovs_expr e) {
+UChar* ovs_name(const ovs_expr e) {
 	if (e.type != OVS_SYMBOL) {
 		assert(false);
 	}
-	uint32_t size = bdtrie_key_size(e.p->symbol);
+	uint32_t size = bdtrie_key_size(e.p->symbol.node);
 	if (size <= 0) {
 		assert(false);
 	} else {
-		ovs_symbol_info* s = malloc(size + sizeof(UChar));
-		bdtrie_key(s, e.p->symbol);
+		UChar* s = malloc(size + sizeof(UChar));
+		bdtrie_key(s, e.p->symbol.node);
 		UChar* end = (UChar*)((uint8_t*)s + size);
 		*end = u'\0';
 		return s;
@@ -114,7 +110,7 @@ ovs_expr ovs_string(strref s) {
 	return (ovs_expr){ OVS_STRING, .p=r };
 }
 
-ovs_expr ovs_cons(const ovs_expr car, const ovs_expr cdr) {
+ovs_expr ovs_cons(ovs_table* t, const ovs_expr car, const ovs_expr cdr) {
 	if (car.type == OVS_CHARACTER && cdr.type == OVS_STRING) {
 		bool single = !U_IS_SURROGATE(car.character);
 		int32_t head = single ? 1 : 2;
@@ -132,6 +128,7 @@ ovs_expr ovs_cons(const ovs_expr car, const ovs_expr cdr) {
 	}
 
 	ovs_expr_ref* r = ref(sizeof(ovs_cons_data), 1);
+	r->cons.table = t;
 	r->cons.car = car;
 	r->cons.cdr = cdr;
 	ovs_alias(car);
@@ -215,8 +212,8 @@ bool ovs_eq(const ovs_expr a, const ovs_expr b) {
 			return ovs_eq(a.p->cons.car, b.p->cons.car) && ovs_eq(a.p->cons.cdr, b.p->cons.cdr);
 		case OVS_FUNCTION:
 			return a.p->function.type == b.p->function.type
-				&& ovs_eq(a.p->function.type->represent(&a.p->function + 1),
-					b.p->function.type->represent(&b.p->function + 1));
+				&& ovs_eq(a.p->function.type->represent(a.p->function.context, &a.p->function + 1),
+					b.p->function.type->represent(b.p->function.context, &b.p->function + 1));
 		case OVS_CHARACTER:
 			return a.character == b.character;
 		case OVS_STRING:
@@ -264,10 +261,13 @@ void ovs_elem_dump(const ovs_expr s) {
 			printf("%li", s.integer);
 			break;
 		default:
-			if (ovs_atom(s)) {
+			if (ovs_is_symbol(s)) {
 				if (ovs_eq(s, data_nil)) {
 					printf("()");
+
 				} else {
+					s_exor
+					UChar* n = ovs_name(s);
 					ovs_symbol_info* i = ovs_inspect(s);
 					if (i->qualifier == NULL) {
 						u_printf_u(u"%S", i->name);

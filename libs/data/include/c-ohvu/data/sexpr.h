@@ -25,8 +25,8 @@ typedef struct ovs_instruction {
 } ovs_instruction;
 
 typedef struct ovs_table {
-	ovs_expr_ref* qualifier;
 	bdtrie trie;
+	ovs_expr_ref* qualifier;
 } ovs_table;
 
 typedef struct ovs_context {
@@ -42,6 +42,7 @@ typedef struct ovs_symbol_data {
 } ovs_symbol_data;
 
 typedef struct ovs_cons_data {
+	ovs_table* table;
 	ovs_expr car;
 	ovs_expr cdr;
 } ovs_cons_data;
