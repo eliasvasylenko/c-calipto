@@ -106,12 +106,12 @@ node_layout layout_of(bdtrie_node* n) {
 
 typedef struct key {
 	uint32_t size;
-	uint8_t* data;
+	const uint8_t* data;
 } key;
 
 typedef struct entry {
 	key key;
-	void* value_data;
+	const void* value_data;
 } entry;
 
 bdtrie_node* make_split(bdtrie* t, bdtrie_node* n, uint32_t index, bdtrie_node* parent) {
@@ -356,7 +356,7 @@ bdtrie_value insert_recur(bdtrie* t, entry e, bdtrie_node** np, key k, bool over
 	}
 }
 
-bdtrie_value bdtrie_insert(bdtrie* t, uint32_t key_size, void* key_data, void* value_data) {
+bdtrie_value bdtrie_insert(bdtrie* t, uint32_t key_size, const void* key_data, const void* value_data) {
 	key k = { key_size, key_data };
 	entry e = { k, value_data };
 
@@ -368,7 +368,7 @@ bdtrie_value bdtrie_insert(bdtrie* t, uint32_t key_size, void* key_data, void* v
 	}
 }
 
-bdtrie_value bdtrie_find_or_insert(bdtrie* t, uint32_t key_size, void* key_data, void* value_data) {
+bdtrie_value bdtrie_find_or_insert(bdtrie* t, uint32_t key_size, const void* key_data, const void* value_data) {
 	key k = { key_size, key_data };
 	entry e = { k, value_data };
 
@@ -408,7 +408,7 @@ uint32_t bdtrie_key_size(bdtrie_node* n) {
 	return leaf_of(n)->key_size;
 }
 
-bdtrie_value find_recur(bdtrie* t, key tail, bdtrie_node* n) {
+bdtrie_value find_recur(const bdtrie* t, key tail, bdtrie_node* n) {
 	if (tail.size < n->keysize) {
 		return (bdtrie_value){ NULL, NULL };
 	}
@@ -436,7 +436,7 @@ bdtrie_value find_recur(bdtrie* t, key tail, bdtrie_node* n) {
 	return find_recur(t, tail, *child);
 }
 
-bdtrie_value bdtrie_find(bdtrie* t, uint32_t key_size, void* key_data) {
+bdtrie_value bdtrie_find(const bdtrie* t, uint32_t key_size, const void* key_data) {
 	key k = { key_size, key_data };
 	if (t->root == NULL) {
 		return (bdtrie_value){ NULL, NULL };

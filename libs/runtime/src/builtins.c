@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include <unicode/utypes.h>
 #include <unicode/ucnv.h>
@@ -11,33 +12,35 @@
 #include "c-ohvu/runtime/builtins.h"
 #include "c-ohvu/runtime/interpreter.h"
 
-ovs_expr no_represent(void* d) { return ovs_list(0, NULL); }
+ovs_expr no_represent(ovs_context* c, UChar* name, const void* d) {
+	return ovs_symbol(c->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(name), name);
+}
 
-void no_free(void* d) {}
+void no_free(const void* d) {}
 
 /*
  * exit
  */
 
-int32_t exit_apply(ovs_instruction* r, ovs_expr* args, void* d) {
+int32_t exit_apply(ovs_instruction* r, ovs_expr* args, const void* d) {
 	r->size = 0;
 	return OVRU_SUCCESS;
 }
 
-ovs_function_info exit_inspect(void* d) {
+ovs_function_info exit_inspect(const void* d) {
 	return (ovs_function_info){ 0, 0 };
 }
 
 static ovs_function_type exit_function = {
-	u"scan",
+	u"exit",
 	no_represent,
 	exit_inspect,
 	exit_apply,
 	no_free
 };
 
-ovs_expr ovru_exit() {
-	return ovs_function(&exit_function, 0, NULL);
+ovs_expr ovru_exit(ovs_context* c) {
+	return ovs_function(c, &exit_function, 0, NULL);
 }
 
 /*
@@ -51,15 +54,15 @@ typedef struct scanner_data {
 	ovs_expr* text;
 } scanner_data;
 
-ovs_expr scanner_represent(void* d) {
-	;
+ovs_expr scanner_represent(ovs_context* c, UChar* name, const void* d) {
+	assert(false);
 }
 
-ovs_function_info scanner_inspect(void* d) {
+ovs_function_info scanner_inspect(const void* d) {
 	return (ovs_function_info){ 2, 2 };
 }
 
-int32_t scanner_apply(ovs_instruction* i, ovs_expr* args, void* d) {
+int32_t scanner_apply(ovs_instruction* i, ovs_expr* args, const void* d) {
 	ovs_expr fail = args[0];
 	ovs_expr cont = args[1];
 
@@ -69,7 +72,7 @@ int32_t scanner_apply(ovs_instruction* i, ovs_expr* args, void* d) {
 	return OVRU_SUCCESS;
 }
 
-void scanner_free(void* d) {
+void scanner_free(const void* d) {
 	scanner_data data = *(scanner_data*)d;
 
 	ovs_dealias(data.file_name);
@@ -94,9 +97,9 @@ static ovs_function_type scanner_function = {
 	scanner_free
 };
 
-ovs_expr ovru_open_scanner(UFILE* f, UChar* name) {
-	scanner_data data = { f, ovs_string(ovio_u_strref(name)), NULL, NULL };
-	return ovs_function(&scanner_function, sizeof(scanner_data), &data);
+ovs_expr ovru_open_scanner(ovs_context* c, UFILE* f, UChar* name) {
+	scanner_data data = { f, ovs_string(u_strlen(name), name), NULL, NULL };
+	return ovs_function(c, &scanner_function, sizeof(scanner_data), &data);
 }
 
 /*
@@ -110,15 +113,15 @@ typedef struct printer_data {
 	ovs_expr* text;
 } printer_data;
 
-ovs_expr printer_represent(void* d) {
-	;
+ovs_expr printer_represent(ovs_context*c, UChar* name, const void* d) {
+	assert(false);
 }
 
-ovs_function_info printer_inspect(void* d) {
+ovs_function_info printer_inspect(const void* d) {
 	return (ovs_function_info){ 3, 1 };
 }
 
-int32_t printer_apply(ovs_instruction* i, ovs_expr* args, void* d) {
+int32_t printer_apply(ovs_instruction* i, ovs_expr* args, const void* d) {
 	ovs_expr string = args[0];
 	ovs_expr fail = args[1];
 	ovs_expr cont = args[2];
@@ -140,7 +143,7 @@ int32_t printer_apply(ovs_instruction* i, ovs_expr* args, void* d) {
 	return OVRU_SUCCESS;
 }
 
-void printer_free(void* d) {
+void printer_free(const void* d) {
 	printer_data data = *(printer_data*)d;
 
 	ovs_dealias(data.file_name);
@@ -165,57 +168,75 @@ static ovs_function_type printer_function = {
 	printer_free
 };
 
-ovs_expr ovru_open_printer(UFILE* f, UChar* name) {
-	printer_data data = { f, ovs_string(ovio_u_strref(name)), NULL, NULL };
-	return ovs_function(&printer_function, sizeof(printer_data), &data);
+ovs_expr ovru_open_printer(ovs_context* c, UFILE* f, UChar* name) {
+	printer_data data = { f, ovs_string(u_strlen(name), name), NULL, NULL };
+	return ovs_function(c, &printer_function, sizeof(printer_data), &data);
 }
 
 /*
  * cons
  */
 
-ovs_function_info cons_inspect(void* d) {
+ovs_expr cons_represent(ovs_context*c, UChar* name, const void* d) {
+	assert(false);
+}
+
+ovs_function_info cons_inspect(const void* d) {
 	return (ovs_function_info){ 3, 2 };
 }
 
-int32_t cons_apply(ovs_instruction* i, ovs_expr* args, void* d) {
+int32_t cons_apply(ovs_instruction* i, ovs_expr* args, const void* d) {
 	ovs_expr car = args[0];
 	ovs_expr cdr = args[1];
 	ovs_expr cont = args[2];
 
 	i->size = 2;
 	i->values[0] = ovs_alias(cont);
-	i->values[1] = ovs_cons(car, cdr);
+	i->values[1] = ovs_cons((ovs_table*)d, car, cdr);
 
 	return OVRU_SUCCESS;
 }
 
+void cons_free(const void* d) {
+	ovs_table* t = (ovs_table*)d;
+	if (t->qualifier != NULL) {
+		ovs_free(OVS_SYMBOL, t->qualifier);
+	}
+}
+
 static ovs_function_type cons_function = {
 	u"cons",
-	no_represent,
+	cons_represent,
 	cons_inspect,
 	cons_apply,
-	no_free
+	cons_free	
 };
 
-ovs_expr ovru_cons() {
-	return ovs_function(&cons_function, 0, NULL);
+ovs_expr ovru_cons(ovs_context* c, ovs_table* t) {
+	if (t->qualifier != NULL) {
+		ovs_ref(t->qualifier);
+	}
+	return ovs_function(c, &cons_function, 0, t);
 }
 
 /*
  * des
  */
 
-ovs_function_info des_inspect(void* d) {
+ovs_expr des_represent(ovs_context* c, UChar* name, const void* d) {
+	assert(false);
+}
+
+ovs_function_info des_inspect(const void* d) {
 	return (ovs_function_info){ 3, 3 };
 }
 
-int32_t des_apply(ovs_instruction* i, ovs_expr* args, void* d) {
+int32_t des_apply(ovs_instruction* i, ovs_expr* args, const void* d) {
 	ovs_expr e = args[0];
 	ovs_expr fail = args[1];
 	ovs_expr cont = args[2];
 
-	if (ovs_atom(e)) {
+	if (ovs_is_atom((ovs_table*)d, e)) {
 		i->size = 1;
 		i->values[0] = ovs_alias(fail);
 
@@ -229,34 +250,44 @@ int32_t des_apply(ovs_instruction* i, ovs_expr* args, void* d) {
 	return OVRU_SUCCESS;
 }
 
+void des_free(const void* d) {
+	ovs_table* t = (ovs_table*)d;
+	if (t->qualifier != NULL) {
+		ovs_free(OVS_SYMBOL, t->qualifier);
+	}
+}
+
 static ovs_function_type des_function = {
 	u"des",
-	no_represent,
+	des_represent,
 	des_inspect,
 	des_apply,
-	no_free
+	des_free
 };
 
-ovs_expr ovru_des() {
-	return ovs_function(&des_function, 0, NULL);
+ovs_expr ovru_des(ovs_context* c, ovs_table* t) {
+	if (t->qualifier != NULL) {
+		ovs_ref(t->qualifier);
+	}
+	return ovs_function(c, &des_function, 0, t);
 }
 
 /*
  * eq
  */
 
-ovs_function_info eq_inspect(void* d) {
+ovs_function_info eq_inspect(const void* d) {
 	return (ovs_function_info){ 4, 1 };
 }
 
-int32_t eq_apply(ovs_instruction* i, ovs_expr* args, void* d) {
+int32_t eq_apply(ovs_instruction* i, ovs_expr* args, const void* d) {
 	ovs_expr e_a = args[0];
 	ovs_expr e_b = args[1];
 	ovs_expr f = args[2];
 	ovs_expr t = args[3];
 
 	i->size = 1;
-	i->values[0] = ovs_alias(ovs_eq(e_a, e_b) ? t : f);
+	i->values[0] = ovs_alias(ovs_is_eq(e_a, e_b) ? t : f);
 
 	return OVRU_SUCCESS;
 }
@@ -269,6 +300,6 @@ static ovs_function_type eq_function = {
 	no_free
 };
 
-ovs_expr ovru_eq() {
-	return ovs_function(&eq_function, 0, NULL);
+ovs_expr ovru_eq(ovs_context* c) {
+	return ovs_function(c, &eq_function, 0, NULL);
 }

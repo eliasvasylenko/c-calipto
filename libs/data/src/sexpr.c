@@ -45,7 +45,7 @@ void ovs_update_value(void* value, bdtrie_node* owner) {
 	r->symbol.node = owner;
 }
 
-void* ovs_get_value(uint32_t key_size, void* key_data, void* value_data, bdtrie_node* owner) {
+void* ovs_get_value(uint32_t key_size, const void* key_data, const void* value_data, bdtrie_node* owner) {
 	ovs_expr_ref* r = ref(sizeof(ovs_symbol_data), 0);
 	r->symbol.node = owner;
 	r->symbol.table = malloc(sizeof(ovs_table));
@@ -54,26 +54,20 @@ void* ovs_get_value(uint32_t key_size, void* key_data, void* value_data, bdtrie_
 	return r;
 }
 
-ovs_expr_ref* ovs_intern(ovs_table* table, strref name) {
-	uint32_t len = ovio_strref_maxlen(name);
-	UChar* key = malloc(sizeof(UChar) * len);
-	len = ovio_strref_cpy(len, key, name);
-
+ovs_expr_ref* ovs_intern(ovs_table* table, uint32_t len, UChar* name) {
 	if (table->qualifier != NULL) {
 		ovs_ref(table->qualifier);
 	}
 
 	uint32_t keysize = sizeof(UChar) * len;
-	ovs_expr_ref* r = bdtrie_find_or_insert(&table->trie, keysize, key, NULL).data;
+	ovs_expr_ref* r = bdtrie_find_or_insert(&table->trie, keysize, name, NULL).data;
 	ovs_ref(r);
-
-	free(key);
 
 	return r;
 }
 
-ovs_expr ovs_symbol(ovs_table* t, strref n) {
-	return (ovs_expr){ OVS_SYMBOL, .p=ovs_intern(t, n) };
+ovs_expr ovs_symbol(ovs_table* t, uint32_t l, UChar* n) {
+	return (ovs_expr){ OVS_SYMBOL, .p=ovs_intern(t, l, n) };
 }
 
 UChar* ovs_name(const ovs_expr e) {
@@ -96,16 +90,9 @@ ovs_expr ovs_character(UChar32 cp) {
 	return (ovs_expr){ OVS_CHARACTER, .character=cp };
 }
 
-ovs_expr ovs_string(strref s) {
-	int32_t maxlen = ovio_strref_maxlen(s);
-	ovs_expr_ref* r = ref(offsetof(ovs_string_data, string) + sizeof(UChar) * (maxlen + 1), 1);
-	int32_t len = ovio_strref_cpy(maxlen, r->string.string, s);
-	if (maxlen != len) {
-		ovs_expr_ref* r2 = ref(offsetof(ovs_string_data, string) + sizeof(UChar) * (len + 1), 1);
-		memcpy(r2->string.string, r->string.string, len);
-		free(r);
-		r = r2;
-	}
+ovs_expr ovs_string(uint32_t len, UChar* s) {
+	ovs_expr_ref* r = ref(offsetof(ovs_string_data, string) + sizeof(UChar) * (len + 1), 1);
+	memcpy(r->string.string, s, len);
 	r->string.string[len] = u'\0';
 	return (ovs_expr){ OVS_STRING, .p=r };
 }
@@ -211,9 +198,12 @@ bool ovs_eq(const ovs_expr a, const ovs_expr b) {
 		case OVS_CONS:
 			return ovs_eq(a.p->cons.car, b.p->cons.car) && ovs_eq(a.p->cons.cdr, b.p->cons.cdr);
 		case OVS_FUNCTION:
-			return a.p->function.type == b.p->function.type
-				&& ovs_eq(a.p->function.type->represent(a.p->function.context, &a.p->function + 1),
-					b.p->function.type->represent(b.p->function.context, &b.p->function + 1));
+			;
+			const ovs_function_data* fa = &a.p->function;
+			const ovs_function_data* fb = &b.p->function;
+			return fa->type == fb->type
+				&& ovs_eq(fa->type->represent(fa->context, fa->type->name, fa + 1),
+					fb->type->represent(fb->context, fb->type->name, fb + 1));
 		case OVS_CHARACTER:
 			return a.character == b.character;
 		case OVS_STRING:
@@ -261,22 +251,20 @@ void ovs_elem_dump(const ovs_expr s) {
 			printf("%li", s.integer);
 			break;
 		default:
+			if (ovs_is_qualified(s)) {
+				ovs_expr q = ovs_qualifier(s);
+				ovs_elem_dump(q);
+				u_printf_u(u":");
+				ovs_dealias(q);
+			}
 			if (ovs_is_symbol(s)) {
 				if (ovs_eq(s, data_nil)) {
 					printf("()");
 
 				} else {
-					s_exor
 					UChar* n = ovs_name(s);
-					ovs_symbol_info* i = ovs_inspect(s);
-					if (i->qualifier == NULL) {
-						u_printf_u(u"%S", i->name);
-					} else {
-						ovs_expr q = { OVS_SYMBOL, .p=i->qualifier };
-						ovs_elem_dump(q);
-						u_printf_u(u":%S", i->name);
-					}
-					free(i);
+					u_printf_u(u"%S", n);
+					free(n);
 				}
 			} else {
 				ovs_expr car = ovs_car(s);
@@ -317,13 +305,13 @@ void ovs_dealias(ovs_expr e) {
 	}
 }
 
-ovs_expr_ref* ovs_ref(ovs_expr_ref* r) {
-	atomic_fetch_add(&r->ref_count, 1);
+const ovs_expr_ref* ovs_ref(const ovs_expr_ref* r) {
+	atomic_fetch_add(&((ovs_expr_ref*)r)->ref_count, 1);
 	return r;
 }
 
-void ovs_free(ovs_expr_type t, ovs_expr_ref* r) {
-	if (atomic_fetch_add(&r->ref_count, -1) > 1) {
+void ovs_free(ovs_expr_type t, const ovs_expr_ref* r) {
+	if (atomic_fetch_add(&((ovs_expr_ref*)r)->ref_count, -1) > 1) {
 		return;
 	}
 	switch (t) {
@@ -331,54 +319,62 @@ void ovs_free(ovs_expr_type t, ovs_expr_ref* r) {
 		case OVS_INTEGER:
 			break;
 		case OVS_SYMBOL:
-			bdtrie_delete(r->symbol);
+			bdtrie_delete(r->symbol.node);
 			break;
 		case OVS_CONS:
+			if (r->cons.table->qualifier != NULL) {
+				ovs_free(OVS_SYMBOL, r->cons.table->qualifier);
+			}
 			ovs_dealias(r->cons.car);
 			ovs_dealias(r->cons.cdr);
-			free(r);
+			free((void*)r);
 			break;
 		case OVS_FUNCTION:
 			r->function.type->free(&r->function + 1);
-			free(r);
+			free((void*)r);
 			break;
 		case OVS_STRING:
-			free(r);
+			free((void*)r);
 			break;
 		case OVS_BIG_INTEGER:
 			break;
 	}
 }
 
-void ovs_init() {
-	table = (ovs_table){ { NULL, ovs_get_value, ovs_update_value, free } };
-	ovs_expr data = ovs_symbol(NULL, ovio_u_strref(u"data"));
-	data_nil = ovs_symbol(data.p, ovio_u_strref(u"nil"));
-	data_quote = ovs_symbol(data.p, ovio_u_strref(u"quote"));
-	data_lambda = ovs_symbol(data.p, ovio_u_strref(u"lambda"));
-	ovs_dealias(data);
+ovs_context ovs_init() {
+	ovs_context c = {
+		malloc(sizeof(ovs_table) * OVS_ROOT_TABLE_COUNT)
+	};
+	for (int i = 0; i < OVS_ROOT_TABLE_COUNT; i++) {
+		c.root_tables[i].trie = (bdtrie){ NULL, ovs_get_value, ovs_update_value, free };
+		c.root_tables[i].qualifier = (i == 0)
+			? NULL
+			: &ovs_root_symbols[ovs_root_symbols[i].qualifier].data;
+	}
 }
 
-void ovs_close() {
-	bdtrie_clear(&table.trie);
+void ovs_close(ovs_context* c) {
+	for (int i = 0; i < OVS_ROOT_TABLE_COUNT; i++) {
+		bdtrie_clear(&c->root_tables[i].trie);
+	}
 }
 
-ovs_expr ovs_list(int32_t count, ovs_expr* e) {
+ovs_expr ovs_list(ovs_table* t, int32_t count, ovs_expr* e) {
 	ovs_expr l = ovs_alias(data_nil);
 	for (int i = count - 1; i >= 0; i--) {
 		ovs_expr prev = l;
-		l = ovs_cons(e[i], l);
+		l = ovs_cons(t, e[i], l);
 		ovs_dealias(prev);
 	}
 	return l;
 }
 
-ovs_expr ovs_list_of(int32_t count, void** e, ovs_expr (*map)(void* elem)) {
+ovs_expr ovs_list_of(ovs_table* t, int32_t count, void** e, ovs_expr (*map)(const void* elem)) {
 	ovs_expr l = ovs_alias(data_nil);
 	for (int i = count - 1; i >= 0; i--) {
 		ovs_expr prev = l;
 		ovs_expr head = map(e[i]);
-		l = ovs_cons(head, l);
+		l = ovs_cons(t, head, l);
 		ovs_dealias(head);
 		ovs_dealias(prev);
 	}

@@ -15,7 +15,7 @@ typedef struct ovs_expr {
 	union {
 		UChar32 character;
 		int64_t integer;
-		ovs_expr_ref* p;
+		ovs_expr_ref const* p;
 	};
 } ovs_expr;
 
@@ -24,21 +24,35 @@ typedef struct ovs_instruction {
 	ovs_expr* values;
 } ovs_instruction;
 
+typedef enum ovs_root_table {
+	OVS_UNQUALIFIED,
+	OVS_DATA,
+	OVS_DATA_NIL,
+	OVS_DATA_QUOTE,
+	OVS_DATA_LAMBDA,
+	OVS_SYSTEM,
+	OVS_SYSTEM_BUILTIN,
+	OVS_TEXT,
+	OVS_TEXT_STRING,
+	OVS_TEXT_CHARACTER
+} ovs_root_table;
+#define OVS_ROOT_TABLE_COUNT (OVS_TEXT_CHARACTER + 1)
+
 typedef struct ovs_table {
 	bdtrie trie;
-	ovs_expr_ref* qualifier;
+	const ovs_expr_ref* qualifier;
 } ovs_table;
 
 typedef struct ovs_context {
-	ovs_table table;
-	ovs_expr_ref* data;
-	ovs_expr_ref* nil;
-	ovs_expr_ref* quote;
+	ovs_table root_tables[OVS_ROOT_TABLE_COUNT];
 } ovs_context;
 
 typedef struct ovs_symbol_data {
 	bdtrie_node* node;
-	ovs_table* table;
+	union {
+		ovs_table* table;
+		uint32_t offset;
+	};
 } ovs_symbol_data;
 
 typedef struct ovs_cons_data {
@@ -53,10 +67,11 @@ typedef struct ovs_function_info {
 } ovs_function_info;
 
 typedef struct ovs_function_type {
-	ovs_expr (*represent)(ovs_context* c, void* d);
-	ovs_function_info (*inspect)(void* d);
-	int32_t (*apply)(ovs_instruction* result, ovs_expr* args, void* d);
-	void (*free) (void* data);
+	UChar* name;
+	ovs_expr (*represent)(ovs_context* c, UChar* n, const void* d);
+	ovs_function_info (*inspect)(const void* d);
+	int32_t (*apply)(ovs_instruction* result, ovs_expr* args, const void* d);
+	void (*free) (const void* data);
 } ovs_function_type;
 
 typedef struct ovs_function_data {
@@ -79,17 +94,44 @@ struct ovs_expr_ref {
 	};
 };
 
-ovs_context ovs_init();
-void ovs_close(ovs_context c);
+/*
+ * Core symbols
+ */
 
-ovs_expr ovs_symbol(ovs_table* t, ovio_strref name);
+typedef struct ovs_root_symbol_data {
+	UChar* name;
+	ovs_root_table qualifier;
+	ovs_expr_ref data;
+} ovs_root_symbol_data;
+
+static const ovs_root_symbol_data ovs_root_symbols[] = {
+	{ NULL },
+	{ u"data", OVS_UNQUALIFIED, { 0, .symbol={ NULL, .offset=OVS_DATA } } },
+	{ u"nil", OVS_DATA, { 0, .symbol={ NULL, .offset=OVS_DATA_NIL } } },
+	{ u"quote", OVS_DATA, { 0, .symbol={ NULL, .offset=OVS_DATA_QUOTE } } },
+	{ u"lambda", OVS_DATA, { 0, .symbol={ NULL, .offset=OVS_DATA_LAMBDA } } },
+	{ u"system", OVS_UNQUALIFIED, { 0, .symbol={ NULL, .offset=OVS_SYSTEM } } },
+	{ u"builtin", OVS_SYSTEM, { 0, .symbol={ NULL, .offset=OVS_SYSTEM_BUILTIN } } },
+	{ u"text", OVS_UNQUALIFIED, { 0, .symbol={ NULL, .offset=OVS_TEXT } } },
+	{ u"string", OVS_TEXT, { 0, .symbol={ NULL, .offset=OVS_TEXT_STRING } } },
+	{ u"character", OVS_TEXT, { 0, .symbol={ NULL, .offset=OVS_TEXT_CHARACTER } } }
+};
+
+ovs_context ovs_init();
+void ovs_close(ovs_context* c);
+
+ovs_table* ovs_qualifier_table(const ovs_expr_ref* r);
+
+ovs_expr ovs_symbol(ovs_table* t, uint32_t l, UChar* name);
+ovs_expr ovs_root_symbol(ovs_root_table t);
 ovs_expr ovs_cons(ovs_table* t, ovs_expr car, ovs_expr cdr);
 ovs_expr ovs_character(UChar32 c);
-ovs_expr ovs_string(ovio_strref s);
+ovs_expr ovs_string(uint32_t l, UChar* s);
+ovs_expr ovs_cstring(UConverter* c, char* s);
 ovs_expr ovs_function(ovs_context* c, ovs_function_type* t, uint32_t data_size, void* data);
 
 ovs_expr ovs_list(ovs_table* t, int32_t count, ovs_expr* e);
-ovs_expr ovs_list_of(ovs_table* t, int32_t count, void** e, ovs_expr (*map)(void* elem));
+ovs_expr ovs_list_of(ovs_table* t, int32_t count, void** e, ovs_expr (*map)(const void* elem));
 int32_t ovs_delist(ovs_expr l, ovs_expr** e); 
 int32_t ovs_delist_of(ovs_expr l, void*** e, void* (*map)(ovs_expr elem)); 
 
@@ -98,7 +140,7 @@ bool ovs_is_qualified(ovs_expr e);
 bool ovs_is_symbol(ovs_expr e);
 bool ovs_is_eq(ovs_expr a, ovs_expr b);
 
-ovs_expr ovs_qualifier(ovs_context* c, ovs_expr e);
+ovs_expr ovs_qualifier(ovs_expr e);
 UChar* ovs_name(ovs_expr e);
 ovs_expr ovs_car(ovs_expr e);
 ovs_expr ovs_cdr(ovs_expr e);
@@ -107,6 +149,6 @@ void ovs_dump(ovs_expr s);
 
 ovs_expr ovs_alias(ovs_expr s);
 void ovs_dealias(ovs_expr s);
-ovs_expr_ref* ovs_ref(ovs_expr_ref* r);
-void ovs_free(ovs_expr_type t, ovs_expr_ref* r);
+const ovs_expr_ref* ovs_ref(const ovs_expr_ref* r);
+void ovs_free(ovs_expr_type t, const ovs_expr_ref* r);
 

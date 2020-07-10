@@ -20,7 +20,7 @@ typedef struct variable_bindings {
 	bdtrie variables;
 } variable_bindings;
 
-void* get_variable_binding(uint32_t key_size, void* key_data, void* value_data, bdtrie_node* owner) {
+void* get_variable_binding(uint32_t key_size, const void* key_data, const void* value_data, bdtrie_node* owner) {
 	ovru_variable* value = malloc(sizeof(ovru_variable*));
 	*value = *((ovru_variable*)value_data);
 	return value;
@@ -54,11 +54,9 @@ variable_bindings make_variable_bindings(uint64_t param_count, const ovs_expr_re
 typedef struct compile_context {
 	struct compile_context* parent;
 	variable_bindings bindings;
-	ovs_expr data_quote;
-	ovs_expr data_lambda;
 } compile_context;
 
-ovru_result find_variable(ovru_variable* result, compile_context* c, ovs_expr_ref* symbol) {
+ovru_result find_variable(ovru_variable* result, compile_context* c, const ovs_expr_ref* symbol) {
 	ovru_variable v = { OVRU_CAPTURE, c->bindings.capture_count };
 	ovru_variable w = *(ovru_variable*)bdtrie_find_or_insert(&c->bindings.variables, sizeof(ovs_expr_ref*), &symbol, &v).data;
 
@@ -123,7 +121,7 @@ void free_lambda(ovru_lambda* l) {
 }
 
 void* get_ref(ovs_expr e) {
-	return ovs_ref(e.p);
+	return (void*)ovs_ref(e.p);
 }
 
 ovru_result compile_lambda(ovru_term* result, int32_t part_count, ovs_expr* parts, compile_context* c) {
@@ -142,9 +140,7 @@ ovru_result compile_lambda(ovru_term* result, int32_t part_count, ovs_expr* part
 
 	compile_context lambda_context = {
 		c,
-		make_variable_bindings(param_count, (const ovs_expr_ref**) params),
-		c->data_quote,
-		c->data_lambda
+		make_variable_bindings(param_count, (const ovs_expr_ref**) params)
 	};
 
 	ovru_statement body;
@@ -177,7 +173,7 @@ ovru_result compile_lambda(ovru_term* result, int32_t part_count, ovs_expr* part
 }
 
 ovru_result compile_expression(ovru_term* result, ovs_expr e, compile_context* c) {
-	if (ovs_atom(e)) {
+	if (ovs_is_symbol(e)) {
 		ovru_variable v;
 		ovru_result r = find_variable(&v, c, e.p);
 		if (r == OVRU_SUCCESS) {
@@ -197,10 +193,10 @@ ovru_result compile_expression(ovru_term* result, ovs_expr e, compile_context* c
 	ovs_expr* terms = parts + 1;
 
 	ovru_result success;
-	if (ovs_eq(kind, c->data_quote)) {
+	if (ovs_is_eq(kind, ovs_root_symbol(OVS_DATA_QUOTE))) {
 		success = compile_quote(result, term_count, terms, c);
 
-	} else if (ovs_eq(kind, c->data_lambda)) {
+	} else if (ovs_is_eq(kind, ovs_root_symbol(OVS_DATA_LAMBDA))) {
 		success = compile_lambda(result, term_count, terms, c);
 
 	} else {
@@ -247,14 +243,10 @@ ovru_result compile_statement(ovru_statement* result, ovs_expr s, compile_contex
 }
 
 ovru_result ovru_compile(ovru_statement* result, const ovs_expr e, const uint32_t param_count, const ovs_expr_ref** params) {
-	ovs_expr data = ovs_symbol(NULL, ovio_u_strref(u"data"));
 	compile_context c = {
 		NULL,
-		make_variable_bindings(param_count, params),
-		ovs_symbol(data.p, ovio_u_strref(u"quote")),
-		ovs_symbol(data.p, ovio_u_strref(u"lambda"))
+		make_variable_bindings(param_count, params)
 	};
-	ovs_dealias(data);
 
 	ovru_result success = compile_statement(result, e, &c);
 
@@ -262,9 +254,6 @@ ovru_result ovru_compile(ovru_statement* result, const ovs_expr e, const uint32_
 		free(c.bindings.captures);
 	}
 	bdtrie_clear(&c.bindings.variables);
-
-	ovs_dealias(c.data_quote);
-	ovs_dealias(c.data_lambda);
 
 	return success;
 }
@@ -302,20 +291,21 @@ void clear_instruction_slot(instruction_slot* s) {
 	}
 }
 
-ovs_expr represent_param(void* p) {
+ovs_expr represent_param(const void* p) {
 	return (ovs_expr){ OVS_SYMBOL, .p=*(ovs_expr_ref**)p };
 }
 
-ovs_expr represent_bound_lambda(void* d) {
-	ovru_bound_lambda* l = d;
+ovs_expr represent_bound_lambda(ovs_context* c, UChar* name, const void* d) {
+	const ovru_bound_lambda* l = d;
 
+	ovs_table* t = c->root_tables + OVS_DATA_LAMBDA;
 	ovs_expr form[] = {
-		ovs_list_of(l->lambda->param_count, (void**)l->lambda->params, represent_param),
-		ovs_list(0, NULL) // TODO
+		ovs_list_of(t, l->lambda->param_count, (void**)l->lambda->params, represent_param),
+		ovs_list(t, 0, NULL) // TODO
 	};
 	uint32_t size = sizeof(form) / sizeof(ovs_expr);
 
-	ovs_expr r = ovs_list(2, form);
+	ovs_expr r = ovs_list(t, 2, form);
 
 	for (int i = 0; i < size; i++) {
 		ovs_dealias(form[i]);
@@ -324,24 +314,24 @@ ovs_expr represent_bound_lambda(void* d) {
 	return r;
 }
 
-ovs_function_info inspect_bound_lambda(void* d) {
-	ovru_bound_lambda* l = d;
+ovs_function_info inspect_bound_lambda(const void* d) {
+	const ovru_bound_lambda* l = d;
 
 	return (ovs_function_info){ l->lambda->param_count, l->lambda->body.term_count };
 }
 
 void eval_statement(ovs_instruction* result, ovru_statement s, const ovs_expr* args, const ovs_expr* closure);
 
-int32_t apply_bound_lambda(ovs_instruction* result, ovs_expr* args, void* d) {
-	ovru_bound_lambda* l = d;
+int32_t apply_bound_lambda(ovs_instruction* result, ovs_expr* args, const void* d) {
+	const ovru_bound_lambda* l = d;
 
 	eval_statement(result, l->lambda->body, args, l->closure);
 
 	return OVRU_SUCCESS;
 }
 
-void free_bound_lambda(void* d) {
-	ovru_bound_lambda* l = d;
+void free_bound_lambda(const void* d) {
+	const ovru_bound_lambda* l = d;
 	for (int i = 0; i < l->lambda->capture_count; i++) {
 		ovs_dealias(l->closure[i]);
 	}

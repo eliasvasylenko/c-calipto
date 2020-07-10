@@ -156,7 +156,7 @@ ovda_result ovda_read_symbol(reader* r, expr* e) {
 		UChar* n = malloc(sizeof(UChar) * len);
 		ovio_take_buffer_length(r->scanner, len, n);
 
-		symbol = ovs_symbol(symbol.p->symbol.table, ovio_u_strnref(len, n));
+		symbol = ovs_symbol(ovs_qualifier_table(symbol.p), len, n);
 
 		free(n);
 	} while (ovio_advance_input_if(r->scanner, is_equal, &colon));
@@ -182,10 +182,10 @@ ovda_result read_string(reader* r, expr* e) {
 
 	UChar* c = malloc(sizeof(UChar) * len);
 	ovio_take_buffer_length(r->scanner, len, c);
-	expr string = ovs_string(ovio_u_strnref(len, c));
+	expr string = ovs_string(len, c);
 
-	expr list[] = { { OVS_SYMBOL, .p=r->context->quote }, string };
-	*e = ovs_list(&r->context->table, 2, list);
+	expr list[] = { { OVS_SYMBOL, .p=&ovs_root_symbols[OVS_DATA_QUOTE].data }, string };
+	*e = ovs_list(&r->context->root_tables[OVS_UNQUALIFIED], 2, list);
 
 	ovs_dealias(string);
 	free(c);
@@ -205,8 +205,8 @@ ovda_result read_quote(reader* r, expr* e) {
 		return OVDA_INVALID;
 	}
 
-	expr list[] = { { OVS_SYMBOL, .p=r->context->quote }, data };
-	*e = ovs_list(&r->context->table, 2, list);
+	expr list[] = { { OVS_SYMBOL, .p=&ovs_root_symbols[OVS_DATA_QUOTE].data }, data };
+	*e = ovs_list(&r->context->root_tables[OVS_UNQUALIFIED], 2, list);
 
 	ovs_dealias(data);
 
@@ -257,7 +257,7 @@ ovda_result ovda_read_step_out(reader* r, expr* e) {
 	if (ovio_advance_input_if(r->scanner, is_equal, &close_bracket)) {
 		ovio_discard_buffer(r->scanner);
 
-		*e = (expr){ OVS_SYMBOL, .p=ovs_ref(r->context->nil) };
+		*e = (expr){ OVS_SYMBOL, .p=&ovs_root_symbols[OVS_DATA_NIL].data };
 		return OVDA_SUCCESS;
 	}
 
@@ -285,7 +285,7 @@ ovda_result ovda_read_step_out(reader* r, expr* e) {
 		return OVDA_INVALID;
 	}
 
-	expr cons = ovs_cons(&r->context->table, head, tail);
+	expr cons = ovs_cons(&r->context->root_tables[OVS_UNQUALIFIED], head, tail);
 
 	ovs_dealias(head);
 	ovs_dealias(tail);
