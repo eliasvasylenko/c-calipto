@@ -52,6 +52,7 @@ variable_bindings make_variable_bindings(uint64_t param_count, const ovs_expr_re
 }
 
 typedef struct compile_context {
+	ovs_context* ovs_context;
 	struct compile_context* parent;
 	variable_bindings bindings;
 } compile_context;
@@ -133,13 +134,14 @@ ovru_result compile_lambda(ovru_term* result, int32_t part_count, ovs_expr* part
 	ovs_expr body_decl = parts[1];
 
 	ovs_expr_ref** params;
-	int32_t param_count = ovs_delist_of(params_decl, (void***)&params, get_ref);
+	int32_t param_count = ovs_delist_of(c->ovs_context->root_tables, params_decl, (void***)&params, get_ref);
 	if (param_count < 0) {
 		return OVRU_INVALID_PARAMETER_TERMINATOR;
 	}
 
 	compile_context lambda_context = {
 		c,
+		c->ovs_context,
 		make_variable_bindings(param_count, (const ovs_expr_ref**) params)
 	};
 
@@ -242,18 +244,19 @@ ovru_result compile_statement(ovru_statement* result, ovs_expr s, compile_contex
 	return success;
 }
 
-ovru_result ovru_compile(ovru_statement* result, const ovs_expr e, const uint32_t param_count, const ovs_expr_ref** params) {
-	compile_context c = {
+ovru_result ovru_compile(ovru_statement* result, ovs_context* c, const ovs_expr e, const uint32_t param_count, const ovs_expr_ref** params) {
+	compile_context context = {
 		NULL,
+		c,
 		make_variable_bindings(param_count, params)
 	};
 
-	ovru_result success = compile_statement(result, e, &c);
+	ovru_result success = compile_statement(result, e, &context);
 
-	if (c.bindings.capture_count > 0) {
-		free(c.bindings.captures);
+	if (context.bindings.capture_count > 0) {
+		free(context.bindings.captures);
 	}
-	bdtrie_clear(&c.bindings.variables);
+	bdtrie_clear(&context.bindings.variables);
 
 	return success;
 }
@@ -422,7 +425,7 @@ ovru_result execute_instruction(instruction_slot* next, instruction_slot* curren
 	return r;
 }
 
-ovru_result ovru_eval(ovs_context* c, const ovru_statement s, const ovs_expr* args) {
+ovru_result ovru_eval(const ovru_statement s, ovs_context* c, const ovs_expr* args) {
 	/*
 	 * We have two instruction slots, the current instruction which is
 	 * executing, and the next instruction which is being written. We
