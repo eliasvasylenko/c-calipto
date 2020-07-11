@@ -156,7 +156,7 @@ ovda_result ovda_read_symbol(reader* r, expr* e) {
 		UChar* n = malloc(sizeof(UChar) * len);
 		ovio_take_buffer_length(r->scanner, len, n);
 
-		symbol = ovs_symbol(ovs_qualifier_table(symbol.p), len, n);
+		symbol = ovs_symbol(ovs_table_of(r->context, symbol), len, n);
 
 		free(n);
 	} while (ovio_advance_input_if(r->scanner, is_equal, &colon));

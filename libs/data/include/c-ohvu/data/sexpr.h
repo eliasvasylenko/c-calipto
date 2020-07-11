@@ -70,7 +70,7 @@ typedef struct ovs_function_type {
 	UChar* name;
 	ovs_expr (*represent)(ovs_context* c, UChar* n, const void* d);
 	ovs_function_info (*inspect)(const void* d);
-	int32_t (*apply)(ovs_instruction* result, ovs_expr* args, const void* d);
+	int32_t (*apply)(ovs_instruction* result, ovs_context* c, ovs_expr* args, const void* d);
 	void (*free) (const void* data);
 } ovs_function_type;
 
@@ -120,7 +120,8 @@ static const ovs_root_symbol_data ovs_root_symbols[] = {
 ovs_context ovs_init();
 void ovs_close(ovs_context* c);
 
-ovs_table* ovs_qualifier_table(const ovs_expr_ref* r);
+ovs_table* ovs_table_of(ovs_context* c, ovs_expr e);
+ovs_context* ovs_context_of(ovs_table* t);
 
 ovs_expr ovs_symbol(ovs_table* t, uint32_t l, UChar* name);
 ovs_expr ovs_root_symbol(ovs_root_table t);
@@ -132,8 +133,8 @@ ovs_expr ovs_function(ovs_context* c, ovs_function_type* t, uint32_t data_size, 
 
 ovs_expr ovs_list(ovs_table* t, int32_t count, ovs_expr* e);
 ovs_expr ovs_list_of(ovs_table* t, int32_t count, void** e, ovs_expr (*map)(const void* elem));
-int32_t ovs_delist(ovs_expr l, ovs_expr** e); 
-int32_t ovs_delist_of(ovs_expr l, void*** e, void* (*map)(ovs_expr elem)); 
+int32_t ovs_delist(ovs_table* t, ovs_expr l, ovs_expr** e); 
+int32_t ovs_delist_of(ovs_table* t, ovs_expr l, void*** e, void* (*map)(ovs_expr elem)); 
 
 bool ovs_is_atom(ovs_table* t, ovs_expr e);
 bool ovs_is_qualified(ovs_expr e);

@@ -22,7 +22,7 @@ void no_free(const void* d) {}
  * exit
  */
 
-int32_t exit_apply(ovs_instruction* r, ovs_expr* args, const void* d) {
+int32_t exit_apply(ovs_instruction* r, ovs_context* c, ovs_expr* args, const void* d) {
 	r->size = 0;
 	return OVRU_SUCCESS;
 }
@@ -62,7 +62,7 @@ ovs_function_info scanner_inspect(const void* d) {
 	return (ovs_function_info){ 2, 2 };
 }
 
-int32_t scanner_apply(ovs_instruction* i, ovs_expr* args, const void* d) {
+int32_t scanner_apply(ovs_instruction* i, ovs_context* c, ovs_expr* args, const void* d) {
 	ovs_expr fail = args[0];
 	ovs_expr cont = args[1];
 
@@ -121,7 +121,7 @@ ovs_function_info printer_inspect(const void* d) {
 	return (ovs_function_info){ 3, 1 };
 }
 
-int32_t printer_apply(ovs_instruction* i, ovs_expr* args, const void* d) {
+int32_t printer_apply(ovs_instruction* i, ovs_context* c, ovs_expr* args, const void* d) {
 	ovs_expr string = args[0];
 	ovs_expr fail = args[1];
 	ovs_expr cont = args[2];
@@ -185,7 +185,7 @@ ovs_function_info cons_inspect(const void* d) {
 	return (ovs_function_info){ 3, 2 };
 }
 
-int32_t cons_apply(ovs_instruction* i, ovs_expr* args, const void* d) {
+int32_t cons_apply(ovs_instruction* i, ovs_context* c, ovs_expr* args, const void* d) {
 	ovs_expr car = args[0];
 	ovs_expr cdr = args[1];
 	ovs_expr cont = args[2];
@@ -231,7 +231,7 @@ ovs_function_info des_inspect(const void* d) {
 	return (ovs_function_info){ 3, 3 };
 }
 
-int32_t des_apply(ovs_instruction* i, ovs_expr* args, const void* d) {
+int32_t des_apply(ovs_instruction* i, ovs_context* c, ovs_expr* args, const void* d) {
 	ovs_expr e = args[0];
 	ovs_expr fail = args[1];
 	ovs_expr cont = args[2];
@@ -280,7 +280,7 @@ ovs_function_info eq_inspect(const void* d) {
 	return (ovs_function_info){ 4, 1 };
 }
 
-int32_t eq_apply(ovs_instruction* i, ovs_expr* args, const void* d) {
+int32_t eq_apply(ovs_instruction* i, ovs_context* c, ovs_expr* args, const void* d) {
 	ovs_expr e_a = args[0];
 	ovs_expr e_b = args[1];
 	ovs_expr f = args[2];

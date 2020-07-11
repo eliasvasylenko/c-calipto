@@ -184,11 +184,11 @@ ovs_expr ovs_cdr(const ovs_expr e) {
 	}
 }
 
-bool ovs_atom(const ovs_expr e) {
-	return e.type == OVS_SYMBOL;
+bool ovs_is_atom(ovs_table* t, const ovs_expr e) {
+	return ovs_table_of(ovs_context_of(t), e) == t && e.type == OVS_SYMBOL;
 }
 
-bool ovs_eq(const ovs_expr a, const ovs_expr b) {
+bool ovs_is_eq(const ovs_expr a, const ovs_expr b) {
 	if (a.type != b.type) {
 		return false;
 	}
@@ -196,13 +196,13 @@ bool ovs_eq(const ovs_expr a, const ovs_expr b) {
 		case OVS_SYMBOL:
 			return a.p == b.p;
 		case OVS_CONS:
-			return ovs_eq(a.p->cons.car, b.p->cons.car) && ovs_eq(a.p->cons.cdr, b.p->cons.cdr);
+			return ovs_is_eq(a.p->cons.car, b.p->cons.car) && ovs_is_eq(a.p->cons.cdr, b.p->cons.cdr);
 		case OVS_FUNCTION:
 			;
 			const ovs_function_data* fa = &a.p->function;
 			const ovs_function_data* fb = &b.p->function;
 			return fa->type == fb->type
-				&& ovs_eq(fa->type->represent(fa->context, fa->type->name, fa + 1),
+				&& ovs_is_eq(fa->type->represent(fa->context, fa->type->name, fa + 1),
 					fb->type->represent(fb->context, fb->type->name, fb + 1));
 		case OVS_CHARACTER:
 			return a.character == b.character;
@@ -216,12 +216,15 @@ bool ovs_eq(const ovs_expr a, const ovs_expr b) {
 
 void ovs_elem_dump(const ovs_expr s);
 
-void ovs_tail_dump(const ovs_expr s) {
-	if (ovs_eq(s, data_nil)) {
+void ovs_tail_dump(const ovs_expr_ref* q, const ovs_expr s) {
+	if (ovs_is_eq(s, data_nil)) {
 		printf(")");
 		return;
 	}
-	if (ovs_atom(s)) {
+	if (ovs_is_symbol(s)
+			|| (q == NULL
+				? !ovs_is_qualified(s)
+				: q == ovs_qualifier(s).p)) {
 		printf(" . ");
 		ovs_elem_dump(s);
 		printf(")");
@@ -231,7 +234,7 @@ void ovs_tail_dump(const ovs_expr s) {
 	ovs_expr car = ovs_car(s);
 	ovs_expr cdr = ovs_cdr(s);
 	ovs_elem_dump(car);
-	ovs_tail_dump(cdr);
+	ovs_tail_dump(q, cdr);
 	ovs_dealias(car);
 	ovs_dealias(cdr);
 }
@@ -251,14 +254,18 @@ void ovs_elem_dump(const ovs_expr s) {
 			printf("%li", s.integer);
 			break;
 		default:
+			;
+			ovs_expr_ref* qualifier = NULL;
 			if (ovs_is_qualified(s)) {
 				ovs_expr q = ovs_qualifier(s);
+				qualifier = (ovs_expr_ref*)q.p;
+
 				ovs_elem_dump(q);
 				u_printf_u(u":");
 				ovs_dealias(q);
 			}
 			if (ovs_is_symbol(s)) {
-				if (ovs_eq(s, data_nil)) {
+				if (ovs_is_eq(s, data_nil)) {
 					printf("()");
 
 				} else {
@@ -271,7 +278,7 @@ void ovs_elem_dump(const ovs_expr s) {
 				ovs_expr cdr = ovs_cdr(s);
 				printf("(");
 				ovs_elem_dump(car);
-				ovs_tail_dump(cdr);
+				ovs_tail_dump(qualifier, cdr);
 				ovs_dealias(car);
 				ovs_dealias(cdr);
 			}
@@ -381,18 +388,18 @@ ovs_expr ovs_list_of(ovs_table* t, int32_t count, void** e, ovs_expr (*map)(cons
 	return l;
 }
 
-int32_t ovs_delist_recur(int32_t index, ovs_expr s, ovs_expr** elems) {
-	if (ovs_eq(s, data_nil)) {
+int32_t ovs_delist_recur(ovs_table* t, int32_t index, ovs_expr s, ovs_expr** elems) {
+	if (ovs_is_eq(s, data_nil)) {
 		*elems = index == 0 ? NULL : malloc(sizeof(ovs_expr) * index);
 		return index;
 	}
 
-	if (ovs_atom(s)) {
+	if (ovs_is_atom(t, s)) {
 		return -1;
 	}
 
 	ovs_expr tail = ovs_cdr(s);
-	int32_t size = ovs_delist_recur(index + 1, tail, elems);
+	int32_t size = ovs_delist_recur(t, index + 1, tail, elems);
 	ovs_dealias(tail);
 
 	if (size >= 0) {
@@ -402,22 +409,22 @@ int32_t ovs_delist_recur(int32_t index, ovs_expr s, ovs_expr** elems) {
 	return size;
 }
 
-int32_t ovs_delist(ovs_expr s, ovs_expr** elems) {
-	return ovs_delist_recur(0, s, elems);
+int32_t ovs_delist(ovs_table* t, ovs_expr s, ovs_expr** elems) {
+	return ovs_delist_recur(t, 0, s, elems);
 }
 
-int32_t ovs_delist_of_recur(int32_t index, ovs_expr s, void*** elems, void* (*map)(ovs_expr elem)) {
-	if (ovs_eq(s, data_nil)) {
+int32_t ovs_delist_of_recur(ovs_table* t, int32_t index, ovs_expr s, void*** elems, void* (*map)(ovs_expr elem)) {
+	if (ovs_is_eq(s, data_nil)) {
 		*elems = index == 0 ? NULL : malloc(sizeof(void*) * index);
 		return index;
 	}
 
-	if (ovs_atom(s)) {
+	if (ovs_is_atom(t, s)) {
 		return -1;
 	}
 
 	ovs_expr tail = ovs_cdr(s);
-	int32_t size = ovs_delist_of_recur(index + 1, tail, elems, map);
+	int32_t size = ovs_delist_of_recur(t, index + 1, tail, elems, map);
 	ovs_dealias(tail);
 
 	if (size >= 0) {
@@ -429,7 +436,7 @@ int32_t ovs_delist_of_recur(int32_t index, ovs_expr s, void*** elems, void* (*ma
 	return size;
 }
 
-int32_t ovs_delist_of(ovs_expr s, void*** elems, void* (*map)(ovs_expr elem)) {
-	return ovs_delist_of_recur(0, s, elems, map);
+int32_t ovs_delist_of(ovs_table* t, ovs_expr s, void*** elems, void* (*map)(ovs_expr elem)) {
+	return ovs_delist_of_recur(t, 0, s, elems, map);
 }
 

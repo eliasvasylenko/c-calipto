@@ -320,12 +320,12 @@ ovs_function_info inspect_bound_lambda(const void* d) {
 	return (ovs_function_info){ l->lambda->param_count, l->lambda->body.term_count };
 }
 
-void eval_statement(ovs_instruction* result, ovru_statement s, const ovs_expr* args, const ovs_expr* closure);
+void eval_statement(ovs_context* c, ovs_instruction* result, ovru_statement s, const ovs_expr* args, const ovs_expr* closure);
 
-int32_t apply_bound_lambda(ovs_instruction* result, ovs_expr* args, const void* d) {
+int32_t apply_bound_lambda(ovs_instruction* result, ovs_context* c, ovs_expr* args, const void* d) {
 	const ovru_bound_lambda* l = d;
 
-	eval_statement(result, l->lambda->body, args, l->closure);
+	eval_statement(c, result, l->lambda->body, args, l->closure);
 
 	return OVRU_SUCCESS;
 }
@@ -347,7 +347,7 @@ static ovs_function_type lambda_function = {
 	free_bound_lambda
 };
 
-void eval_expression(ovs_expr* result, ovru_term e, const ovs_expr* args, const ovs_expr* closure) {
+void eval_expression(ovs_context* context, ovs_expr* result, ovru_term e, const ovs_expr* args, const ovs_expr* closure) {
 	switch (e.type) {
 		case OVRU_VARIABLE:
 			switch (e.variable.type) {
@@ -385,7 +385,7 @@ void eval_expression(ovs_expr* result, ovru_term e, const ovs_expr* args, const 
 						assert(false);
 				}
 			}
-			*result = ovs_function(&lambda_function, sizeof(ovru_bound_lambda), &l);
+			*result = ovs_function(context, &lambda_function, sizeof(ovru_bound_lambda), &l);
 			break;
 
 		default:
@@ -394,9 +394,9 @@ void eval_expression(ovs_expr* result, ovru_term e, const ovs_expr* args, const 
 	}
 }
 
-void eval_statement(ovs_instruction* result, ovru_statement s, const ovs_expr* args, const ovs_expr* closure) {
+void eval_statement(ovs_context* c, ovs_instruction* result, ovru_statement s, const ovs_expr* args, const ovs_expr* closure) {
 	for (int i = 0; i < s.term_count; i++) {
-		eval_expression(result->values + i, s.terms[i], args, closure);
+		eval_expression(c, result->values + i, s.terms[i], args, closure);
 	}
 }
 
@@ -405,7 +405,7 @@ ovru_result execute_instruction(instruction_slot* next, instruction_slot* curren
 		return OVRU_ATTEMPT_TO_CALL_NON_FUNCTION;
 	}
 	
-	ovs_function_data* f = &current->instruction.values[0].p->function;
+	const ovs_function_data* f = &current->instruction.values[0].p->function;
 
 	ovs_function_info i = f->type->inspect(f + 1);
 
@@ -415,14 +415,14 @@ ovru_result execute_instruction(instruction_slot* next, instruction_slot* curren
 		return OVRU_ARGUMENT_COUNT_MISMATCH;
 	}
 
-	ovru_result r = f->type->apply(&next->instruction, current->instruction.values + 1, f + 1);
+	ovru_result r = f->type->apply(&next->instruction, f->context, current->instruction.values + 1, f + 1);
 
 	clear_instruction_slot(current);
 
 	return r;
 }
 
-ovru_result ovru_eval(const ovru_statement s, const ovs_expr* args) {
+ovru_result ovru_eval(ovs_context* c, const ovru_statement s, const ovs_expr* args) {
 	/*
 	 * We have two instruction slots, the current instruction which is
 	 * executing, and the next instruction which is being written. We
@@ -438,7 +438,7 @@ ovru_result ovru_eval(const ovru_statement s, const ovs_expr* args) {
 
 	instruction_slot* current = &a;
 	prepare_instruction_slot(current, s.term_count);
-	eval_statement(&current->instruction, s, args, NULL);
+	eval_statement(c, &current->instruction, s, args, NULL);
 
 	ovru_result r = OVRU_SUCCESS;
 	while (r == OVRU_SUCCESS && current->instruction.size > 0) {
