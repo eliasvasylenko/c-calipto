@@ -29,7 +29,7 @@ int compare_entries(const void* a, const void* b) {
 	return c;
 }
 
-void* alloc_value(uint32_t key_size, void* key_data, void* value_data, bdtrie_node* owner) {
+void* alloc_value(uint32_t key_size, const void* key_data, const void* value_data, bdtrie_node* owner) {
 	uint32_t* v = malloc(sizeof(uint32_t));
 	*v = *(uint32_t*)value_data;
 	return v;

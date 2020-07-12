@@ -52,8 +52,8 @@ variable_bindings make_variable_bindings(uint64_t param_count, const ovs_expr_re
 }
 
 typedef struct compile_context {
-	ovs_context* ovs_context;
 	struct compile_context* parent;
+	ovs_context* ovs_context;
 	variable_bindings bindings;
 } compile_context;
 
@@ -185,7 +185,7 @@ ovru_result compile_expression(ovru_term* result, ovs_expr e, compile_context* c
 	}
 
 	ovs_expr* parts;
-	uint32_t count = ovs_delist(e, &parts);
+	uint32_t count = ovs_delist(c->ovs_context->root_tables + OVS_UNQUALIFIED, e, &parts);
 	if (count <= 0) {
 		return count == 0 ? OVRU_EMPTY_EXPRESSION : OVRU_INVALID_EXPRESSION_TERMINATOR;
 	}
@@ -215,7 +215,7 @@ ovru_result compile_expression(ovru_term* result, ovs_expr e, compile_context* c
 
 ovru_result compile_statement(ovru_statement* result, ovs_expr s, compile_context* c) {
 	ovs_expr* expressions;
-	int32_t count = ovs_delist(s, &expressions);
+	int32_t count = ovs_delist(c->ovs_context->root_tables + OVS_UNQUALIFIED, s, &expressions);
 	if (count <= 0) {
 		return count == 0 ? OVRU_EMPTY_STATEMENT : OVRU_INVALID_STATEMENT_TERMINATOR;
 	}

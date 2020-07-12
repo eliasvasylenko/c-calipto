@@ -40,7 +40,7 @@ int run(ovs_expr e, ovs_expr args) {
 	uint32_t c = sizeof(parameters) / sizeof(ovs_expr_ref*);
 
 	ovru_statement s;
-	ovru_result r = ovru_compile(&s, e, c, (const ovs_expr_ref**)parameters);
+	ovru_result r = ovru_compile(&s, &context, e, c, (const ovs_expr_ref**)parameters);
 	if (r != OVRU_SUCCESS) {
 		for (int i = 0; i < c; i++) {
 			ovs_free(OVS_SYMBOL, parameters[i]);
@@ -69,7 +69,7 @@ int run(ovs_expr e, ovs_expr args) {
 				u"stderr")
 	};
 
-	r = ovru_eval(&context, s, arguments);
+	r = ovru_eval(s, &context, arguments);
 
 	ovru_free(s);
 

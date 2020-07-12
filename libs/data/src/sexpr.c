@@ -46,28 +46,143 @@ void ovs_update_value(void* value, bdtrie_node* owner) {
 }
 
 void* ovs_get_value(uint32_t key_size, const void* key_data, const void* value_data, bdtrie_node* owner) {
-	ovs_expr_ref* r = ref(sizeof(ovs_symbol_data), 0);
-	r->symbol.node = owner;
-	r->symbol.table = malloc(sizeof(ovs_table));
-	r->symbol.table->qualifier = r;
-	r->symbol.table->trie = (bdtrie) { NULL, ovs_get_value, ovs_update_value, free };
+	ovs_expr_ref* r;
+	if (value_data == NULL) {
+		r = ref(sizeof(ovs_symbol_data), 0);
+		r->symbol.node = owner;
+		r->symbol.table = malloc(sizeof(ovs_table));
+		r->symbol.table->qualifier = r;
+		r->symbol.table->trie = (bdtrie) { NULL, ovs_get_value, ovs_update_value, free };
+	} else {
+		r = (ovs_expr_ref*)value_data;
+	}
 	return r;
 }
 
-ovs_expr_ref* ovs_intern(ovs_table* table, uint32_t len, UChar* name) {
+ovs_expr_ref* ovs_intern(ovs_table* table, uint32_t len, UChar* name, const ovs_expr_ref* root_symbol) {
 	if (table->qualifier != NULL) {
 		ovs_ref(table->qualifier);
 	}
 
 	uint32_t keysize = sizeof(UChar) * len;
-	ovs_expr_ref* r = bdtrie_find_or_insert(&table->trie, keysize, name, NULL).data;
+	ovs_expr_ref* r = bdtrie_find_or_insert(&table->trie, keysize, name, root_symbol).data;
 	ovs_ref(r);
 
 	return r;
 }
 
 ovs_expr ovs_symbol(ovs_table* t, uint32_t l, UChar* n) {
-	return (ovs_expr){ OVS_SYMBOL, .p=ovs_intern(t, l, n) };
+	return (ovs_expr){ OVS_SYMBOL, .p=ovs_intern(t, l, n, NULL) };
+}
+
+ovs_expr ovs_root_symbol(ovs_root_table t) {
+	return (ovs_expr){ OVS_SYMBOL, .p=&ovs_root_symbols[t].data };
+}
+
+ovs_table* table_for(ovs_context* c, const ovs_expr_ref* r) {
+	if (r->symbol.node == NULL) {
+		return c->root_tables + r->symbol.offset;
+	} else {
+		return r->symbol.table;
+	}
+}
+
+ovs_table* ovs_table_of(ovs_context* c, const ovs_expr e) {
+	switch (e.type) {
+		case OVS_SYMBOL:
+			if (e.p->symbol.node == NULL) {
+				return c->root_tables + ovs_root_symbols[e.p->symbol.offset].qualifier;
+			} else {
+				return table_for(c, e.p->symbol.table->qualifier);
+			}
+
+		case OVS_CONS:
+			return table_for(c, e.p->cons.table->qualifier);
+
+		case OVS_FUNCTION:
+			;
+			const ovs_function_data* f = &e.p->function;
+			ovs_expr r = f->type->represent(f->context, f->type->name, f + 1);
+			ovs_table* t = ovs_table_of(c, r);
+			ovs_dealias(r);
+			return t;
+
+		case OVS_CHARACTER:
+			return c->root_tables + OVS_TEXT_CHARACTER;
+
+		case OVS_STRING:
+			return c->root_tables + OVS_TEXT_STRING;
+
+		default:
+			assert(false);
+	}
+}
+
+bool ovs_is_atom(ovs_table* t, const ovs_expr e) {
+	return e.type == OVS_SYMBOL
+		|| (t->qualifier == NULL
+				? !ovs_is_qualified(e)
+				: t->qualifier != ovs_qualifier(e).p);
+}
+
+bool ovs_is_symbol(ovs_expr e) {
+	return e.type == OVS_SYMBOL;
+}
+
+bool ovs_is_qualified(ovs_expr e) {
+	switch (e.type) {
+		case OVS_SYMBOL:
+			if (e.p->symbol.node == NULL) {
+				return ovs_root_symbols[e.p->symbol.offset].qualifier != OVS_UNQUALIFIED;
+			} else {
+				return e.p->symbol.table->qualifier != NULL;
+			}
+
+		case OVS_CONS:
+			return e.p->cons.table->qualifier != NULL;
+
+		case OVS_FUNCTION:
+			;
+			const ovs_function_data* f = &e.p->function;
+			ovs_expr r = f->type->represent(f->context, f->type->name, f + 1);
+			bool q = ovs_is_qualified(r);
+			ovs_dealias(r);
+			return q;
+
+		default:
+			return true;
+	}
+}
+
+ovs_expr ovs_qualifier(ovs_expr e) {
+	switch (e.type) {
+		case OVS_SYMBOL:
+			if (e.p->symbol.node == NULL) {
+				return ovs_root_symbol(e.p->symbol.offset);
+			} else {
+				return (ovs_expr){ OVS_SYMBOL, .p=e.p->symbol.table->qualifier };
+			}
+
+		case OVS_CONS:
+			return (ovs_expr){ OVS_SYMBOL, .p=e.p->cons.table->qualifier };
+
+		case OVS_FUNCTION:
+			;
+			const ovs_function_data* f = &e.p->function;
+			ovs_expr r = f->type->represent(f->context, f->type->name, f + 1);
+			ovs_expr q = ovs_qualifier(r);
+			ovs_dealias(r);
+			return q;
+
+		case OVS_CHARACTER:
+			return ovs_root_symbol(OVS_TEXT_CHARACTER);
+
+		case OVS_STRING:
+			return ovs_root_symbol(OVS_TEXT_STRING);
+
+		default:
+			assert(false);
+	}
 }
 
 UChar* ovs_name(const ovs_expr e) {
@@ -88,6 +203,33 @@ UChar* ovs_name(const ovs_expr e) {
 
 ovs_expr ovs_character(UChar32 cp) {
 	return (ovs_expr){ OVS_CHARACTER, .character=cp };
+}
+
+ovs_expr ovs_cstring(UConverter* c, char* s) {
+	int32_t size = strlen(s);
+	int32_t destSize = size * 2;
+
+	ovs_expr_ref* r = ref(offsetof(ovs_string_data, string) + sizeof(UChar) * (destSize + 1), 1);
+
+	UErrorCode error = 0;
+	uint32_t len = ucnv_toUChars(c,
+			r->string.string, destSize,
+			s, size,
+			&error);
+
+	if (len != destSize) {
+		ovs_expr_ref* oldR = r;
+
+		destSize = len;
+		r = ref(offsetof(ovs_string_data, string) + sizeof(UChar) * (len + 1), 1);
+
+		memcpy(r->string.string, oldR->string.string, destSize);
+
+		free(oldR);
+	}
+
+	r->string.string[len] = u'\0';
+	return (ovs_expr){ OVS_STRING, .p=r };
 }
 
 ovs_expr ovs_string(uint32_t len, UChar* s) {
@@ -182,10 +324,6 @@ ovs_expr ovs_cdr(const ovs_expr e) {
 			printf("Cannot destruct atom %i ", e.type);
 			assert(false);
 	}
-}
-
-bool ovs_is_atom(ovs_table* t, const ovs_expr e) {
-	return ovs_table_of(ovs_context_of(t), e) == t && e.type == OVS_SYMBOL;
 }
 
 bool ovs_is_eq(const ovs_expr a, const ovs_expr b) {
@@ -354,9 +492,16 @@ ovs_context ovs_init() {
 	};
 	for (int i = 0; i < OVS_ROOT_TABLE_COUNT; i++) {
 		c.root_tables[i].trie = (bdtrie){ NULL, ovs_get_value, ovs_update_value, free };
-		c.root_tables[i].qualifier = (i == 0)
-			? NULL
-			: &ovs_root_symbols[ovs_root_symbols[i].qualifier].data;
+
+		if (i == OVS_UNQUALIFIED) {
+			c.root_tables[i].qualifier = NULL;
+
+		} else {
+			ovs_root_symbol_data symbol = ovs_root_symbols[i];
+			c.root_tables[i].qualifier = &symbol.data;
+
+			ovs_intern(c.root_tables + symbol.qualifier, u_strlen(symbol.name), symbol.name, &symbol.data);
+		}
 	}
 }
 
