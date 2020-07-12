@@ -18,11 +18,6 @@
 
 typedef ovio_strref strref;
 
-static ovs_table table;
-static ovs_expr data_nil;
-static ovs_expr data_quote;
-static ovs_expr data_lambda;
-
 ovs_expr_ref* ref(uint32_t payload_size, uint32_t refs) {
 	size_t size = offsetof(ovs_expr_ref, symbol) + payload_size;
 	ovs_expr_ref* r = malloc(size);
