@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -143,6 +144,7 @@ ovda_result ovda_read_symbol(reader* r, expr* e) {
 	skip_whitespace(r->scanner);
        
 	expr symbol = { OVS_SYMBOL, .p=NULL };
+	ovs_table* t = &r->context->root_tables[OVS_UNQUALIFIED];
 
 	do {
 		ovio_discard_buffer(r->scanner);
@@ -156,7 +158,8 @@ ovda_result ovda_read_symbol(reader* r, expr* e) {
 		UChar* n = malloc(sizeof(UChar) * len);
 		ovio_take_buffer_length(r->scanner, len, n);
 
-		symbol = ovs_symbol(ovs_table_of(r->context, symbol), len, n);
+		symbol = ovs_symbol(t, len, n);
+		t = ovs_table_for(r->context, symbol.p);
 
 		free(n);
 	} while (ovio_advance_input_if(r->scanner, is_equal, &colon));

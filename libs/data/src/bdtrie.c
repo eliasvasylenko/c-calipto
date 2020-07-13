@@ -512,3 +512,9 @@ bool bdtrie_is_present(bdtrie_value v) {
 	return v.node != NULL;
 }
 
+bdtrie* bdtrie_trie(bdtrie_node* n) {
+	while (n->parent != NULL) {
+		n = n->parent;
+	}
+	return (bdtrie*)n;
+}

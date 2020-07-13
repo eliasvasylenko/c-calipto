@@ -73,6 +73,8 @@ bdtrie_value bdtrie_find_or_insert(bdtrie* t, uint32_t key_size, const void* key
 
 void bdtrie_delete(bdtrie_node* n);
 
+bdtrie* bdtrie_trie(bdtrie_node* n);
+
 uint32_t bdtrie_key(void* dest, bdtrie_node* n);
 
 uint32_t bdtrie_key_size(bdtrie_node* n);
