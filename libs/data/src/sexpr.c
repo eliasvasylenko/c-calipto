@@ -37,7 +37,9 @@ ovs_expr ovs_function(ovs_context* c, ovs_function_type* t, uint32_t data_size, 
 
 void ovs_update_value(void* value, bdtrie_node* owner) {
 	ovs_expr_ref* r = value;
-	r->symbol.node = owner;
+	if (r->symbol.node != NULL) {
+		r->symbol.node = owner;
+	}
 }
 
 void* ovs_get_value(uint32_t key_size, const void* key_data, const void* value_data, bdtrie_node* owner) {
@@ -52,6 +54,13 @@ void* ovs_get_value(uint32_t key_size, const void* key_data, const void* value_d
 		r = (ovs_expr_ref*)value_data;
 	}
 	return r;
+}
+
+void ovs_free_value(void* d) {
+	ovs_expr_ref* r = d;
+	if (r->symbol.node != NULL) {
+		free(d);
+	}
 }
 
 ovs_expr_ref* ovs_intern(ovs_table* table, uint32_t len, UChar* name, const ovs_expr_ref* root_symbol) {
@@ -130,7 +139,7 @@ bool ovs_is_qualified(ovs_expr e) {
 			if (e.p->symbol.node == NULL) {
 				return ovs_root_symbols[e.p->symbol.offset].qualifier != OVS_UNQUALIFIED;
 			} else {
-				return e.p->symbol.table->qualifier != NULL;
+				return ((ovs_table*)bdtrie_trie(e.p->symbol.node))->qualifier != NULL;
 			}
 
 		case OVS_CONS:
@@ -183,6 +192,13 @@ ovs_expr ovs_qualifier(ovs_expr e) {
 UChar* ovs_name(const ovs_expr e) {
 	if (e.type != OVS_SYMBOL) {
 		assert(false);
+	}
+	if (e.p->symbol.node == NULL) {
+		UChar* name = ovs_root_symbols[e.p->symbol.offset].name;
+		size_t nameSize = u_strlen(name);
+		UChar* s = malloc(sizeof(UChar) * (nameSize + 1));
+		u_strcpy(s, name, nameSize + 1);
+		return s;
 	}
 	uint32_t size = bdtrie_key_size(e.p->symbol.node);
 	if (size <= 0) {
@@ -394,7 +410,7 @@ void ovs_elem_dump(const ovs_expr s) {
 				qualifier = (ovs_expr_ref*)q.p;
 
 				ovs_elem_dump(q);
-				u_printf_u(u":");
+				u_printf_u(u"/");
 				ovs_dealias(q);
 			}
 			if (ovs_is_symbol(s)) {
@@ -461,6 +477,7 @@ void ovs_free(ovs_expr_type t, const ovs_expr_ref* r) {
 		case OVS_SYMBOL:
 			if (r->symbol.node != NULL) {
 				bdtrie_delete(r->symbol.node);
+				bdtrie_clear(&r->symbol.table->trie);
 			}
 			break;
 		case OVS_CONS:
@@ -488,7 +505,7 @@ ovs_context ovs_init() {
 		malloc(sizeof(ovs_table) * OVS_ROOT_TABLE_COUNT)
 	};
 	for (int i = 0; i < OVS_ROOT_TABLE_COUNT; i++) {
-		c.root_tables[i].trie = (bdtrie){ NULL, ovs_get_value, ovs_update_value, free };
+		c.root_tables[i].trie = (bdtrie){ NULL, ovs_get_value, ovs_update_value, ovs_free_value };
 
 		if (i == OVS_UNQUALIFIED) {
 			c.root_tables[i].qualifier = NULL;

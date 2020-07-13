@@ -80,7 +80,7 @@ int32_t pop_cursor(reader* r) {
  * Character Tests
  */
 
-const UChar32 colon = U':';
+const UChar32 qualifier = U'/';
 const UChar32 open_bracket = U'(';
 const UChar32 close_bracket = U')';
 const UChar32 dot = U'.';
@@ -92,7 +92,7 @@ bool is_whitespace(UChar32 c, const void* v) {
 }
 
 bool isymbol_character(UChar32 c, const void* v) {
-	if (c == U':' ||
+	if (c == U'/' ||
 	    c == U'(' ||
 	    c == U')' ||
 	    is_whitespace(c, v)) {
@@ -162,7 +162,7 @@ ovda_result ovda_read_symbol(reader* r, expr* e) {
 		t = ovs_table_for(r->context, symbol.p);
 
 		free(n);
-	} while (ovio_advance_input_if(r->scanner, is_equal, &colon));
+	} while (ovio_advance_input_if(r->scanner, is_equal, &qualifier));
 
 	*e = symbol;
 
