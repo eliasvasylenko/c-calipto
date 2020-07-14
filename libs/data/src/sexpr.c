@@ -48,6 +48,13 @@ void ovs_update_value(void* value, bdtrie_node* owner) {
 }
 
 void* ovs_get_value(uint32_t key_size, const void* key_data, const void* value_data, bdtrie_node* owner) {
+
+		UChar* s = malloc(key_size + sizeof(UChar));
+		u_strncpy(s, key_data, key_size / 2);
+		s[key_size / 2] = u'\0';
+		u_printf_u(u"    adding ... %S\n", s);
+		printf("      to %p\n", bdtrie_trie(owner));
+
 	ovs_expr_ref* r;
 	if (value_data == NULL) {
 		r = ref(sizeof(ovs_symbol_data), 0);
@@ -55,14 +62,11 @@ void* ovs_get_value(uint32_t key_size, const void* key_data, const void* value_d
 		r->symbol.table = malloc(sizeof(ovs_table));
 		r->symbol.table->qualifier = r;
 		r->symbol.table->trie = (bdtrie) { NULL, ovs_get_value, ovs_update_value, free };
+
+		printf("                   %p\n", r->symbol.table);
 	} else {
 		r = (ovs_expr_ref*)value_data;
 	}
-
-		UChar* s = malloc(key_size + sizeof(UChar));
-		u_strncpy(s, key_data, key_size / 2);
-		s[key_size / 2] = u'\0';
-		u_printf_u(u"    adding ... %S\n", s);
 	return r;
 }
 

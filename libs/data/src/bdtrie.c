@@ -170,6 +170,23 @@ bdtrie_value split_with_leaf(bdtrie* t, entry e, bdtrie_node** np, uint32_t inde
 	bdtrie_leaf* leaf = leaf_of(before);
 	bdtrie_branch* branch = branch_of(before);
 
+
+
+	/*
+	 *
+	 * Instead of allocating the leaf value here while the table is in a partial
+	 * state, return an unfilled value holder and call alloc_value or update_value
+	 * at the root of the insert operation. This has two benefits:
+	 *
+	 * A) The shape of the trie will be complete and consistent, meaning the
+	 * alloc_value function can call e.g. bdtrie_trie.
+	 *
+	 * B) We don't have to pass the entry info down through the call tree.
+	 *
+	 */
+	assert(false);
+
+
 	leaf->value = t->alloc_value(e.key.size, e.key.data, e.value_data, before);
 	leaf->key_size = e.key.size;
 
@@ -360,8 +377,8 @@ bdtrie_value bdtrie_insert(bdtrie* t, uint32_t key_size, const void* key_data, c
 	key k = { key_size, key_data };
 	entry e = { k, value_data };
 
-	if (t->root == NULL ) {
-		t->root = make_leaf(t, e, k, NULL);
+	if (t->root == NULL) {
+		t->root = make_leaf(t, e, k, (void*)t);
 		return value_of(t->root);
 	} else {
 		return insert_recur(t, e, &t->root, k, true);
@@ -372,8 +389,8 @@ bdtrie_value bdtrie_find_or_insert(bdtrie* t, uint32_t key_size, const void* key
 	key k = { key_size, key_data };
 	entry e = { k, value_data };
 
-	if (t->root == NULL ) {
-		t->root = make_leaf(t, e, k, NULL);
+	if (t->root == NULL) {
+		t->root = make_leaf(t, e, k, (void*)t);
 		return value_of(t->root);
 	} else {
 		return insert_recur(t, e, &t->root, k, false);
@@ -386,7 +403,7 @@ void bdtrie_delete(bdtrie_node* n) {
 
 void key_data_recur(uint32_t size, uint8_t* dest, bdtrie_node* n) {
 	size -= n->keysize;
-	if (n->parent != NULL) {
+	if (n->trie->root != n) {
 		key_data_recur(size, dest, n->parent);
 	}
 
@@ -491,7 +508,7 @@ bdtrie_value bdtrie_next(bdtrie_value v) {
 		return value_of(n);
 	}
 
-	while (n->parent != NULL) {
+	while (n->trie->root != n) {
 		int i = n->parent_index + 1;
 		n = n->parent;
 		if (i < n->branchsize) {
@@ -513,8 +530,9 @@ bool bdtrie_is_present(bdtrie_value v) {
 }
 
 bdtrie* bdtrie_trie(bdtrie_node* n) {
-	while (n->parent != NULL) {
+	while (n->trie->root != n) {
 		n = n->parent;
 	}
-	return (bdtrie*)n;
+	return n->trie;
 }
+

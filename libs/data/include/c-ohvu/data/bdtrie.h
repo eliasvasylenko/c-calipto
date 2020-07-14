@@ -19,8 +19,13 @@
  * Internal structure
  */
 
+struct bdtrie;
+
 typedef struct bdtrie_node {
-	struct bdtrie_node* parent;
+	union {
+		struct bdtrie* trie;
+		struct bdtrie_node* parent;
+	};
 	union {
 		struct {
 			uint8_t parent_index : 8;
