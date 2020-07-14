@@ -117,7 +117,7 @@ static ovs_root_symbol_data ovs_root_symbols[] = {
 	{ u"character", OVS_TEXT, { ATOMIC_VAR_INIT(0), .symbol={ NULL, .offset=OVS_TEXT_CHARACTER } } }
 };
 
-ovs_context ovs_init();
+ovs_context* ovs_init();
 void ovs_close(ovs_context* c);
 
 ovs_table* ovs_table_for(ovs_context* c, const ovs_expr_ref* r);

@@ -24,24 +24,24 @@
 #include "c-ohvu/runtime/builtins.h"
 
 static UConverter* char_conv;
-static ovs_context context;
+static ovs_context* context;
 
 int run(ovs_expr e, ovs_expr args) {
 	const ovs_expr_ref* parameters[] = {
-		ovs_symbol(context.root_tables + OVS_SYSTEM, u_strlen(u"args"), u"args").p,
-		ovs_symbol(context.root_tables + OVS_SYSTEM, u_strlen(u"exit"), u"exit").p,
-		ovs_symbol(context.root_tables + OVS_DATA, u_strlen(u"cons"), u"cons").p,
-		ovs_symbol(context.root_tables + OVS_DATA, u_strlen(u"des"), u"des").p,
-		ovs_symbol(context.root_tables + OVS_DATA, u_strlen(u"eq"), u"eq").p,
-		ovs_symbol(context.root_tables + OVS_SYSTEM, u_strlen(u"in"), u"in").p,
-		ovs_symbol(context.root_tables + OVS_SYSTEM, u_strlen(u"out"), u"out").p,
-		ovs_symbol(context.root_tables + OVS_SYSTEM, u_strlen(u"err"), u"err").p
+		ovs_symbol(context->root_tables + OVS_SYSTEM, u_strlen(u"args"), u"args").p,
+		ovs_symbol(context->root_tables + OVS_SYSTEM, u_strlen(u"exit"), u"exit").p,
+		ovs_symbol(context->root_tables + OVS_DATA, u_strlen(u"cons"), u"cons").p,
+		ovs_symbol(context->root_tables + OVS_DATA, u_strlen(u"des"), u"des").p,
+		ovs_symbol(context->root_tables + OVS_DATA, u_strlen(u"eq"), u"eq").p,
+		ovs_symbol(context->root_tables + OVS_SYSTEM, u_strlen(u"in"), u"in").p,
+		ovs_symbol(context->root_tables + OVS_SYSTEM, u_strlen(u"out"), u"out").p,
+		ovs_symbol(context->root_tables + OVS_SYSTEM, u_strlen(u"err"), u"err").p
 	};
 
 	uint32_t c = sizeof(parameters) / sizeof(ovs_expr_ref*);
 
 	ovru_statement s;
-	ovru_result r = ovru_compile(&s, &context, e, c, (const ovs_expr_ref**)parameters);
+	ovru_result r = ovru_compile(&s, context, e, c, (const ovs_expr_ref**)parameters);
 	if (r != OVRU_SUCCESS) {
 		for (int i = 0; i < c; i++) {
 			ovs_free(OVS_SYMBOL, parameters[i]);
@@ -52,25 +52,25 @@ int run(ovs_expr e, ovs_expr args) {
 
 	ovs_expr arguments[] = {
 		ovs_alias(args),
-		ovru_exit(&context),
-		ovru_cons(&context, context.root_tables + OVS_UNQUALIFIED),
-		ovru_des(&context, context.root_tables + OVS_UNQUALIFIED),
-		ovru_eq(&context),
+		ovru_exit(context),
+		ovru_cons(context, context->root_tables + OVS_UNQUALIFIED),
+		ovru_des(context, context->root_tables + OVS_UNQUALIFIED),
+		ovru_eq(context),
 		ovru_open_scanner(
-				&context,
+				context,
 				u_finit(stdin, NULL, NULL),
 				u"stdin"),
 		ovru_open_printer(
-				&context,
+				context,
 				u_finit(stdout, NULL, NULL),
 				u"stdout"),
 		ovru_open_printer(
-				&context,
+				context,
 				u_finit(stderr, NULL, NULL),
 				u"stderr")
 	};
 
-	r = ovru_eval(s, &context, arguments);
+	r = ovru_eval(s, context, arguments);
 
 	ovru_free(s);
 
@@ -91,7 +91,7 @@ int run_bootstrap(ovs_expr args) {
 
 	ovio_stream* st = ovio_open_file_stream(f);
 	ovio_scanner* sc = ovio_open_scanner(st);
-	ovda_reader* r = ovda_open_reader(sc, &context);
+	ovda_reader* r = ovda_open_reader(sc, context);
 
 	ovs_expr e;
 	int result;
@@ -122,13 +122,13 @@ int main(int argc, char** argv) {
 	char_conv = ucnv_open(NULL, &error);
 
 	context = ovs_init();
-	ovs_expr args = ovs_list_of(context.root_tables + OVS_UNQUALIFIED, argc, (void**)argv, read_arg);
+	ovs_expr args = ovs_list_of(context->root_tables + OVS_UNQUALIFIED, argc, (void**)argv, read_arg);
 
 	int result = run_bootstrap(args);
 
 	ovs_dealias(args);
-	ovs_dump_context(&context);
-	ovs_close(&context);
+	ovs_dump_context(context);
+	ovs_close(context);
 
 	ucnv_close(char_conv);
 

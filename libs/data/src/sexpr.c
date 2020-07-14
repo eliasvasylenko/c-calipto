@@ -38,23 +38,12 @@ ovs_expr ovs_function(ovs_context* c, ovs_function_type* t, uint32_t data_size, 
 void ovs_update_value(void* value, bdtrie_node* owner) {
 	ovs_expr_ref* r = value;
 
-	printf("    updating ... ");
-	ovs_dump_expr((ovs_expr){ OVS_SYMBOL, .p=r });
-
 	if (r->symbol.node != NULL) {
-		printf("       change!\n");
 		r->symbol.node = owner;
 	}
 }
 
 void* ovs_get_value(uint32_t key_size, const void* key_data, const void* value_data, bdtrie_node* owner) {
-
-		UChar* s = malloc(key_size + sizeof(UChar));
-		u_strncpy(s, key_data, key_size / 2);
-		s[key_size / 2] = u'\0';
-		u_printf_u(u"    adding ... %S\n", s);
-		printf("      to %p\n", bdtrie_trie(owner));
-
 	ovs_expr_ref* r;
 	if (value_data == NULL) {
 		r = ref(sizeof(ovs_symbol_data), 0);
@@ -62,8 +51,6 @@ void* ovs_get_value(uint32_t key_size, const void* key_data, const void* value_d
 		r->symbol.table = malloc(sizeof(ovs_table));
 		r->symbol.table->qualifier = r;
 		r->symbol.table->trie = (bdtrie) { NULL, ovs_get_value, ovs_update_value, free };
-
-		printf("                   %p\n", r->symbol.table);
 	} else {
 		r = (ovs_expr_ref*)value_data;
 	}
@@ -531,6 +518,7 @@ void ovs_free(ovs_expr_type t, const ovs_expr_ref* r) {
 			if (r->symbol.node != NULL) {
 				bdtrie_delete(r->symbol.node);
 				bdtrie_clear(&r->symbol.table->trie);
+				// TODO free(r->symbol.table);
 			}
 			break;
 		case OVS_CONS:
@@ -553,22 +541,21 @@ void ovs_free(ovs_expr_type t, const ovs_expr_ref* r) {
 	}
 }
 
-ovs_context ovs_init() {
-	ovs_context c = {
-		malloc(sizeof(ovs_table) * OVS_ROOT_TABLE_COUNT)
-	};
+ovs_context* ovs_init() {
+	ovs_context* c = malloc(sizeof(ovs_context));
+
 	for (int i = 0; i < OVS_ROOT_TABLE_COUNT; i++) {
-		c.root_tables[i].trie = (bdtrie){ NULL, ovs_get_value, ovs_update_value, ovs_free_value };
+		c->root_tables[i].trie = (bdtrie){ NULL, ovs_get_value, ovs_update_value, ovs_free_value };
 
 		if (i == OVS_UNQUALIFIED) {
-			c.root_tables[i].qualifier = NULL;
+			c->root_tables[i].qualifier = NULL;
 
 		} else {
 			ovs_root_symbol_data* symbol = &ovs_root_symbols[i];
-			c.root_tables[i].qualifier = &symbol->data;
+			c->root_tables[i].qualifier = &symbol->data;
 
 			intern(
-					c.root_tables + symbol->qualifier,
+					c->root_tables + symbol->qualifier,
 					u_strlen(symbol->name),
 					symbol->name,
 					&symbol->data);
@@ -582,6 +569,7 @@ void ovs_close(ovs_context* c) {
 	for (int i = 0; i < OVS_ROOT_TABLE_COUNT; i++) {
 		bdtrie_clear(&c->root_tables[i].trie);
 	}
+	free(c);
 }
 
 ovs_expr ovs_list(ovs_table* t, int32_t count, ovs_expr* e) {
