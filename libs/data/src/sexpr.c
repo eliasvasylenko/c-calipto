@@ -37,7 +37,12 @@ ovs_expr ovs_function(ovs_context* c, ovs_function_type* t, uint32_t data_size, 
 
 void ovs_update_value(void* value, bdtrie_node* owner) {
 	ovs_expr_ref* r = value;
+
+	printf("    updating ... ");
+	ovs_dump_expr((ovs_expr){ OVS_SYMBOL, .p=r });
+
 	if (r->symbol.node != NULL) {
+		printf("       change!\n");
 		r->symbol.node = owner;
 	}
 }
@@ -53,6 +58,11 @@ void* ovs_get_value(uint32_t key_size, const void* key_data, const void* value_d
 	} else {
 		r = (ovs_expr_ref*)value_data;
 	}
+
+		UChar* s = malloc(key_size + sizeof(UChar));
+		u_strncpy(s, key_data, key_size / 2);
+		s[key_size / 2] = u'\0';
+		u_printf_u(u"    adding ... %S\n", s);
 	return r;
 }
 
@@ -63,7 +73,7 @@ void ovs_free_value(void* d) {
 	}
 }
 
-ovs_expr_ref* ovs_intern(ovs_table* table, uint32_t len, UChar* name, const ovs_expr_ref* root_symbol) {
+ovs_expr_ref* intern(ovs_table* table, uint32_t len, UChar* name, const ovs_expr_ref* root_symbol) {
 	if (table->qualifier != NULL) {
 		ovs_ref(table->qualifier);
 	}
@@ -76,7 +86,7 @@ ovs_expr_ref* ovs_intern(ovs_table* table, uint32_t len, UChar* name, const ovs_
 }
 
 ovs_expr ovs_symbol(ovs_table* t, uint32_t l, UChar* n) {
-	return (ovs_expr){ OVS_SYMBOL, .p=ovs_intern(t, l, n, NULL) };
+	return (ovs_expr){ OVS_SYMBOL, .p=intern(t, l, n, NULL) };
 }
 
 ovs_expr ovs_root_symbol(ovs_root_table t) {
@@ -365,15 +375,27 @@ bool ovs_is_eq(const ovs_expr a, const ovs_expr b) {
 
 void ovs_elem_dump(const ovs_expr s);
 
+bool qualifier_is_eq(const ovs_expr_ref* q, const ovs_expr e) {
+	if (ovs_is_qualified(e)) {
+		if (q == NULL) {
+			return false;
+		}
+		ovs_expr actual = ovs_qualifier(e);
+		bool result = q == actual.p;
+		ovs_dealias(actual);
+		return result;
+	} else {
+		return q == NULL;
+	}
+}
+
 void ovs_tail_dump(const ovs_expr_ref* q, const ovs_expr s) {
 	if (ovs_is_eq(s, ovs_root_symbol(OVS_DATA_NIL))) {
 		printf(")");
 		return;
 	}
-	if (ovs_is_symbol(s)
-			|| (q == NULL
-				? !ovs_is_qualified(s)
-				: q == ovs_qualifier(s).p)) {
+
+	if (ovs_is_symbol(s) || !qualifier_is_eq(q, s)) {
 		printf(" . ");
 		ovs_elem_dump(s);
 		printf(")");
@@ -435,9 +457,36 @@ void ovs_elem_dump(const ovs_expr s) {
 	}
 }
 
-void ovs_dump(const ovs_expr s) {
+void ovs_dump_expr(const ovs_expr s) {
 	ovs_elem_dump(s);
 	printf("\n");
+}
+
+void dump_table(const ovs_context* c, const ovs_table* t, uint16_t indent) {
+	for (bdtrie_value v = bdtrie_first((bdtrie*)&t->trie); bdtrie_is_present(v); v = bdtrie_next(v)) {
+		ovs_expr_ref* r = v.data;
+
+		uint32_t l = bdtrie_key_size(v.node);
+		uint32_t chars = (l / sizeof(UChar)) + indent;
+		UChar* n = malloc((chars + 1) * sizeof(UChar));
+		bdtrie_key(n + indent, v.node);
+
+		for (uint16_t i = 0; i < indent; i++) {
+			n[i] = u' ';
+		}
+		n[chars] = u'\0';
+		u_printf_u(u"%S\n", n);
+
+		if (r->symbol.node == NULL) {
+			dump_table(c, &c->root_tables[r->symbol.offset], indent + 2);
+		} else {
+			dump_table(c, r->symbol.table, indent + 2);
+		}
+	}
+}
+
+void ovs_dump_context(const ovs_context* c) {
+	dump_table(c, &c->root_tables[OVS_UNQUALIFIED], 0);
 }
 
 ovs_expr ovs_alias(ovs_expr e) {
@@ -514,7 +563,7 @@ ovs_context ovs_init() {
 			ovs_root_symbol_data* symbol = &ovs_root_symbols[i];
 			c.root_tables[i].qualifier = &symbol->data;
 
-			ovs_intern(
+			intern(
 					c.root_tables + symbol->qualifier,
 					u_strlen(symbol->name),
 					symbol->name,

@@ -28,7 +28,7 @@ static ovs_context context;
 
 int run(ovs_expr e, ovs_expr args) {
 	const ovs_expr_ref* parameters[] = {
-		ovs_symbol(context.root_tables + OVS_SYSTEM, u_strlen("args"), u"args").p,
+		ovs_symbol(context.root_tables + OVS_SYSTEM, u_strlen(u"args"), u"args").p,
 		ovs_symbol(context.root_tables + OVS_SYSTEM, u_strlen(u"exit"), u"exit").p,
 		ovs_symbol(context.root_tables + OVS_DATA, u_strlen(u"cons"), u"cons").p,
 		ovs_symbol(context.root_tables + OVS_DATA, u_strlen(u"des"), u"des").p,
@@ -96,7 +96,7 @@ int run_bootstrap(ovs_expr args) {
 	ovs_expr e;
 	int result;
 	if (ovda_read(r, &e) == OVDA_SUCCESS) {
-		ovs_dump(e);
+		ovs_dump_expr(e);
 		result = run(e, args);
 
 		ovs_dealias(e);
@@ -127,6 +127,7 @@ int main(int argc, char** argv) {
 	int result = run_bootstrap(args);
 
 	ovs_dealias(args);
+	ovs_dump_context(&context);
 	ovs_close(&context);
 
 	ucnv_close(char_conv);

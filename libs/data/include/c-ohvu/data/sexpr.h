@@ -147,7 +147,8 @@ UChar* ovs_name(ovs_expr e);
 ovs_expr ovs_car(ovs_expr e);
 ovs_expr ovs_cdr(ovs_expr e);
 
-void ovs_dump(ovs_expr s);
+void ovs_dump_expr(const ovs_expr s);
+void ovs_dump_context(const ovs_context* c);
 
 ovs_expr ovs_alias(ovs_expr s);
 void ovs_dealias(ovs_expr s);

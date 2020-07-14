@@ -103,6 +103,15 @@ void test_updates(size_t s, update* u) {
 
 		actual_values[i] = *(uint32_t*)v.data;
 
+		uint32_t actualSize = 0;
+		bdtrie_node* n = v.node;
+		do {
+			actualSize += n->keysize;
+			n = n->parent;
+		} while (n != NULL);
+
+		TEST_ASSERT_EQUAL_INT32(k, actualSize);
+
 		i++;
 	}
 	for (int i = c; i < max_count; i++) {
