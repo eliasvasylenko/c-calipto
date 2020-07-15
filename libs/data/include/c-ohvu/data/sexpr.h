@@ -99,23 +99,12 @@ struct ovs_expr_ref {
  */
 
 typedef struct ovs_root_symbol_data {
+	int32_t nameSize;
 	UChar* name;
 	ovs_root_table qualifier;
 	ovs_expr_ref data;
+	ovs_expr expr;
 } ovs_root_symbol_data;
-
-static ovs_root_symbol_data ovs_root_symbols[] = {
-	{ NULL },
-	{ u"data", OVS_UNQUALIFIED, { ATOMIC_VAR_INIT(0), .symbol={ NULL, .offset=OVS_DATA } } },
-	{ u"nil", OVS_DATA, { ATOMIC_VAR_INIT(0), .symbol={ NULL, .offset=OVS_DATA_NIL } } },
-	{ u"quote", OVS_DATA, { ATOMIC_VAR_INIT(0), .symbol={ NULL, .offset=OVS_DATA_QUOTE } } },
-	{ u"lambda", OVS_DATA, { ATOMIC_VAR_INIT(0), .symbol={ NULL, .offset=OVS_DATA_LAMBDA } } },
-	{ u"system", OVS_UNQUALIFIED, { ATOMIC_VAR_INIT(0), .symbol={ NULL, .offset=OVS_SYSTEM } } },
-	{ u"builtin", OVS_SYSTEM, { ATOMIC_VAR_INIT(0), .symbol={ NULL, .offset=OVS_SYSTEM_BUILTIN } } },
-	{ u"text", OVS_UNQUALIFIED, { ATOMIC_VAR_INIT(0), .symbol={ NULL, .offset=OVS_TEXT } } },
-	{ u"string", OVS_TEXT, { ATOMIC_VAR_INIT(0), .symbol={ NULL, .offset=OVS_TEXT_STRING } } },
-	{ u"character", OVS_TEXT, { ATOMIC_VAR_INIT(0), .symbol={ NULL, .offset=OVS_TEXT_CHARACTER } } }
-};
 
 ovs_context* ovs_init();
 void ovs_close(ovs_context* c);
@@ -125,7 +114,7 @@ ovs_table* ovs_table_of(ovs_context* c, const ovs_expr e);
 ovs_context* ovs_context_of(ovs_table* t);
 
 ovs_expr ovs_symbol(ovs_table* t, uint32_t l, UChar* name);
-ovs_expr ovs_root_symbol(ovs_root_table t);
+ovs_root_symbol_data* ovs_root_symbol(ovs_root_table t);
 ovs_expr ovs_cons(ovs_table* t, ovs_expr car, ovs_expr cdr);
 ovs_expr ovs_character(UChar32 c);
 ovs_expr ovs_string(uint32_t l, UChar* s);

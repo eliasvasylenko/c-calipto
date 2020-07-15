@@ -187,7 +187,7 @@ ovda_result read_string(reader* r, expr* e) {
 	ovio_take_buffer_length(r->scanner, len, c);
 	expr string = ovs_string(len, c);
 
-	expr list[] = { { OVS_SYMBOL, .p=&ovs_root_symbols[OVS_DATA_QUOTE].data }, string };
+	expr list[] = { ovs_root_symbol(OVS_DATA_QUOTE)->expr, string };
 	*e = ovs_list(&r->context->root_tables[OVS_UNQUALIFIED], 2, list);
 
 	ovs_dealias(string);
@@ -208,7 +208,7 @@ ovda_result read_quote(reader* r, expr* e) {
 		return OVDA_INVALID;
 	}
 
-	expr list[] = { { OVS_SYMBOL, .p=&ovs_root_symbols[OVS_DATA_QUOTE].data }, data };
+	expr list[] = { ovs_root_symbol(OVS_DATA_QUOTE)->expr, data };
 	*e = ovs_list(&r->context->root_tables[OVS_UNQUALIFIED], 2, list);
 
 	ovs_dealias(data);
@@ -260,7 +260,7 @@ ovda_result ovda_read_step_out(reader* r, expr* e) {
 	if (ovio_advance_input_if(r->scanner, is_equal, &close_bracket)) {
 		ovio_discard_buffer(r->scanner);
 
-		*e = (expr){ OVS_SYMBOL, .p=&ovs_root_symbols[OVS_DATA_NIL].data };
+		*e = ovs_root_symbol(OVS_DATA_NIL)->expr;
 		return OVDA_SUCCESS;
 	}
 

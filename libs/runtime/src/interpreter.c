@@ -195,10 +195,10 @@ ovru_result compile_expression(ovru_term* result, ovs_expr e, compile_context* c
 	ovs_expr* terms = parts + 1;
 
 	ovru_result success;
-	if (ovs_is_eq(kind, ovs_root_symbol(OVS_DATA_QUOTE))) {
+	if (ovs_is_eq(kind, ovs_root_symbol(OVS_DATA_QUOTE)->expr)) {
 		success = compile_quote(result, term_count, terms, c);
 
-	} else if (ovs_is_eq(kind, ovs_root_symbol(OVS_DATA_LAMBDA))) {
+	} else if (ovs_is_eq(kind, ovs_root_symbol(OVS_DATA_LAMBDA)->expr)) {
 		success = compile_lambda(result, term_count, terms, c);
 
 	} else {

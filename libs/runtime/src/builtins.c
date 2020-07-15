@@ -187,19 +187,21 @@ ovs_function_info cons_inspect(const void* d) {
 }
 
 int32_t cons_apply(ovs_instruction* i, ovs_context* c, ovs_expr* args, const void* d) {
+	ovs_table* t = *(ovs_table**)d;
+
 	ovs_expr car = args[0];
 	ovs_expr cdr = args[1];
 	ovs_expr cont = args[2];
 
 	i->size = 2;
 	i->values[0] = ovs_alias(cont);
-	i->values[1] = ovs_cons((ovs_table*)d, car, cdr);
+	i->values[1] = ovs_cons(t, car, cdr);
 
 	return OVRU_SUCCESS;
 }
 
 void cons_free(const void* d) {
-	ovs_table* t = (ovs_table*)d;
+	ovs_table* t = *(ovs_table**)d;
 	if (t->qualifier != NULL) {
 		ovs_free(OVS_SYMBOL, t->qualifier);
 	}
@@ -217,7 +219,7 @@ ovs_expr ovru_cons(ovs_context* c, ovs_table* t) {
 	if (t->qualifier != NULL) {
 		ovs_ref(t->qualifier);
 	}
-	return ovs_function(c, &cons_function, 0, t);
+	return ovs_function(c, &cons_function, sizeof(ovs_table*), &t);
 }
 
 /*
@@ -233,11 +235,13 @@ ovs_function_info des_inspect(const void* d) {
 }
 
 int32_t des_apply(ovs_instruction* i, ovs_context* c, ovs_expr* args, const void* d) {
+	ovs_table* t = *(ovs_table**)d;
+
 	ovs_expr e = args[0];
 	ovs_expr fail = args[1];
 	ovs_expr cont = args[2];
 
-	if (ovs_is_atom((ovs_table*)d, e)) {
+	if (ovs_is_atom(t, e)) {
 		i->size = 1;
 		i->values[0] = ovs_alias(fail);
 
@@ -252,7 +256,7 @@ int32_t des_apply(ovs_instruction* i, ovs_context* c, ovs_expr* args, const void
 }
 
 void des_free(const void* d) {
-	ovs_table* t = (ovs_table*)d;
+	ovs_table* t = *(ovs_table**)d;
 	if (t->qualifier != NULL) {
 		ovs_free(OVS_SYMBOL, t->qualifier);
 	}
@@ -270,7 +274,7 @@ ovs_expr ovru_des(ovs_context* c, ovs_table* t) {
 	if (t->qualifier != NULL) {
 		ovs_ref(t->qualifier);
 	}
-	return ovs_function(c, &des_function, 0, t);
+	return ovs_function(c, &des_function, sizeof(ovs_table*), t);
 }
 
 /*
