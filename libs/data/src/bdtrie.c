@@ -25,6 +25,10 @@ void popadd(uint64_t* p, uint8_t slot) {
 	p[slot / 64] |= slot_bit << (slot % 64);
 }
 
+void popremove(uint64_t* p, uint8_t slot) {
+	p[slot / 64] &= ~(slot_bit << (slot % 64));
+}
+
 uint8_t popindex(const uint64_t* p, uint8_t slot) {
 	// awkward trick to avoid branching. There's probably a better way.
 	static const uint64_t toggle_mask[] = { 0, (int64_t) -1 };
@@ -391,19 +395,84 @@ bdtrie_value bdtrie_find_or_insert(bdtrie* t, uint32_t key_size, const void* key
 	return (bdtrie_value){ n, l->value };
 }
 
-void splice_node(bdtrie_node* n, bdtrie_node* c) {
-	bdtrie_node** np = &children_of(n->parent)[n->parent_index];
+bdtrie_node** pointer_of(bdtrie_node* n) {
+	if (n->has_parent) {
+		return &children_of(n->parent)[n->parent_index];
+	} else {
+		return &n->trie->root;
+	}
+}
 
-	// TODO we have no leaf and only one branch left
-	// delete whole node, reparent child on parent
-	assert(false);
+
+void splice_node(bdtrie_node* n, bdtrie_node* c) {
+	bdtrie_node** np = pointer_of(n);
+
+	size_t size = sizeof_node(n->key_size + c->key_size, c->has_leaf, c->branch_size, c->branch_size);
+	bdtrie_node* combined = malloc(size);
+	combined->layout = c->layout;
+	combined->parent = n->parent;
+	combined->parent_index = n->parent_index;
+	combined->has_parent = n->has_parent;
+	combined->key_size += n->key_size;
+
+	memcpy(data_of(combined), data_of(n), n->key_size);
+	memcpy(data_of(combined) + n->key_size, data_of(c), size - sizeof_node(n->key_size, false, false, 0));
+
+	free(n);
+	free(c);
+	*np = combined;
+
+	bdtrie_branch* branch = branch_of(combined);
+
+	for (int i = 0; i < combined->branch_size; i++) {
+		branch->children[i]->parent = combined;
+	}
+	if (combined->has_leaf) {
+		bdtrie_leaf* leaf = leaf_of(combined);
+		bdtrie_trie(combined)->update_value(leaf->value, combined);
+	}
 }
 
 void remove_last_child(bdtrie_node* n) {
-	bdtrie_node** np = &children_of(n->parent)[n->parent_index];
+	bdtrie_node** np = pointer_of(n);
 
-	// remove branch section
-	assert(false);
+	uint32_t size = sizeof_node(n->key_size, true, true, 1);
+	bdtrie_node* replacement = malloc(size);
+	memcpy(replacement, n, size);
+	replacement->branch_size = 0;
+
+	free(n);
+	*np = replacement;
+}
+
+void remove_child_at(bdtrie_node* n, uint8_t index) {
+	bdtrie_node** np = pointer_of(n);
+
+	size_t size = sizeof_node(n->key_size, n->has_leaf, true, n->branch_size - 1);
+	bdtrie_node* replacement = malloc(size);
+
+	size_t size_to_child = sizeof_node(n->key_size, n->has_leaf, true, index);
+	memcpy(replacement, n, size_to_child);
+
+	size_t size_to_next_child = size_to_child + sizeof(bdtrie_branch*);
+	memcpy((uint8_t*)replacement + size_to_child, (uint8_t*)n + size_to_next_child, size - size_to_child);
+
+	free(n);
+	*np = replacement;
+
+	bdtrie_branch* branch = branch_of(replacement);
+
+	if (replacement->has_leaf) {
+		bdtrie_leaf* leaf = leaf_of(replacement);
+		bdtrie_trie(n)->update_value(leaf->value, replacement);
+	}
+
+	replacement->branch_size--;
+	for (int i = 0; i < replacement->branch_size; i++) {
+		branch->children[i]->parent = replacement;
+		branch->children[i]->parent_index = i;
+	}
+	popremove(branch->population, data_of(replacement)[0]);
 }
 
 void remove_child(bdtrie_node* p, bdtrie_node* c) {
@@ -415,13 +484,14 @@ void remove_child(bdtrie_node* p, bdtrie_node* c) {
 		splice_node(p, pc[0] == c ? pc[1] : pc[0]);
 
 	} else {
-		// TODO simply remove from child list
-		assert(false);
+		remove_child_at(p, c->parent_index);
 	}
+
+	free(c);
 }
 
 void remove_leaf(bdtrie_node* n) {
-	bdtrie_node** np = &children_of(n->parent)[n->parent_index];
+	bdtrie_node** np = pointer_of(n);
 
 	bdtrie_node* replacement = malloc(sizeof_node(n->key_size, false, true, n->branch_size));
 	memcpy(replacement, n, sizeof_node(n->key_size, false, true, 0));
@@ -440,8 +510,16 @@ void remove_leaf(bdtrie_node* n) {
 }
 
 void bdtrie_delete(bdtrie_node* n) {
+	bdtrie_trie(n)->free_value(leaf_of(n)->value);
+
 	if (n->branch_size == 0) {
-		remove_child(n->parent, n);
+		if (n->has_parent) {
+			remove_child(n->parent, n);
+
+		} else {
+			n->trie->root = NULL;
+			free(n);
+		}
 
 	} else if (n->branch_size == 1) {
 		splice_node(n, children_of(n)[0]);

@@ -71,8 +71,11 @@ void* ovs_get_value(uint32_t key_size, const void* key_data, const void* value_d
 
 void ovs_free_value(void* d) {
 	ovs_expr_ref* r = d;
+
 	if (r->symbol.node != NULL) {
-		free(d);
+		assert(r->symbol.table->trie.root == NULL);
+		free(r->symbol.table);
+		free(r);
 	}
 }
 
@@ -500,6 +503,7 @@ void dump_table(const ovs_context* c, const ovs_table* t, uint16_t indent) {
 		} else {
 			dump_table(c, r->symbol.table, indent + 2);
 		}
+		free(n);
 	}
 }
 
@@ -544,8 +548,6 @@ void ovs_free(ovs_expr_type t, const ovs_expr_ref* r) {
 		case OVS_SYMBOL:
 			if (r->symbol.node != NULL) {
 				bdtrie_delete(r->symbol.node);
-				bdtrie_clear(&r->symbol.table->trie);
-				free(r->symbol.table);
 			}
 			break;
 		case OVS_CONS:
