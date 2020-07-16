@@ -29,14 +29,15 @@ typedef struct bdtrie_node {
 	union {
 		struct {
 			uint8_t parent_index : 8;
-			uint32_t keysize : 15;
-			bool hasleaf: 1;
-			uint8_t branchsize: 8;
+			bool has_parent : 1;
+			bool has_leaf: 1;
+			uint32_t key_size : 14;
+			uint8_t branch_size: 8;
 		};
 		uint32_t layout;
 	};
 	/*
-	 * TODO if we need keys > 2^15 bytes we can just chain nodes
+	 * TODO if we need keys > 2^14 bytes we can just chain nodes
 	 */
 
 	// followed by 'keysize' bytes of key data

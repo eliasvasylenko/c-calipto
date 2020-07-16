@@ -104,10 +104,10 @@ void test_updates(size_t s, update* u) {
 		actual_values[i] = *(uint32_t*)v.data;
 
 		bdtrie_node* n = v.node;
-		uint32_t actualSize = n->keysize;
+		uint32_t actualSize = n->key_size;
 		while (n->trie->root != n) {
 			n = n->parent;
-			actualSize += n->keysize;
+			actualSize += n->key_size;
 		}
 
 		TEST_ASSERT_EQUAL_INT32(k, actualSize);
