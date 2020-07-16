@@ -1,8 +1,18 @@
-((data/lambda (fail succeed)
-   (system/out "
-               Lindsey is incredible!
-	       " fail succeed))
+((data/lambda (reduce fail succeed)
+   (system/out "Lindsey is incredible!" fail succeed))
+
+  ; reduce
+  (data/lambda (unit list f cont)
+    ((data/lambda (reduce)
+       (reduce reduce unit list))
+      (data/lambda (reduce value tail)
+        (data/des tail (data/lambda () (cont value)) (data/lambda (head tail)
+          (f value (data/lambda (value) (reduce reduce value tail))))))))
+
+  ; fail
   (data/lambda () (system/err "Error!" system/exit system/exit))
+
+  ; succeed
   system/exit)
 
 ((data/lambda (open-reader)

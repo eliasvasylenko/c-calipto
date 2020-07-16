@@ -63,6 +63,8 @@ ovru_result find_variable(ovru_variable* result, compile_context* c, const ovs_e
 
 	if (w.index == v.index && w.type == v.type) {
 		if (c->parent == NULL) {
+			printf("   ~ ");
+			ovs_dump_expr((ovs_expr){ OVS_SYMBOL, .p=symbol });
 			return OVRU_VARIABLE_NOT_IN_SCOPE;
 		}
 		ovru_variable capture;

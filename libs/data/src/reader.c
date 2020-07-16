@@ -86,12 +86,14 @@ const UChar32 close_bracket = U')';
 const UChar32 dot = U'.';
 const UChar32 double_quote = U'"';
 const UChar32 single_quote = U'\'';
+const UChar32 comment = U';';
+const UChar32 newline = U'\n';
 
 bool is_whitespace(UChar32 c, const void* v) {
 	return U' ' == c || U'\t' == c || U'\n' == c;
 }
 
-bool isymbol_character(UChar32 c, const void* v) {
+bool is_symbol_character(UChar32 c, const void* v) {
 	if (c == U'/' ||
 	    c == U'(' ||
 	    c == U')' ||
@@ -101,8 +103,8 @@ bool isymbol_character(UChar32 c, const void* v) {
 	return true;
 }
 
-bool isymbol_leading_character(UChar32 c, const void* v) {
-	return isymbol_character(c, v);
+bool is_symbol_leading_character(UChar32 c, const void* v) {
+	return is_symbol_character(c, v);
 }
 
 bool is_equal(UChar32 c, const void* to) {
@@ -119,13 +121,17 @@ bool is_not_equal(UChar32 c, const void* to) {
 
 void skip_whitespace(scanner* s) {
 	ovio_advance_input_while(s, is_whitespace, NULL);
+	while (ovio_advance_input_if(s, is_equal, &comment)) {
+		ovio_advance_input_while(s, is_not_equal, &newline);
+		ovio_advance_input_while(s, is_whitespace, NULL);
+	}
 	ovio_discard_buffer(s);
 }
 
 int32_t scan_name(scanner* s) {
 	int32_t start = ovio_input_position(s);
-	if (ovio_advance_input_if(s, isymbol_leading_character, NULL)) {
-		ovio_advance_input_while(s, isymbol_character, NULL);
+	if (ovio_advance_input_if(s, is_symbol_leading_character, NULL)) {
+		ovio_advance_input_while(s, is_symbol_character, NULL);
 		return ovio_input_position(s) - start;
 	}
 	return -1;
