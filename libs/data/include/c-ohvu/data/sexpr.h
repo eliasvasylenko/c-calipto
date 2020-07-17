@@ -66,11 +66,13 @@ typedef struct ovs_function_info {
 	uint32_t max_result_size;
 } ovs_function_info;
 
+struct ovs_function_data;
+
 typedef struct ovs_function_type {
 	UChar* name;
-	ovs_expr (*represent)(ovs_context* c, UChar* n, const void* d);
+	ovs_expr (*represent)(const struct ovs_function_data* d);
 	ovs_function_info (*inspect)(const void* d);
-	int32_t (*apply)(ovs_instruction* result, ovs_context* c, ovs_expr* args, const void* d);
+	int32_t (*apply)(ovs_instruction* result,  ovs_expr* args, const struct ovs_function_data* d);
 	void (*free) (const void* data);
 } ovs_function_type;
 

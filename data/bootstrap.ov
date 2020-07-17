@@ -1,13 +1,24 @@
 ((data/lambda (reduce fail succeed)
-   (system/out "Lindsey is incredible!" fail succeed))
+   (reduce
+     system/out
+     '("Lindsey is the best!" "Lindsey is incredible!")
+     (data/lambda (out s cont)
+       (out s fail (data/lambda (out) (cont out))))
+     succeed))
 
   ; reduce
   (data/lambda (unit list f cont)
     ((data/lambda (reduce)
        (reduce reduce unit list))
       (data/lambda (reduce value tail)
-        (data/des tail (data/lambda () (cont value)) (data/lambda (head tail)
-          (f value (data/lambda (value) (reduce reduce value tail))))))))
+        (data/eq tail '()
+          (data/lambda ()
+            (data/des tail
+              (data/lambda ()
+                (cont value))
+              (data/lambda (head tail)
+                (f value head (data/lambda (value) (reduce reduce value tail))))))
+          (data/lambda () (cont value))))))
 
   ; fail
   (data/lambda () (system/err "Error!" system/exit system/exit))

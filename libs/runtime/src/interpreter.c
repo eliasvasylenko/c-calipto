@@ -63,6 +63,9 @@ ovru_result find_variable(ovru_variable* result, compile_context* c, const ovs_e
 
 	if (w.index == v.index && w.type == v.type) {
 		if (c->parent == NULL) {
+			ovs_expr e = { OVS_SYMBOL, .p=symbol };
+			printf("\nVariable Not In Scope\n  ");
+			ovs_dump_expr(e);
 			return OVRU_VARIABLE_NOT_IN_SCOPE;
 		}
 		ovru_variable capture;
@@ -87,8 +90,10 @@ ovru_result find_variable(ovru_variable* result, compile_context* c, const ovs_e
 	return OVRU_SUCCESS;
 }
 
-ovru_result compile_quote(ovru_term* result, int32_t part_count, ovs_expr* parts, compile_context* c) {
+ovru_result compile_quote(ovru_term* result, int32_t part_count, ovs_expr* parts, compile_context* c, ovs_expr e) {
 	if (part_count != 1) {
+		printf("\nInvalid Quote Length\n  ");
+		ovs_dump_expr(e);
 		return OVRU_INVALID_QUOTE_LENGTH;
 	}
 
@@ -125,8 +130,10 @@ void* get_ref(ovs_expr e) {
 	return (void*)ovs_ref(e.p);
 }
 
-ovru_result compile_lambda(ovru_term* result, int32_t part_count, ovs_expr* parts, compile_context* c) {
+ovru_result compile_lambda(ovru_term* result, int32_t part_count, ovs_expr* parts, compile_context* c, ovs_expr e) {
 	if (part_count != 2) {
+		printf("\nInvalid Lambda Length\n  ");
+		ovs_dump_expr(e);
 		return OVRU_INVALID_LAMBDA_LENGTH;
 	}
 
@@ -136,6 +143,8 @@ ovru_result compile_lambda(ovru_term* result, int32_t part_count, ovs_expr* part
 	ovs_expr_ref** params;
 	int32_t param_count = ovs_delist_of(c->ovs_context->root_tables, params_decl, (void***)&params, get_ref);
 	if (param_count < 0) {
+		printf("\nInvalid Parameter Terminator\n  ");
+		ovs_dump_expr(e);
 		return OVRU_INVALID_PARAMETER_TERMINATOR;
 	}
 
@@ -187,7 +196,15 @@ ovru_result compile_expression(ovru_term* result, ovs_expr e, compile_context* c
 	ovs_expr* parts;
 	uint32_t count = ovs_delist(c->ovs_context->root_tables + OVS_UNQUALIFIED, e, &parts);
 	if (count <= 0) {
-		return count == 0 ? OVRU_EMPTY_EXPRESSION : OVRU_INVALID_EXPRESSION_TERMINATOR;
+		if (count == 0) {
+			printf("\nEmpty Expression\n  ");
+			ovs_dump_expr(e);
+			return OVRU_EMPTY_EXPRESSION;
+		} else {
+			printf("\nInvalid Expression Terminator\n  ");
+			ovs_dump_expr(e);
+			return OVRU_INVALID_EXPRESSION_TERMINATOR;
+		}
 	}
 
 	ovs_expr kind = parts[0];
@@ -196,12 +213,14 @@ ovru_result compile_expression(ovru_term* result, ovs_expr e, compile_context* c
 
 	ovru_result success;
 	if (ovs_is_eq(kind, ovs_root_symbol(OVS_DATA_QUOTE)->expr)) {
-		success = compile_quote(result, term_count, terms, c);
+		success = compile_quote(result, term_count, terms, c, e);
 
 	} else if (ovs_is_eq(kind, ovs_root_symbol(OVS_DATA_LAMBDA)->expr)) {
-		success = compile_lambda(result, term_count, terms, c);
+		success = compile_lambda(result, term_count, terms, c, e);
 
 	} else {
+		printf("\nInvalid Expression Type\n  ");
+		ovs_dump_expr(e);
 		success = OVRU_INVALID_EXPRESSION_TYPE;
 	}
 
@@ -217,7 +236,15 @@ ovru_result compile_statement(ovru_statement* result, ovs_expr s, compile_contex
 	ovs_expr* expressions;
 	int32_t count = ovs_delist(c->ovs_context->root_tables + OVS_UNQUALIFIED, s, &expressions);
 	if (count <= 0) {
-		return count == 0 ? OVRU_EMPTY_STATEMENT : OVRU_INVALID_STATEMENT_TERMINATOR;
+		if (count == 0) {
+			printf("\nEmpty Statement\n  ");
+			ovs_dump_expr(s);
+			return OVRU_EMPTY_STATEMENT;
+		} else {
+			printf("\nInvalid Statement Terminator\n  ");
+			ovs_dump_expr(s);
+			return OVRU_INVALID_STATEMENT_TERMINATOR;
+		}
 	}
 
 	ovru_term* terms = malloc(sizeof(ovru_term) * count);
@@ -298,10 +325,10 @@ ovs_expr represent_param(const void* p) {
 	return (ovs_expr){ OVS_SYMBOL, .p=*(ovs_expr_ref**)p };
 }
 
-ovs_expr represent_bound_lambda(ovs_context* c, UChar* name, const void* d) {
-	const ovru_bound_lambda* l = d;
+ovs_expr represent_bound_lambda(const ovs_function_data* d) {
+	const ovru_bound_lambda* l = (ovru_bound_lambda*)(d + 1);
 
-	ovs_table* t = c->root_tables + OVS_DATA_LAMBDA;
+	ovs_table* t = d->context->root_tables + OVS_DATA_LAMBDA;
 	ovs_expr form[] = {
 		ovs_list_of(t, l->lambda->param_count, (void**)l->lambda->params, represent_param),
 		ovs_list(t, 0, NULL) // TODO
@@ -325,10 +352,10 @@ ovs_function_info inspect_bound_lambda(const void* d) {
 
 void eval_statement(ovs_context* c, ovs_instruction* result, ovru_statement s, const ovs_expr* args, const ovs_expr* closure);
 
-int32_t apply_bound_lambda(ovs_instruction* result, ovs_context* c, ovs_expr* args, const void* d) {
-	const ovru_bound_lambda* l = d;
+int32_t apply_bound_lambda(ovs_instruction* result, ovs_expr* args, const ovs_function_data* d) {
+	const ovru_bound_lambda* l = (ovru_bound_lambda*)(d + 1);
 
-	eval_statement(c, result, l->lambda->body, args, l->closure);
+	eval_statement(d->context, result, l->lambda->body, args, l->closure);
 
 	return OVRU_SUCCESS;
 }
@@ -405,6 +432,8 @@ void eval_statement(ovs_context* c, ovs_instruction* result, ovru_statement s, c
 
 ovru_result execute_instruction(instruction_slot* next, instruction_slot* current) {
 	if (current->instruction.values[0].type != OVS_FUNCTION) {
+		printf("\nAttempt To Call Non Function\n  ");
+		ovs_dump_expr(current->instruction.values[0]);
 		return OVRU_ATTEMPT_TO_CALL_NON_FUNCTION;
 	}
 	
@@ -415,10 +444,12 @@ ovru_result execute_instruction(instruction_slot* next, instruction_slot* curren
 	prepare_instruction_slot(next, i.max_result_size);
 
 	if (i.arg_count != current->instruction.size - 1) {
+		printf("\nArgument Count Mismatch\n  ");
+		ovs_dump_expr(current->instruction.values[0]);
 		return OVRU_ARGUMENT_COUNT_MISMATCH;
 	}
 
-	ovru_result r = f->type->apply(&next->instruction, f->context, current->instruction.values + 1, f + 1);
+	ovru_result r = f->type->apply(&next->instruction, current->instruction.values + 1, f);
 
 	clear_instruction_slot(current);
 

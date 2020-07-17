@@ -137,7 +137,7 @@ ovs_table* ovs_table_of(ovs_context* c, const ovs_expr e) {
 		case OVS_FUNCTION:
 			;
 			const ovs_function_data* f = &e.p->function;
-			ovs_expr r = f->type->represent(f->context, f->type->name, f + 1);
+			ovs_expr r = f->type->represent(f);
 			ovs_table* t = ovs_table_of(c, r);
 			ovs_dealias(r);
 			return t;
@@ -186,7 +186,7 @@ bool ovs_is_qualified(ovs_expr e) {
 		case OVS_FUNCTION:
 			;
 			const ovs_function_data* f = &e.p->function;
-			ovs_expr r = f->type->represent(f->context, f->type->name, f + 1);
+			ovs_expr r = f->type->represent(f);
 			bool q = ovs_is_qualified(r);
 			ovs_dealias(r);
 			return q;
@@ -211,7 +211,7 @@ ovs_expr ovs_qualifier(ovs_expr e) {
 		case OVS_FUNCTION:
 			;
 			const ovs_function_data* f = &e.p->function;
-			ovs_expr r = f->type->represent(f->context, f->type->name, f + 1);
+			ovs_expr r = f->type->represent(f);
 			ovs_expr q = ovs_qualifier(r);
 			ovs_dealias(r);
 			return q;
@@ -327,8 +327,11 @@ ovs_expr ovs_car(const ovs_expr e) {
 			return ovs_character(cp);
 
 		case OVS_FUNCTION:
-			printf("Cannot destruct function yet");
-			assert(false);
+			;
+			ovs_expr rep = e.p->function.type->represent(&e.p->function);
+			ovs_expr car = ovs_car(rep);
+			ovs_dealias(rep);
+			return car;
 
 		case OVS_CHARACTER:
 			printf("Cannot destruct character yet");
@@ -361,8 +364,11 @@ ovs_expr ovs_cdr(const ovs_expr e) {
 			return (ovs_expr){ OVS_STRING, .p=r };
 
 		case OVS_FUNCTION:
-			printf("Cannot destruct function yet");
-			assert(false);
+			;
+			ovs_expr rep = e.p->function.type->represent(&e.p->function);
+			ovs_expr cdr = ovs_cdr(rep);
+			ovs_dealias(rep);
+			return cdr;
 
 		case OVS_CHARACTER:
 			printf("Cannot destruct character yet");
@@ -388,8 +394,7 @@ bool ovs_is_eq(const ovs_expr a, const ovs_expr b) {
 			const ovs_function_data* fa = &a.p->function;
 			const ovs_function_data* fb = &b.p->function;
 			return fa->type == fb->type
-				&& ovs_is_eq(fa->type->represent(fa->context, fa->type->name, fa + 1),
-					fb->type->represent(fb->context, fb->type->name, fb + 1));
+				&& ovs_is_eq(fa->type->represent(fa), fb->type->represent(fb));
 		case OVS_CHARACTER:
 			return a.character == b.character;
 		case OVS_STRING:

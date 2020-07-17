@@ -13,8 +13,10 @@
 #include "c-ohvu/runtime/builtins.h"
 #include "c-ohvu/runtime/interpreter.h"
 
-ovs_expr no_represent(ovs_context* c, UChar* name, const void* d) {
-	return ovs_symbol(c->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(name), name);
+ovs_expr no_represent(const ovs_function_data* d) {
+	u_printf_u(u"\nxxxxx == %S\n", d->type->name);
+ovs_dump_expr( ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name));
+	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
 }
 
 void no_free(const void* d) {}
@@ -23,7 +25,7 @@ void no_free(const void* d) {}
  * exit
  */
 
-int32_t exit_apply(ovs_instruction* r, ovs_context* c, ovs_expr* args, const void* d) {
+int32_t exit_apply(ovs_instruction* r, ovs_expr* args, const ovs_function_data* d) {
 	r->size = 0;
 	return OVRU_SUCCESS;
 }
@@ -55,7 +57,7 @@ typedef struct scanner_data {
 	ovs_expr* text;
 } scanner_data;
 
-ovs_expr scanner_represent(ovs_context* c, UChar* name, const void* d) {
+ovs_expr scanner_represent(const ovs_function_data* d) {
 	assert(false);
 }
 
@@ -63,7 +65,7 @@ ovs_function_info scanner_inspect(const void* d) {
 	return (ovs_function_info){ 2, 2 };
 }
 
-int32_t scanner_apply(ovs_instruction* i, ovs_context* c, ovs_expr* args, const void* d) {
+int32_t scanner_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
 	ovs_expr fail = args[0];
 	ovs_expr cont = args[1];
 
@@ -114,7 +116,7 @@ typedef struct printer_data {
 	ovs_expr* text;
 } printer_data;
 
-ovs_expr printer_represent(ovs_context*c, UChar* name, const void* d) {
+ovs_expr printer_represent(const ovs_function_data* d) {
 	assert(false);
 }
 
@@ -122,25 +124,30 @@ ovs_function_info printer_inspect(const void* d) {
 	return (ovs_function_info){ 3, 1 };
 }
 
-int32_t printer_apply(ovs_instruction* i, ovs_context* c, ovs_expr* args, const void* d) {
+int32_t printer_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
 	ovs_expr string = args[0];
 	ovs_expr fail = args[1];
 	ovs_expr cont = args[2];
 	
-	printer_data data = *(printer_data*)d;
+	printer_data data = *(printer_data*)(d + 1);
 
-	i->size = 1;
 	if (string.type != OVS_STRING) {
+		i->size = 1;
 		i->values[0] = ovs_alias(fail);
 
 	} else if (data.next == NULL) {
 		u_fprintf(data.file, "%S", &string.p->string);
+
+		printer_data next_data = { data.file, data.file_name, NULL, NULL };
+
+		i->size = 2;
 		i->values[0] = ovs_alias(cont);
+		i->values[1] = ovs_function(d->context, d->type, sizeof(printer_data), &next_data);
 
 	} else {
-		
 
 	}
+
 	return OVRU_SUCCESS;
 }
 
@@ -178,7 +185,7 @@ ovs_expr ovru_open_printer(ovs_context* c, UFILE* f, UChar* name) {
  * cons
  */
 
-ovs_expr cons_represent(ovs_context*c, UChar* name, const void* d) {
+ovs_expr cons_represent(const ovs_function_data* d) {
 	assert(false);
 }
 
@@ -186,8 +193,8 @@ ovs_function_info cons_inspect(const void* d) {
 	return (ovs_function_info){ 3, 2 };
 }
 
-int32_t cons_apply(ovs_instruction* i, ovs_context* c, ovs_expr* args, const void* d) {
-	ovs_table* t = *(ovs_table**)d;
+int32_t cons_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
+	ovs_table* t = *(ovs_table**)(d + 1);
 
 	ovs_expr car = args[0];
 	ovs_expr cdr = args[1];
@@ -226,7 +233,7 @@ ovs_expr ovru_cons(ovs_context* c, ovs_table* t) {
  * des
  */
 
-ovs_expr des_represent(ovs_context* c, UChar* name, const void* d) {
+ovs_expr des_represent(const ovs_function_data* d) {
 	assert(false);
 }
 
@@ -234,8 +241,8 @@ ovs_function_info des_inspect(const void* d) {
 	return (ovs_function_info){ 3, 3 };
 }
 
-int32_t des_apply(ovs_instruction* i, ovs_context* c, ovs_expr* args, const void* d) {
-	ovs_table* t = *(ovs_table**)d;
+int32_t des_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
+	ovs_table* t = *(ovs_table**)(d + 1);
 
 	ovs_expr e = args[0];
 	ovs_expr fail = args[1];
@@ -285,7 +292,7 @@ ovs_function_info eq_inspect(const void* d) {
 	return (ovs_function_info){ 4, 1 };
 }
 
-int32_t eq_apply(ovs_instruction* i, ovs_context* c, ovs_expr* args, const void* d) {
+int32_t eq_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
 	ovs_expr e_a = args[0];
 	ovs_expr e_b = args[1];
 	ovs_expr f = args[2];
