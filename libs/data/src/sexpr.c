@@ -73,6 +73,10 @@ void ovs_free_value(void* d) {
 	ovs_expr_ref* r = d;
 
 	if (r->symbol.node != NULL) {
+		ovs_expr e = { OVS_SYMBOL, .p=r };
+		if (ovs_is_qualified(e)) {
+			ovs_dealias(ovs_qualifier(e));
+		}
 		assert(r->symbol.table->trie.root == NULL);
 		free(r->symbol.table);
 		free(r);

@@ -90,16 +90,19 @@ void test_updates(size_t s, update* u) {
 	for (bdtrie_value v = bdtrie_first(&trie); bdtrie_is_present(v); v = bdtrie_next(v)) {
 		c++;
 	}
-	uint32_t max_count = s > c ? s : c;
 
-	char** actual_keys = malloc(sizeof(char*) * max_count);
-	int32_t* actual_values = malloc(sizeof(int32_t) * max_count);
+	printf("   [ ");
+
+	char** actual_keys = malloc(sizeof(char*) * c);
+	int32_t* actual_values = malloc(sizeof(int32_t) * c);
 	int i = 0;
 	for (bdtrie_value v = bdtrie_first(&trie); bdtrie_is_present(v); v = bdtrie_next(v)) {
 		uint32_t k = bdtrie_key_size(v.node);
 		actual_keys[i] = malloc(sizeof(char) * k + 1);
 		bdtrie_key(actual_keys[i], v.node);
 		actual_keys[i][k] = '\0';
+
+		printf("%s ", actual_keys[i]);
 
 		actual_values[i] = *(uint32_t*)v.data;
 
@@ -115,25 +118,25 @@ void test_updates(size_t s, update* u) {
 		TEST_ASSERT_EQUAL_INT64(&trie, bdtrie_trie(v.node));
 		i++;
 	}
-	for (int i = c; i < max_count; i++) {
-		actual_keys[i] = NULL;
-		actual_values[i] = -1;
-	}
 
-	char** expected_keys = malloc(sizeof(char*) * max_count);
-	int32_t* expected_values = malloc(sizeof(int32_t) * max_count);
+	printf("]\n = [ ");
+
+	char** expected_keys = malloc(sizeof(char*) * s);
+	int32_t* expected_values = malloc(sizeof(int32_t) * s);
 	for (int i = 0; i < s; i++) {
 		expected_keys[i] = u[i].key;
 		expected_values[i] = u[i].index;
-	}
-	for (int i = s; i < max_count; i++) {
-		expected_keys[i] = NULL;
-		expected_values[i] = -1;
+
+		printf("%s ", expected_keys[i]);
 	}
 
-	if (max_count > 0) {
-		TEST_ASSERT_EQUAL_STRING_ARRAY(expected_keys, actual_keys, max_count);
-		TEST_ASSERT_EQUAL_INT32_ARRAY(expected_values, actual_values, max_count);
+	printf("]\n");
+
+	TEST_ASSERT_EQUAL_INT32(s, c);
+	if (s > 0 && c > 0) {
+		uint32_t min = s < c ? s : c;
+		TEST_ASSERT_EQUAL_STRING_ARRAY(expected_keys, actual_keys, min);
+		TEST_ASSERT_EQUAL_INT32_ARRAY(expected_values, actual_values, min);
 	}
 
 	for (int i = 0; i < c; i++) {
@@ -156,10 +159,15 @@ void test_insert(size_t s, char** k) {
 	free(u);
 }
 
-void test_insert_and_remove(size_t s, char** k, operation* o) {
+typedef struct test_update {
+	char* key;
+	operation op;
+} test_update;
+
+void test_insert_and_remove(size_t s, test_update* t) {
 	update* u = malloc(sizeof(update) * s);
 	for (int i = 0; i < s; i++) {
-		u[i] = (update){ k[i], i, o[i] };
+		u[i] = (update){ t[i].key, i, t[i].op };
 	}
 
 	test_updates(s, u);
@@ -227,6 +235,120 @@ void test_insert_12() {
 	test_insert(sizeof(k) / sizeof(char*), k);
 }
 
+
+
+void test_insert_and_remove_1() {
+	test_update k[] = { { "a", INSERT }, { "a", DELETE } };
+	test_insert_and_remove(sizeof(k) / sizeof(test_update), k);
+}
+
+void test_insert_and_remove_2() {
+	test_update k[] = { { "a", INSERT }, { "aa", INSERT }, { "a", DELETE } };
+	test_insert_and_remove(sizeof(k) / sizeof(test_update), k);
+}
+
+void test_insert_and_remove_3() {
+	test_update k[] = { { "a", INSERT }, { "aa", INSERT }, { "aa", DELETE } };
+	test_insert_and_remove(sizeof(k) / sizeof(test_update), k);
+}
+
+void test_insert_and_remove_4() {
+	test_update k[] = { { "a", INSERT }, { "aa", INSERT }, { "ab", INSERT }, { "a", DELETE } };
+	test_insert_and_remove(sizeof(k) / sizeof(test_update), k);
+}
+
+void test_insert_and_remove_5() {
+	test_update k[] = {
+		{ "a", INSERT },
+		{ "aa", INSERT },
+		{ "aaab", INSERT },
+		{ "aaac", INSERT },
+		{ "aa", DELETE },
+		{ "aa", INSERT },
+		{ "aa", DELETE },
+		{ "aa", INSERT },
+		{ "aa", DELETE }
+	};
+	test_insert_and_remove(sizeof(k) / sizeof(test_update), k);
+}
+
+void test_insert_and_remove_6() {
+	test_update k[] = {
+		{ "a", INSERT },
+		{ "aa", INSERT },
+		{ "ab", INSERT },
+		{ "ac", INSERT },
+		{ "ad", INSERT },
+		{ "ad", DELETE },
+		{ "ac", DELETE },
+		{ "ab", DELETE },
+		{ "aa", DELETE }
+	};
+	test_insert_and_remove(sizeof(k) / sizeof(test_update), k);
+}
+
+void test_insert_and_remove_7() {
+	test_update k[] = {
+		{ "a", INSERT },
+		{ "aa", INSERT },
+		{ "ab", INSERT },
+		{ "ac", INSERT },
+		{ "ad", INSERT },
+		{ "aa", DELETE },
+		{ "ab", DELETE },
+		{ "ac", DELETE },
+		{ "ad", DELETE }
+	};
+	test_insert_and_remove(sizeof(k) / sizeof(test_update), k);
+}
+
+void test_insert_and_remove_8() {
+	/*
+	 * TODO test update_value
+	 */
+	test_update k[] = {
+		{ "data", INSERT },
+		{ "system", INSERT },
+		{ "text", INSERT },
+		{ "reduce", INSERT },
+		{ "fail", INSERT },
+		{ "succeed", INSERT },
+		{ "fa", INSERT },
+		{ "reduce", DELETE },
+		{ "fail", DELETE },
+		{ "succeed", DELETE },
+		{ "fa", DELETE },
+		{ "data", DELETE },
+		{ "system", DELETE },
+		{ "text", DELETE }
+	};
+	test_insert_and_remove(sizeof(k) / sizeof(test_update), k);
+}
+
+void test_insert_and_remove_9() {
+	test_update k[] = {
+		{ "data", INSERT },
+		{ "system", INSERT },
+		{ "text", INSERT },
+		{ "reduce", INSERT },
+		{ "fail", INSERT },
+		{ "succeed", INSERT },
+		{ "fa", INSERT },
+		{ "reduce", DELETE },
+		{ "fail", DELETE }
+	};
+	test_insert_and_remove(sizeof(k) / sizeof(test_update), k);
+}
+
+void test_insert_and_remove_10() {
+}
+
+void test_insert_and_remove_11() {
+}
+
+void test_insert_and_remove_12() {
+}
+
 int main(void) {
 	UNITY_BEGIN();
 
@@ -242,6 +364,19 @@ int main(void) {
 	RUN_TEST(test_insert_10);
 	RUN_TEST(test_insert_11);
 	RUN_TEST(test_insert_12);
+
+	RUN_TEST(test_insert_and_remove_1);
+	RUN_TEST(test_insert_and_remove_2);
+	RUN_TEST(test_insert_and_remove_3);
+	RUN_TEST(test_insert_and_remove_4);
+	RUN_TEST(test_insert_and_remove_5);
+	RUN_TEST(test_insert_and_remove_6);
+	RUN_TEST(test_insert_and_remove_7);
+	RUN_TEST(test_insert_and_remove_8);
+	RUN_TEST(test_insert_and_remove_9);
+	RUN_TEST(test_insert_and_remove_10);
+	RUN_TEST(test_insert_and_remove_11);
+	RUN_TEST(test_insert_and_remove_12);
 
 	return UNITY_END();
 }

@@ -282,7 +282,7 @@ bdtrie_node* add_child(bdtrie* t, bdtrie_node** np, uint8_t index, key k) {
 	size_t size_to_child = sizeof_node(n->key_size, n->has_leaf, true, index);
 	memcpy(replacement, n, size_to_child);
 
-	size_t size_to_next_child = size_to_child + sizeof(bdtrie_branch*);
+	size_t size_to_next_child = size_to_child + sizeof(bdtrie_node*);
 	memcpy((uint8_t*)replacement + size_to_next_child, (uint8_t*)n + size_to_child, size - size_to_next_child);
 
 	free(n);
@@ -436,16 +436,21 @@ void splice_node(bdtrie_node* n, bdtrie_node* c) {
 void remove_last_child(bdtrie_node* n) {
 	bdtrie_node** np = pointer_of(n);
 
-	uint32_t size = sizeof_node(n->key_size, true, true, 1);
+	uint32_t size = sizeof_node(n->key_size, true, false, 0);
 	bdtrie_node* replacement = malloc(size);
 	memcpy(replacement, n, size);
 	replacement->branch_size = 0;
 
 	free(n);
 	*np = replacement;
+
+	if (replacement->has_leaf) {
+		bdtrie_leaf* leaf = leaf_of(replacement);
+		bdtrie_trie(replacement)->update_value(leaf->value, replacement);
+	}
 }
 
-void remove_child_at(bdtrie_node* n, uint8_t index) {
+void remove_child_at(bdtrie_node* n, uint8_t index, uint8_t logical_index) {
 	bdtrie_node** np = pointer_of(n);
 
 	size_t size = sizeof_node(n->key_size, n->has_leaf, true, n->branch_size - 1);
@@ -454,7 +459,7 @@ void remove_child_at(bdtrie_node* n, uint8_t index) {
 	size_t size_to_child = sizeof_node(n->key_size, n->has_leaf, true, index);
 	memcpy(replacement, n, size_to_child);
 
-	size_t size_to_next_child = size_to_child + sizeof(bdtrie_branch*);
+	size_t size_to_next_child = size_to_child + sizeof(bdtrie_node*);
 	memcpy((uint8_t*)replacement + size_to_child, (uint8_t*)n + size_to_next_child, size - size_to_child);
 
 	free(n);
@@ -464,7 +469,7 @@ void remove_child_at(bdtrie_node* n, uint8_t index) {
 
 	if (replacement->has_leaf) {
 		bdtrie_leaf* leaf = leaf_of(replacement);
-		bdtrie_trie(n)->update_value(leaf->value, replacement);
+		bdtrie_trie(replacement)->update_value(leaf->value, replacement);
 	}
 
 	replacement->branch_size--;
@@ -472,7 +477,7 @@ void remove_child_at(bdtrie_node* n, uint8_t index) {
 		branch->children[i]->parent = replacement;
 		branch->children[i]->parent_index = i;
 	}
-	popremove(branch->population, data_of(replacement)[0]);
+	popremove(branch->population, logical_index);
 }
 
 void remove_child(bdtrie_node* p, bdtrie_node* c) {
@@ -484,7 +489,7 @@ void remove_child(bdtrie_node* p, bdtrie_node* c) {
 		splice_node(p, pc[0] == c ? pc[1] : pc[0]);
 
 	} else {
-		remove_child_at(p, c->parent_index);
+		remove_child_at(p, c->parent_index, data_of(c)[0]);
 	}
 
 	free(c);

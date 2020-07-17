@@ -8,4 +8,5 @@ stdenv.mkDerivation {
     icu
     valgrind
   ];
+  hardeningDisable = [ "all" ];
 }
