@@ -96,7 +96,6 @@ int run_bootstrap(ovs_expr args) {
 	ovs_expr e;
 	int result;
 	if (ovda_read(r, &e) == OVDA_SUCCESS) {
-		ovs_dump_expr(e);
 		result = run(e, args);
 
 		ovs_dealias(e);
@@ -126,13 +125,15 @@ int main(int argc, char** argv) {
 
 	int result = run_bootstrap(args);
 
+	if (result != OVRU_SUCCESS) {
+		printf("\nReturning with %i\n", result);
+		ovs_dump_context(context);
+	}
+
 	ovs_dealias(args);
-	ovs_dump_context(context);
 	ovs_close(context);
 
 	ucnv_close(char_conv);
-
-	printf("Returning with %i\n", result);
 
 	return result;
 }

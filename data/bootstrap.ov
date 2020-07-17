@@ -1,10 +1,13 @@
 ((data/lambda (reduce fail succeed)
    (reduce
      system/out
-     '("Lindsey is the best!" "Lindsey is incredible!")
-     (data/lambda (out s cont)
-       (out s fail (data/lambda (out) (cont out))))
-     succeed))
+     system/args
+     (data/lambda (out arg next)
+       (out arg fail (data/lambda (out)
+         (out " " fail (data/lambda (out) (next out))))))
+     (data/lambda (out)
+       (out "!
+" fail (data/lambda (out) (succeed))))))
 
   ; reduce
   (data/lambda (unit list f cont)
@@ -21,10 +24,64 @@
           (data/lambda () (cont value))))))
 
   ; fail
-  (data/lambda () (system/err "Error!" system/exit system/exit))
+  (data/lambda () (system/err "Error!" system/exit (data/lambda (err) (system/exit))))
 
   ; succeed
   system/exit)
+
+
+
+
+
+
+; make it a goal that so long as something will compile (i.e. macro expand) it will run.
+; even builtin functions can be guarded by macros to make sure lambdas of the correct
+; arity are passed as continuations...
+
+
+
+
+#
+
+
+
+
+
+(\ reduce fail succeed
+   (reduce
+     system/out
+     system/args
+     \ out arg next
+       (out arg fail \out (out " " fail \out (next out)))
+     \ out
+       (out "!
+" fail \out (succeed)))
+
+  ; reduce
+  \ unit list f cont
+    (\ reduce (reduce reduce unit list)
+      \ reduce value tail
+        (data/eq tail '()
+          \ (data/des tail
+             \ (cont value)
+             \ head tail
+               (f value head \value (reduce reduce value tail)))
+          \ (cont value)))
+
+  ; fail
+  \ (system/err "Error!" system/exit \err (system/exit))
+
+  ; succeed
+  system/exit)
+
+
+
+
+
+
+
+
+
 
 ((data/lambda (open-reader)
    (data/des args system/exit (data/lambda (binary args)

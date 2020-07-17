@@ -14,8 +14,6 @@
 #include "c-ohvu/runtime/interpreter.h"
 
 ovs_expr no_represent(const ovs_function_data* d) {
-	u_printf_u(u"\nxxxxx == %S\n", d->type->name);
-ovs_dump_expr( ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name));
 	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
 }
 
@@ -129,20 +127,25 @@ int32_t printer_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_dat
 	ovs_expr fail = args[1];
 	ovs_expr cont = args[2];
 	
-	printer_data data = *(printer_data*)(d + 1);
+	printer_data* data = (printer_data*)(d + 1);
 
 	if (string.type != OVS_STRING) {
 		i->size = 1;
 		i->values[0] = ovs_alias(fail);
 
-	} else if (data.next == NULL) {
-		u_fprintf(data.file, "%S", &string.p->string);
+	} else if (data->next == NULL) {
+		u_fprintf(data->file, "%S", &string.p->string);
 
-		printer_data next_data = { data.file, data.file_name, NULL, NULL };
+		printer_data next_data = { data->file, data->file_name, NULL, NULL };
+		data->next = malloc(sizeof(ovs_expr));
+		*data->next = ovs_function(d->context, d->type, sizeof(printer_data), &next_data);
+
+		data->text = malloc(sizeof(ovs_expr));
+		*data->text = ovs_alias(string);
 
 		i->size = 2;
 		i->values[0] = ovs_alias(cont);
-		i->values[1] = ovs_function(d->context, d->type, sizeof(printer_data), &next_data);
+		i->values[1] = ovs_alias(*data->next);
 
 	} else {
 
@@ -154,17 +157,20 @@ int32_t printer_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_dat
 void printer_free(const void* d) {
 	printer_data data = *(printer_data*)d;
 
-	ovs_dealias(data.file_name);
-
 	if (data.next) {
 		ovs_dealias(*data.next);
 		free(data.next);
 
 		if (data.text) {
+			ovs_dealias(*data.text);
 			free(data.text);
 		}
-	} else if (data.file) {
-		u_fclose(data.file);
+	} else {
+		ovs_dealias(data.file_name);
+
+		if (data.file) {
+			u_fclose(data.file);
+		}
 	}
 }
 

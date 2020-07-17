@@ -154,7 +154,7 @@ ovs_table* ovs_table_of(ovs_context* c, const ovs_expr e) {
 }
 
 bool ovs_is_atom(ovs_table* t, const ovs_expr e) {
-	if (e.type == OVS_SYMBOL) {
+	if (ovs_is_symbol(e)) {
 		return true;
 	}
 	if (t->qualifier == NULL) {
@@ -168,6 +168,13 @@ bool ovs_is_atom(ovs_table* t, const ovs_expr e) {
 }
 
 bool ovs_is_symbol(ovs_expr e) {
+	if (e.type == OVS_FUNCTION) {
+		const ovs_function_data* f = &e.p->function;
+		ovs_expr r = f->type->represent(f);
+		bool symbol = ovs_is_symbol(r);
+		ovs_dealias(r);
+		return symbol;
+	}
 	return e.type == OVS_SYMBOL;
 }
 
@@ -228,6 +235,13 @@ ovs_expr ovs_qualifier(ovs_expr e) {
 }
 
 UChar* ovs_name(const ovs_expr e) {
+	if (e.type == OVS_FUNCTION) {
+		const ovs_function_data* f = &e.p->function;
+		ovs_expr r = f->type->represent(f);
+		UChar* name = ovs_name(r);
+		ovs_dealias(r);
+		return name;
+	}
 	if (e.type != OVS_SYMBOL) {
 		assert(false);
 	}
@@ -255,7 +269,7 @@ ovs_expr ovs_character(UChar32 cp) {
 
 ovs_expr ovs_cstring(UConverter* c, char* s) {
 	int32_t size = strlen(s);
-	int32_t destSize = size * 2;
+	int32_t destSize = size * sizeof(UChar);
 
 	ovs_expr_ref* r = ref(offsetof(ovs_string_data, string) + sizeof(UChar) * (destSize + 1), 1);
 
@@ -265,10 +279,10 @@ ovs_expr ovs_cstring(UConverter* c, char* s) {
 			s, size,
 			&error);
 
-	if (len != destSize) {
+	if (len != size) {
 		ovs_expr_ref* oldR = r;
 
-		destSize = len;
+		destSize = len * sizeof(UChar);
 		r = ref(offsetof(ovs_string_data, string) + sizeof(UChar) * (len + 1), 1);
 
 		memcpy(r->string.string, oldR->string.string, destSize);
@@ -328,7 +342,8 @@ ovs_expr ovs_car(const ovs_expr e) {
 
 		case OVS_FUNCTION:
 			;
-			ovs_expr rep = e.p->function.type->represent(&e.p->function);
+			const ovs_function_data* f = &e.p->function;
+			ovs_expr rep = f->type->represent(f);
 			ovs_expr car = ovs_car(rep);
 			ovs_dealias(rep);
 			return car;
@@ -365,7 +380,8 @@ ovs_expr ovs_cdr(const ovs_expr e) {
 
 		case OVS_FUNCTION:
 			;
-			ovs_expr rep = e.p->function.type->represent(&e.p->function);
+			const ovs_function_data* f = &e.p->function;
+			ovs_expr rep = f->type->represent(f);
 			ovs_expr cdr = ovs_cdr(rep);
 			ovs_dealias(rep);
 			return cdr;
