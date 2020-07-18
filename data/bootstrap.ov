@@ -5,23 +5,16 @@
      (data/lambda (out arg next)
        (out arg fail (data/lambda (out)
          (out " " fail (data/lambda (out) (next out))))))
-     (data/lambda (out)
-       (out "!
+     (data/lambda (out terminal)
+       (out "!!
 " fail (data/lambda (out) (succeed))))))
 
   ; reduce
   (data/lambda (unit list f cont)
-    ((data/lambda (reduce)
-       (reduce reduce unit list))
-      (data/lambda (reduce value tail)
-        (data/eq tail '()
-          (data/lambda ()
-            (data/des tail
-              (data/lambda ()
-                (cont value))
-              (data/lambda (head tail)
-                (f value head (data/lambda (value) (reduce reduce value tail))))))
-          (data/lambda () (cont value))))))
+    ((data/lambda (reduce) (reduce reduce unit list))
+      (data/lambda (reduce value tail) (data/des tail
+        (data/lambda () (cont value tail))
+        (data/lambda (head tail) (f value head (data/lambda (value) (reduce reduce value tail))))))))
 
   ; fail
   (data/lambda () (system/err "Error!" system/exit (data/lambda (err) (system/exit))))
@@ -47,29 +40,29 @@
 
 
 
-(\ reduce fail succeed
+
+
+(\reduce fail succeed
    (reduce
      system/out
      system/args
-     \ out arg next
-       (out arg fail \out (out " " fail \out (next out)))
-     \ out
-       (out "!
+     \out arg next (out arg fail \out (out " " fail \out (next out)))
+     \out (out "!
 " fail \out (succeed)))
 
   ; reduce
-  \ unit list f cont
-    (\ reduce (reduce reduce unit list)
-      \ reduce value tail
-        (data/eq tail '()
-          \ (data/des tail
-             \ (cont value)
-             \ head tail
-               (f value head \value (reduce reduce value tail)))
-          \ (cont value)))
+  \unit list f cont (\reduce (reduce reduce unit list)
+    \reduce value tail (data/eq
+      tail
+      '()
+      \(data/des
+        tail
+        \(cont value)
+        \head tail (f value head \value (reduce reduce value tail)))
+      \(cont value)))
 
   ; fail
-  \ (system/err "Error!" system/exit \err (system/exit))
+  \(system/err "Error!" system/exit \err (system/exit))
 
   ; succeed
   system/exit)
@@ -207,14 +200,22 @@
 
 Bootstrap responsibilities/
 
-- reader (inc. macros)
+We need to load files before we have a reader implemented. Either,
+- Provide interim access to a native reader.
+- Pre-load all bootstrap files and shunt them into some environment.
 
-- text (unicode)
-
+Then we need to wire together the following modules, (and their : dependencies).
+- reader (inc. macros)	: text, numerics
+- text (unicode)	: numerics
 - numerics
+- module loader		: content-hashing?
+- content hashing	: numerics? text? (we want to do this early; easier to prove intrinsics are correct if they target exact implementaions by hash)
 
-- content hashing (we want to do this early because it's a good target for intrinsics)
 
+
+Difference between library modules and entry points? Entry point should have full control of runtime? Entry points can't export?
+
+Base CPS module system should isolate modules by construction if possible.
 
 
 
