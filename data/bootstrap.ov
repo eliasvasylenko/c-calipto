@@ -33,39 +33,37 @@
 
 
 
+(compile-lambda '(cons des exit) (lambda (compile-statement)
+  (compile-statement (lambda (compile-lambda '(arg) 
+
+
+
+source
+
+(statement
+  (lambda (lambda-parameters lambda-body statement-tail)
+    (statement-tail
+      (lambda (lambda-parameters lambda-body statement-tail) (...))
+      (lambda (quote-data statement-tail) (...))
+      (lambda (variable-symbol statement-tail) (...))
+      (lambda (compiled-function) (...done...)))
+  (lambda (variable-symbol statement-tail) (...)))
 
 
 
 
+compiler -> scanner 
+scanner -> position buffer advance advance-if advance-while close
 
 
+; macro
+(data/lambda (scanner fail cont)
+  (cont 
+    
+    ; next
+    (data/lambda (
 
 
-
-(\reduce fail succeed
-   (reduce
-     system/out
-     system/args
-     \out arg next (out arg fail \out (out " " fail \out (next out)))
-     \out (out "!
-" fail \out (succeed)))
-
-  ; reduce
-  \unit list f cont (\reduce (reduce reduce unit list)
-    \reduce value tail (data/eq
-      tail
-      '()
-      \(data/des
-        tail
-        \(cont value)
-        \head tail (f value head \value (reduce reduce value tail)))
-      \(cont value)))
-
-  ; fail
-  \(system/err "Error!" system/exit \err (system/exit))
-
-  ; succeed
-  system/exit)
 
 
 

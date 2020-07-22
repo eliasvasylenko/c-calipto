@@ -1,0 +1,24 @@
+(module math
+
+  define scan-expression scanner bindings -> ...
+
+  define print-expression printer bindings -> ...
+
+  export
+    scan-expression print-expression
+
+  (module integer
+
+    export zero
+
+    define inc ...
+
+    define dec ...)
+
+  (module rational
+
+    define blah ...)
+
+  export
+    natural whole integer rational)
+
