@@ -32,9 +32,27 @@
 ; arity are passed as continuations...
 
 
+(compile-lambda (lambda (with-param compile-statement)
+  (with-param 'a (lambda (with-param compile-statement)
+    (with-param 'b (lambda (with-param compile-statement)
+      (compile-statement (lambda (with-lambda with-variable)
+        (with-variable 'a (lambda (with-lambda with-variable with-quote end-statement)
+          (with variable 'b (lambda (with-l with-v with-q end-statement)
+            (end-statement ; signature of end-statement depends on whether we're nested
+                           ; does it more onto adding another expression to an enclosing
+                           ; statement, or are we in the outermost statement and
+                           ; it instantiates the complete source tree?
 
-(compile-lambda '(cons des exit) (lambda (compile-statement)
-  (compile-statement (lambda (compile-lambda '(arg) 
+
+(compile-lambda
+  (lambda (with-param compile-statement)
+    (with-param 'a (lambda (with-param compile-statement)
+      (compile-statement (lambda (with-lambda with-var)
+        (with-lambda
+          (lambda (with-param compile-statement) (...))
+          (lambda (with-lambda with-var with-quote end-statement) (...))))))))
+  (lambda (function)
+    (apply function bindings)))
 
 
 
