@@ -249,8 +249,8 @@ ovru_result compile_statement(ovru_statement* result, ovs_expr s, compile_contex
 	return success;
 }
 
-void compile(ovru_context* result, ovs_context* c, const uint32_t param_count, const ovs_expr_ref** params) {
-	*result = {
+void compile(compile_context* result, ovs_context* c, const uint32_t param_count, const ovs_expr_ref** params) {
+	*result = (compile_context){
 		NULL,
 		c,
 		make_variable_bindings(param_count, params)
@@ -272,15 +272,132 @@ ovru_result ovru_compile(ovru_statement* result, ovs_context* c, const ovs_expr 
 }
 
 /*
- * Compile Params
+ * With Variable
+ */
+
+typedef struct with_variable_data {
+	compile_context context;
+	ovs_expr_ref* parent;
+} with_variable_data;
+
+ovs_expr with_variable_represent(const ovs_function_data* d) {
+	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
+}
+
+ovs_function_info with_variable_inspect(const void* d) {
+	return (ovs_function_info){ 2, 2 };
+}
+
+int32_t with_variable_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
+	ovs_expr params = args[0];
+	ovs_expr build = args[1];
+	ovs_expr cont = args[2];
+
+	return 1234321;
+}
+
+void with_variable_free(const void* d) {
+	with_variable_data* data = (with_variable_data*)d;
+
+	ovs_free(OVS_FUNCTION, data->parent);
+}
+
+static ovs_function_type with_variable_function = {
+	u"with-variable",
+	with_variable_represent,
+	with_variable_inspect,
+	with_variable_apply,
+	with_variable_free
+};
+
+/*
+ * With Quote
+ */
+
+typedef struct with_quote_data {
+	compile_context context;
+	ovs_expr_ref* parent;
+} with_quote_data;
+
+ovs_expr with_quote_represent(const ovs_function_data* d) {
+	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
+}
+
+ovs_function_info with_quote_inspect(const void* d) {
+	return (ovs_function_info){ 3, 2 };
+}
+
+int32_t with_quote_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
+	ovs_expr params = args[0];
+	ovs_expr build = args[1];
+	ovs_expr cont = args[2];
+
+	return 1234321;
+}
+
+void with_quote_free(const void* d) {
+	with_quote_data* data = (with_quote_data*)d;
+
+	ovs_free(OVS_FUNCTION, data->parent);
+}
+
+static ovs_function_type with_quote_function = {
+	u"with-quote",
+	with_quote_represent,
+	with_quote_inspect,
+	with_quote_apply,
+	with_quote_free
+};
+
+/*
+ * With Lambda
+ */
+
+typedef struct with_lambda_data {
+	compile_context context;
+	ovs_expr_ref* parent;
+} with_lambda_data;
+
+ovs_expr with_lambda_represent(const ovs_function_data* d) {
+	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
+}
+
+ovs_function_info with_lambda_inspect(const void* d) {
+	return (ovs_function_info){ 3, 2 };
+}
+
+int32_t with_lambda_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
+	ovs_expr params = args[0];
+	ovs_expr build = args[1];
+	ovs_expr cont = args[2];
+
+	return 1234321;
+}
+
+void with_lambda_free(const void* d) {
+	with_lambda_data* data = (with_lambda_data*)d;
+
+	ovs_free(OVS_FUNCTION, data->parent);
+}
+
+static ovs_function_type with_lambda_function = {
+	u"with-lambda",
+	with_lambda_represent,
+	with_lambda_inspect,
+	with_lambda_apply,
+	with_lambda_free
+};
+
+/*
+ * Compile
  */
 
 typedef struct compile_data {
 	compile_context context;
-	s_expr cont;
-}
+	ovs_expr cont;
+} compile_data;
 
-s_expr compile_represent(ovs_context* c) {
+ovs_expr compile_represent(const ovs_function_data* d) {
 	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
 }
 
@@ -288,13 +405,17 @@ ovs_function_info compile_inspect(const void* d) {
 	return (ovs_function_info){ 3, 2 };
 }
 
-int32_t compile_apply compile_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
+int32_t compile_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
 	ovs_expr params = args[0];
 	ovs_expr build = args[1];
 	ovs_expr cont = args[2];
 
+	i->size = 2;
+
 	return 1234321;
 }
+
+void compile_free(const void* d) {}
 
 static ovs_function_type compile_function = {
 	u"compile",
