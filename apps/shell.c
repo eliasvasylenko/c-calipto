@@ -20,7 +20,8 @@
 #include "c-ohvu/data/bdtrie.h"
 #include "c-ohvu/data/sexpr.h"
 #include "c-ohvu/data/reader.h"
-#include "c-ohvu/runtime/interpreter.h"
+#include "c-ohvu/runtime/compiler.h"
+#include "c-ohvu/runtime/evaluator.h"
 #include "c-ohvu/runtime/builtins.h"
 
 static UConverter* char_conv;

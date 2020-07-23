@@ -45,16 +45,21 @@
 
 
 (compile-lambda
-  (lambda (with-param compile-statement)
-    (with-param 'a (lambda (with-param compile-statement)
-      (compile-statement (lambda (with-lambda with-var)
-        (with-lambda
-          (lambda (with-param compile-statement) (...))
-          (lambda (with-lambda with-var with-quote end-statement) (...))))))))
+  (lambda (with-params)
+    (with-params 'params/(a b c) (lambda (with-lambda with-var)
+      (with-lambda
+        (lambda (with-params) (...))
+        (lambda (with-lambda with-var with-quote end-statement) (...))))))
   (lambda (function)
-    (apply function bindings)))
+    (function a b c)))
 
 
+(compile-lambda (lambda (with-params compile-statement)
+  (param-list (lambda (params)
+    (param-append params 'a (lambda (params)
+      (param-append params 'b (lambda (params)
+        (with-params params (lambda (with-lambda with-variable)
+          (with-variable 'a (lambda (with-lambda with-variable with-quote end-statement)
 
 source
 

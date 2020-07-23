@@ -56,18 +56,10 @@ typedef struct ovru_lambda {
 	ovru_statement body;
 } ovru_lambda;
 
-typedef struct ovru_bound_lambda {
-	ovru_lambda* lambda;
-	ovs_expr* closure;
-} ovru_bound_lambda;
-
 ovru_result ovru_compile(
 		ovru_statement* s, 
 		ovs_context* c, const ovs_expr e,
 		const uint32_t param_count, const ovs_expr_ref** params);
-ovru_result ovru_eval(
-		const ovru_statement s,
-		ovs_context* c,
-		const ovs_expr* args);
+
 void ovru_free(ovru_statement s);
 

@@ -11,7 +11,7 @@
 #include "c-ohvu/data/bdtrie.h"
 #include "c-ohvu/data/sexpr.h"
 #include "c-ohvu/runtime/builtins.h"
-#include "c-ohvu/runtime/interpreter.h"
+#include "c-ohvu/runtime/compiler.h"
 
 ovs_expr no_represent(const ovs_function_data* d) {
 	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
