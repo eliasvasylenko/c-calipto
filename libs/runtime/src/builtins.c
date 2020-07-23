@@ -146,7 +146,6 @@ int32_t printer_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_dat
 		i->size = 2;
 		i->values[0] = ovs_alias(cont);
 		i->values[1] = ovs_alias(*data->next);
-
 	} else {
 
 	}

@@ -249,12 +249,17 @@ ovru_result compile_statement(ovru_statement* result, ovs_expr s, compile_contex
 	return success;
 }
 
-ovru_result ovru_compile(ovru_statement* result, ovs_context* c, const ovs_expr e, const uint32_t param_count, const ovs_expr_ref** params) {
-	compile_context context = {
+void compile(ovru_context* result, ovs_context* c, const uint32_t param_count, const ovs_expr_ref** params) {
+	*result = {
 		NULL,
 		c,
 		make_variable_bindings(param_count, params)
 	};
+}
+
+ovru_result ovru_compile(ovru_statement* result, ovs_context* c, const ovs_expr e, const uint32_t param_count, const ovs_expr_ref** params) {
+	compile_context context;
+	compile(&context, c, param_count, params);
 
 	ovru_result success = compile_statement(result, e, &context);
 
@@ -265,3 +270,37 @@ ovru_result ovru_compile(ovru_statement* result, ovs_context* c, const ovs_expr 
 
 	return success;
 }
+
+/*
+ * Compile Params
+ */
+
+typedef struct compile_data {
+	compile_context context;
+	s_expr cont;
+}
+
+s_expr compile_represent(ovs_context* c) {
+	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
+}
+
+ovs_function_info compile_inspect(const void* d) {
+	return (ovs_function_info){ 3, 2 };
+}
+
+int32_t compile_apply compile_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
+	ovs_expr params = args[0];
+	ovs_expr build = args[1];
+	ovs_expr cont = args[2];
+
+	return 1234321;
+}
+
+static ovs_function_type compile_function = {
+	u"compile",
+	compile_represent,
+	compile_inspect,
+	compile_apply,
+	compile_free
+};
+

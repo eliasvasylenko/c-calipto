@@ -53,6 +53,14 @@
   (lambda (function)
     (function a b c)))
 
+(compile-lambda 'params/(a b c)
+  (lambda (with-lambda with-var)
+    (with-lambda 'params/()
+      (lambda (with-lambda with-var) (...))
+      (lambda (with-lambda with-var with-quote end-statement) (...))))
+  (lambda (function)
+    (function a b c)))
+
 
 (compile-lambda (lambda (with-params compile-statement)
   (param-list (lambda (params)

@@ -73,7 +73,7 @@ ovs_expr represent_param(const void* p) {
 	return (ovs_expr){ OVS_SYMBOL, .p=*(ovs_expr_ref**)p };
 }
 
-ovs_expr represent_bound_lambda(const ovs_function_data* d) {
+ovs_expr bound_lambda_represent(const ovs_function_data* d) {
 	const ovru_bound_lambda* l = (ovru_bound_lambda*)(d + 1);
 
 	ovs_table* t = d->context->root_tables + OVS_DATA_LAMBDA;
@@ -92,7 +92,7 @@ ovs_expr represent_bound_lambda(const ovs_function_data* d) {
 	return r;
 }
 
-ovs_function_info inspect_bound_lambda(const void* d) {
+ovs_function_info bound_lambda_inspect(const void* d) {
 	const ovru_bound_lambda* l = d;
 
 	return (ovs_function_info){ l->lambda->param_count, l->lambda->body.term_count };
@@ -100,7 +100,7 @@ ovs_function_info inspect_bound_lambda(const void* d) {
 
 void eval_statement(ovs_context* c, ovs_instruction* result, ovru_statement s, const ovs_expr* args, const ovs_expr* closure);
 
-int32_t apply_bound_lambda(ovs_instruction* result, ovs_expr* args, const ovs_function_data* d) {
+int32_t bound_lambda_apply(ovs_instruction* result, ovs_expr* args, const ovs_function_data* d) {
 	const ovru_bound_lambda* l = (ovru_bound_lambda*)(d + 1);
 
 	eval_statement(d->context, result, l->lambda->body, args, l->closure);
@@ -108,7 +108,7 @@ int32_t apply_bound_lambda(ovs_instruction* result, ovs_expr* args, const ovs_fu
 	return OVRU_SUCCESS;
 }
 
-void free_bound_lambda(const void* d) {
+void bound_lambda_free(const void* d) {
 	const ovru_bound_lambda* l = d;
 	for (int i = 0; i < l->lambda->capture_count; i++) {
 		ovs_dealias(l->closure[i]);
@@ -119,10 +119,10 @@ void free_bound_lambda(const void* d) {
 
 static ovs_function_type lambda_function = {
 	u"lambda",
-	represent_bound_lambda,
-	inspect_bound_lambda,
-	apply_bound_lambda,
-	free_bound_lambda
+	bound_lambda_represent,
+	bound_lambda_inspect,
+	bound_lambda_apply,
+	bound_lambda_free
 };
 
 void eval_expression(ovs_context* context, ovs_expr* result, ovru_term e, const ovs_expr* args, const ovs_expr* closure) {
