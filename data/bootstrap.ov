@@ -31,46 +31,6 @@
 
 
 
-; PARAMETERS
-
-; fail
-(data/lambda () (system/err "Error!" system/exit (data/lambda (err) (system/exit))))
-
-; succeed
-'system/exit
-
-; reduce
-( data/lambda (reduce value tail) (data/des tail
-     (data/lambda () (cont value tail))
-      (data/lambda (head tail) (f value head (data/lambda (value) (reduce reduce value tail))))))))
-
-  dup apply)
-
-; FIRST CALL
-
-glob glob
-
-'system/out
-swap
-
-'system/args
-swap
-
-unglob swap dup
-
-(data/lambda (out arg next)
-  (out arg fail (data/lambda (out)
-    (out " " fail (data/lambda (out) (next out))))))
-glob swap 
-
-(data/lambda (out terminal)
-  (out "!!
-" fail (data/lambda (out) (succeed))))))
-swap
-
-apply
-
-
 
 
 
