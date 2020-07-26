@@ -272,13 +272,17 @@ ovru_result ovru_compile(ovru_statement* result, ovs_context* c, const ovs_expr 
 }
 
 /*
- * With Variable
+ * API Surface
  */
 
-typedef struct with_variable_data {
-	compile_context context;
+typedef struct with_something_data {
+	compile_context* context;
 	ovs_expr_ref* parent;
 } with_variable_data;
+
+/*
+ * With Variable
+ */
 
 ovs_expr with_variable_represent(const ovs_function_data* d) {
 	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
@@ -293,7 +297,7 @@ int32_t with_variable_apply(ovs_instruction* i, ovs_expr* args, const ovs_functi
 	ovs_expr build = args[1];
 	ovs_expr cont = args[2];
 
-	return 1234321;
+	return 14321;
 }
 
 void with_variable_free(const void* d) {
@@ -332,7 +336,7 @@ int32_t with_quote_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_
 	ovs_expr build = args[1];
 	ovs_expr cont = args[2];
 
-	return 1234321;
+	return 12333;
 }
 
 void with_quote_free(const void* d) {
@@ -371,7 +375,7 @@ int32_t with_lambda_apply(ovs_instruction* i, ovs_expr* args, const ovs_function
 	ovs_expr build = args[1];
 	ovs_expr cont = args[2];
 
-	return 1234321;
+	return 9999;
 }
 
 void with_lambda_free(const void* d) {
@@ -392,11 +396,6 @@ static ovs_function_type with_lambda_function = {
  * Compile
  */
 
-typedef struct compile_data {
-	compile_context context;
-	ovs_expr cont;
-} compile_data;
-
 ovs_expr compile_represent(const ovs_function_data* d) {
 	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
 }
@@ -410,9 +409,18 @@ int32_t compile_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_dat
 	ovs_expr build = args[1];
 	ovs_expr cont = args[2];
 
-	i->size = 2;
+	with_something_data s = {
+		malloc(sizeof(compile_context)),
+		NULL
+	};
+	compile(s.context, d->context, param_count, params);
 
-	return 1234321;
+	i->size = 3;
+	i->values[0] = ovs_alias(build);
+	i->values[1] = ovs_function(d->context, &with_lambda_function, sizeof(with_something_data), s);
+	i->values[2] = ovs_function(d->context, &with_variable_function, sizeof(with_something_data), s);
+
+	return OVRU_SUCCESS;
 }
 
 void compile_free(const void* d) {}

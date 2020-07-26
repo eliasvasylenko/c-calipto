@@ -27,6 +27,55 @@
 
 
 
+
+
+
+
+; PARAMETERS
+
+; fail
+(data/lambda () (system/err "Error!" system/exit (data/lambda (err) (system/exit))))
+
+; succeed
+'system/exit
+
+; reduce
+( data/lambda (reduce value tail) (data/des tail
+     (data/lambda () (cont value tail))
+      (data/lambda (head tail) (f value head (data/lambda (value) (reduce reduce value tail))))))))
+
+  dup apply)
+
+; FIRST CALL
+
+glob glob
+
+'system/out
+swap
+
+'system/args
+swap
+
+unglob swap dup
+
+(data/lambda (out arg next)
+  (out arg fail (data/lambda (out)
+    (out " " fail (data/lambda (out) (next out))))))
+glob swap 
+
+(data/lambda (out terminal)
+  (out "!!
+" fail (data/lambda (out) (succeed))))))
+swap
+
+apply
+
+
+
+
+
+
+
 ; make it a goal that so long as something will compile (i.e. macro expand) it will run.
 ; even builtin functions can be guarded by macros to make sure lambdas of the correct
 ; arity are passed as continuations...
@@ -44,15 +93,6 @@
                            ; it instantiates the complete source tree?
 
 
-(compile-lambda
-  (lambda (with-params)
-    (with-params 'params/(a b c) (lambda (with-lambda with-var)
-      (with-lambda
-        (lambda (with-params) (...))
-        (lambda (with-lambda with-var with-quote end-statement) (...))))))
-  (lambda (function)
-    (function a b c)))
-
 (compile-lambda 'params/(a b c)
   (lambda (with-lambda with-var)
     (with-lambda 'params/()
@@ -62,12 +102,18 @@
     (function a b c)))
 
 
-(compile-lambda (lambda (with-params compile-statement)
-  (param-list (lambda (params)
-    (param-append params 'a (lambda (params)
-      (param-append params 'b (lambda (params)
-        (with-params params (lambda (with-lambda with-variable)
-          (with-variable 'a (lambda (with-lambda with-variable with-quote end-statement)
+(compile-lambda
+  (lambda (with-param end-params)
+    (with-param 'a (lambda (with-param end-params)
+      (with-param 'b (lambda (with-param end-params)
+        (with-param 'c (lambda (with-param end-params)
+          (end-params))))))))
+  (lambda (with-lambda with-var)
+    (with-lambda 'params/()
+      (lambda (with-lambda with-var) (...))
+      (lambda (with-lambda with-var with-quote end-statement) (...))))
+  (lambda (function)
+    (function a b c)))
 
 source
 
