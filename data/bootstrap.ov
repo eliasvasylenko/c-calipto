@@ -69,7 +69,8 @@
         (with-param 'c (lambda (with-param end-params)
           (end-params))))))))
   (lambda (with-lambda with-var)
-    (with-lambda 'params/()
+    (with-lambda
+      (lambda (with-param end-params) (end-params))
       (lambda (with-lambda with-var) (...))
       (lambda (with-lambda with-var with-quote end-statement) (...))))
   (lambda (function)

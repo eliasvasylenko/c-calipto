@@ -249,7 +249,7 @@ ovru_result compile_statement(ovru_statement* result, ovs_expr s, compile_contex
 	return success;
 }
 
-void compile(compile_context* result, ovs_context* c, const uint32_t param_count, const ovs_expr_ref** params) {
+void compile_parameters(compile_context* result, ovs_context* c, const uint32_t param_count, const ovs_expr_ref** params) {
 	*result = (compile_context){
 		NULL,
 		c,
@@ -259,7 +259,7 @@ void compile(compile_context* result, ovs_context* c, const uint32_t param_count
 
 ovru_result ovru_compile(ovru_statement* result, ovs_context* c, const ovs_expr e, const uint32_t param_count, const ovs_expr_ref** params) {
 	compile_context context;
-	compile(&context, c, param_count, params);
+	compile_parameters(&context, c, param_count, params);
 
 	ovru_result success = compile_statement(result, e, &context);
 
@@ -281,8 +281,20 @@ ovru_result ovru_compile(ovru_statement* result, ovs_context* c, const ovs_expr 
 
 typedef struct statement_data {
 	compile_context* context;
+	ovru_statement statement;
 	ovs_expr_ref* parent;
 } statement_data;
+
+void statement_with_term(statement_data* s, statement_data* w, ovru_term t) {
+	s->context = w->context;
+	s->statement.term_count = w->statement.term_count + 1;
+	s->statement.terms = malloc(sizeof(ovru_term) * s->statement.term_count);
+	s->parent = w->parent;
+	for (int i = 0; i < w->statement.term_count; i++) {
+		s->statement.terms[i] = w->statement.terms[i];
+	}
+	s->statement.terms[w->statement.term_count] = t;
+}
 
 ovs_expr statement_represent(const ovs_function_data* d) {
 	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
@@ -293,54 +305,6 @@ void statement_free(const void* d) {
 
 	ovs_free(OVS_FUNCTION, data->parent);
 }
-
-/*
- * With Variable
- */
-
-ovs_function_info with_variable_inspect(const void* d) {
-	return (ovs_function_info){ 2, 2 };
-}
-
-int32_t with_variable_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
-	ovs_expr params = args[0];
-	ovs_expr build = args[1];
-	ovs_expr cont = args[2];
-
-	return 14321;
-}
-
-static ovs_function_type with_variable_function = {
-	u"with-variable",
-	statement_represent,
-	with_variable_inspect,
-	with_variable_apply,
-	statement_free
-};
-
-/*
- * With Quote
- */
-
-ovs_function_info with_quote_inspect(const void* d) {
-	return (ovs_function_info){ 3, 2 };
-}
-
-int32_t with_quote_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
-	ovs_expr params = args[0];
-	ovs_expr build = args[1];
-	ovs_expr cont = args[2];
-
-	return 12333;
-}
-
-static ovs_function_type with_quote_function = {
-	u"with-quote",
-	statement_represent,
-	with_quote_inspect,
-	with_quote_apply,
-	statement_free
-};
 
 /*
  * With Lambda
@@ -367,12 +331,85 @@ static ovs_function_type with_lambda_function = {
 };
 
 /*
+ * With Variable
+ */
+
+ovs_function_info with_variable_inspect(const void* d) {
+	return (ovs_function_info){ 2, 2 };
+}
+
+int32_t with_variable_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
+	ovs_expr variable = args[0];
+	ovs_expr cont = args[2];
+
+	statement_data* data = (statement_data*)(d + 1);
+
+	ovru_variable v;
+	ovru_result r = find_variable(&v, data->context, variable.p);
+
+	if (r == OVRU_SUCCESS) {
+		ovru_term t = { .type=OVRU_VARIABLE, .variable=v };
+
+		statement_data s;
+		statement_with_term(&s, data, t);
+
+		i->size = 3;
+		i->values[0] = ovs_alias(cont);
+		i->values[1] = ovs_function(d->context, &with_lambda_function, sizeof(statement_data), &s);
+		i->values[2] = ovs_function(d->context, &with_variable_function, sizeof(statement_data), &s);
+	} else {
+		// TODO fail
+	}
+	return r;
+}
+
+static ovs_function_type with_variable_function = {
+	u"with-variable",
+	statement_represent,
+	with_variable_inspect,
+	with_variable_apply,
+	statement_free
+};
+
+/*
+ * With Quote
+ */
+
+ovs_function_info with_quote_inspect(const void* d) {
+	return (ovs_function_info){ 2, 3 };
+}
+
+int32_t with_quote_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
+	ovs_expr data = args[0];
+	ovs_expr cont = args[1];
+
+	ovru_term t = { .quote=data };
+
+	statement_data s;
+	statement_with_term(&s, (statement_data*)(d + 1), t);
+
+	i->size = 3;
+	i->values[0] = ovs_alias(cont);
+	i->values[1] = ovs_function(d->context, &with_lambda_function, sizeof(statement_data), &s);
+	i->values[2] = ovs_function(d->context, &with_variable_function, sizeof(statement_data), &s);
+
+	return OVRU_SUCCESS;
+}
+
+static ovs_function_type with_quote_function = {
+	u"with-quote",
+	statement_represent,
+	with_quote_inspect,
+	with_quote_apply,
+	statement_free
+};
+
+/*
  * End Parameters
  */
 
 typedef struct parameters_data {
-	uint8_t param_count;
-	ovs_expr* params;
+	ovs_expr params;
 	ovs_expr_ref* parent;
 } parameters_data;
 
@@ -387,7 +424,7 @@ void parameters_free(const void* d) {
 }
 
 ovs_function_info end_parameters_inspect(const void* d) {
-	return (ovs_function_info){ 1, 2 };
+	return (ovs_function_info){ 1, 3 };
 }
 
 int32_t end_parameters_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d);
@@ -405,7 +442,7 @@ static ovs_function_type end_parameters_function = {
  */
 
 ovs_function_info with_parameter_inspect(const void* d) {
-	return (ovs_function_info){ 3, 2 };
+	return (ovs_function_info){ 2, 3 };
 }
 
 int32_t with_parameter_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d);
@@ -418,25 +455,29 @@ static ovs_function_type with_parameter_function = {
 	parameters_free
 };
 
+void* ref_of(ovs_expr e) {
+	return (void*)e.p;
+}
+
 int32_t end_parameters_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
-	ovs_expr param = args[0];
-	ovs_expr cont = args[1];
+	ovs_expr cont = args[0];
 
 	parameters_data* w = (parameters_data*)(d + 1);
 
-	parameters_data w2;
-	w2.param_count = w->param_count + 1;
-	w2.params = malloc(sizeof(ovs_expr) * w2.param_count);
-	w2.parent = w->parent;
-	for (int i = 0; i < w->param_count; i++) {
-		w2.params[i] = ovs_alias(w->params[i]);
-	}
-	w2.params[w->param_count] = ovs_alias(param);
+	statement_data s;
+	s.context = malloc(sizeof(compile_context));
+	s.statement.term_count = 0;
+	s.statement.terms = NULL;
+	s.parent = w->parent;
+
+	const ovs_expr_ref** param_list;
+	int32_t param_count = ovs_delist_of(&d->context->root_tables[OVS_UNQUALIFIED], w->params, (void***)&param_list, ref_of);
+	compile_parameters(s.context, d->context, param_count, param_list);
 
 	i->size = 3;
 	i->values[0] = ovs_alias(cont);
-	i->values[1] = ovs_function(d->context, &with_parameter_function, sizeof(parameters_data), &w2);
-	i->values[2] = ovs_function(d->context, &end_parameters_function, sizeof(parameters_data), &w2);
+	i->values[1] = ovs_function(d->context, &with_lambda_function, sizeof(statement_data), &s);
+	i->values[2] = ovs_function(d->context, &with_variable_function, sizeof(statement_data), &s);
 
 	return OVRU_SUCCESS;
 }
@@ -448,13 +489,8 @@ int32_t with_parameter_apply(ovs_instruction* i, ovs_expr* args, const ovs_funct
 	parameters_data* w = (parameters_data*)(d + 1);
 
 	parameters_data w2;
-	w2.param_count = w->param_count + 1;
-	w2.params = malloc(sizeof(ovs_expr) * w2.param_count);
+	w2.params = ovs_cons(&d->context->root_tables[OVS_UNQUALIFIED], param, w->params);
 	w2.parent = w->parent;
-	for (int i = 0; i < w->param_count; i++) {
-		w2.params[i] = ovs_alias(w->params[i]);
-	}
-	w2.params[w->param_count] = ovs_alias(param);
 
 	i->size = 3;
 	i->values[0] = ovs_alias(cont);
@@ -473,11 +509,7 @@ ovs_expr compile_represent(const ovs_function_data* d) {
 }
 
 ovs_function_info compile_inspect(const void* d) {
-	return (ovs_function_info){ 3, 2 };
-}
-
-void* ref_of(ovs_expr e) {
-	return (void*)e.p;
+	return (ovs_function_info){ 3, 3 };
 }
 
 int32_t compile_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
@@ -485,18 +517,14 @@ int32_t compile_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_dat
 	ovs_expr build = args[1];
 	ovs_expr cont = args[2];
 
-	statement_data s = {
-		malloc(sizeof(compile_context)),
-		NULL
-	};
-	const ovs_expr_ref** param_list;
-	int32_t param_count = ovs_delist_of(&d->context->root_tables[OVS_UNQUALIFIED], params, (void***)&param_list, ref_of);
-	compile(s.context, d->context, param_count, param_list);
+	parameters_data w;
+	w.params = ovs_root_symbol(OVS_DATA_NIL)->expr;
+	w.parent = NULL; // TODO
 
 	i->size = 3;
 	i->values[0] = ovs_alias(params);
-	i->values[1] = ovs_function(d->context, &with_lambda_function, sizeof(statement_data), &s);
-	i->values[2] = ovs_function(d->context, &with_variable_function, sizeof(statement_data), &s);
+	i->values[1] = ovs_function(d->context, &with_parameter_function, sizeof(parameters_data), &w);
+	i->values[2] = ovs_function(d->context, &end_parameters_function, sizeof(parameters_data), &w);
 
 	return OVRU_SUCCESS;
 }
