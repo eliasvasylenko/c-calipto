@@ -386,6 +386,20 @@ void parameters_free(const void* d) {
 	ovs_free(OVS_FUNCTION, data->parent);
 }
 
+ovs_function_info end_parameters_inspect(const void* d) {
+	return (ovs_function_info){ 1, 2 };
+}
+
+int32_t end_parameters_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d);
+
+static ovs_function_type end_parameters_function = {
+	u"end-parameters",
+	parameters_represent,
+	end_parameters_inspect,
+	end_parameters_apply,
+	parameters_free
+};
+
 /*
  * With Parameter
  */
@@ -403,6 +417,29 @@ static ovs_function_type with_parameter_function = {
 	with_parameter_apply,
 	parameters_free
 };
+
+int32_t end_parameters_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
+	ovs_expr param = args[0];
+	ovs_expr cont = args[1];
+
+	parameters_data* w = (parameters_data*)(d + 1);
+
+	parameters_data w2;
+	w2.param_count = w->param_count + 1;
+	w2.params = malloc(sizeof(ovs_expr) * w2.param_count);
+	w2.parent = w->parent;
+	for (int i = 0; i < w->param_count; i++) {
+		w2.params[i] = ovs_alias(w->params[i]);
+	}
+	w2.params[w->param_count] = ovs_alias(param);
+
+	i->size = 3;
+	i->values[0] = ovs_alias(cont);
+	i->values[1] = ovs_function(d->context, &with_parameter_function, sizeof(parameters_data), &w2);
+	i->values[2] = ovs_function(d->context, &end_parameters_function, sizeof(parameters_data), &w2);
+
+	return OVRU_SUCCESS;
+}
 
 int32_t with_parameter_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
 	ovs_expr param = args[0];
@@ -422,9 +459,9 @@ int32_t with_parameter_apply(ovs_instruction* i, ovs_expr* args, const ovs_funct
 	i->size = 3;
 	i->values[0] = ovs_alias(cont);
 	i->values[1] = ovs_function(d->context, &with_parameter_function, sizeof(parameters_data), &w2);
-	i->values[1] = ovs_function(d->context, &end_parameters_function, sizeof(parameters_data), &w2);
+	i->values[2] = ovs_function(d->context, &end_parameters_function, sizeof(parameters_data), &w2);
 
-	return 9999;
+	return OVRU_SUCCESS;
 }
 
 /*
@@ -439,6 +476,10 @@ ovs_function_info compile_inspect(const void* d) {
 	return (ovs_function_info){ 3, 2 };
 }
 
+void* ref_of(ovs_expr e) {
+	return (void*)e.p;
+}
+
 int32_t compile_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
 	ovs_expr params = args[0];
 	ovs_expr build = args[1];
@@ -448,8 +489,8 @@ int32_t compile_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_dat
 		malloc(sizeof(compile_context)),
 		NULL
 	};
-	ovs_expr* param_list;
-	int32_t param_count = ovs_delist(&param_list, params);
+	const ovs_expr_ref** param_list;
+	int32_t param_count = ovs_delist_of(&d->context->root_tables[OVS_UNQUALIFIED], params, (void***)&param_list, ref_of);
 	compile(s.context, d->context, param_count, param_list);
 
 	i->size = 3;
@@ -470,7 +511,7 @@ static ovs_function_type compile_function = {
 	compile_free
 };
 
-ovs_function ovru_compiler(ovs_context* c) {
+ovs_expr ovru_compiler(ovs_context* c) {
 	return ovs_function(c, &compile_function, 0, NULL);
 }
 
