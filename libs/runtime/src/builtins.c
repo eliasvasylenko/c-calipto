@@ -99,8 +99,11 @@ static ovs_function_type scanner_function = {
 };
 
 ovs_expr ovru_open_scanner(ovs_context* c, UFILE* f, UChar* name) {
-	scanner_data data = { f, ovs_string(u_strlen(name), name), NULL, NULL };
-	return ovs_function(c, &scanner_function, sizeof(scanner_data), &data);
+	scanner_data* data;
+	ovs_expr e = ovs_function(c, &scanner_function, sizeof(scanner_data), (void**)&data);
+	data->file = f;
+	data->file_name = ovs_string(u_strlen(name), name);
+	return e;
 }
 
 /*
@@ -136,9 +139,11 @@ int32_t printer_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_dat
 	} else if (data->next == NULL) {
 		u_fprintf(data->file, "%S", &string.p->string);
 
-		printer_data next_data = { data->file, data->file_name, NULL, NULL };
+		printer_data* next_data;
 		data->next = malloc(sizeof(ovs_expr));
-		*data->next = ovs_function(d->context, d->type, sizeof(printer_data), &next_data);
+		*data->next = ovs_function(d->context, d->type, sizeof(printer_data), (void**)&next_data);
+		next_data->file = data->file;
+		next_data->file_name = data->file_name;
 
 		data->text = malloc(sizeof(ovs_expr));
 		*data->text = ovs_alias(string);
@@ -182,8 +187,11 @@ static ovs_function_type printer_function = {
 };
 
 ovs_expr ovru_open_printer(ovs_context* c, UFILE* f, UChar* name) {
-	printer_data data = { f, ovs_string(u_strlen(name), name), NULL, NULL };
-	return ovs_function(c, &printer_function, sizeof(printer_data), &data);
+	printer_data* data;
+	ovs_expr e = ovs_function(c, &printer_function, sizeof(printer_data), (void**)&data);
+	data->file = f;
+	data->file_name = ovs_string(u_strlen(name), name);
+	return e;
 }
 
 /*
@@ -231,7 +239,10 @@ ovs_expr ovru_cons(ovs_context* c, ovs_table* t) {
 	if (t->qualifier != NULL) {
 		ovs_ref(t->qualifier);
 	}
-	return ovs_function(c, &cons_function, sizeof(ovs_table*), &t);
+	ovs_table** data;
+	ovs_expr e = ovs_function(c, &cons_function, sizeof(ovs_table*), (void**)&data);
+	*data = t;
+	return e;
 }
 
 /*
@@ -286,7 +297,10 @@ ovs_expr ovru_des(ovs_context* c, ovs_table* t) {
 	if (t->qualifier != NULL) {
 		ovs_ref(t->qualifier);
 	}
-	return ovs_function(c, &des_function, sizeof(ovs_table*), t);
+	ovs_table** data;
+	ovs_expr e = ovs_function(c, &des_function, sizeof(ovs_table*), (void**)&data);
+	*data = t;
+	return e;
 }
 
 /*

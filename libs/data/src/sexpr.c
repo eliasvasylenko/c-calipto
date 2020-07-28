@@ -26,12 +26,14 @@ ovs_expr_ref* ref(uint32_t payload_size, uint32_t refs) {
 	return r;
 }
 
-ovs_expr ovs_function(ovs_context* c, ovs_function_type* t, uint32_t data_size, void* data) {
-	ovs_expr_ref* r = ref(sizeof(ovs_function_data) + data_size, 1);
+ovs_expr ovs_function(ovs_context* c, ovs_function_type* t, uint32_t extra_data_size, void** extra_data) {
+	ovs_expr_ref* r = ref(sizeof(ovs_function_data) + extra_data_size, 1);
 	r->function.type = t;
 	r->function.context = c;
-	memcpy(&r->function + 1, data, data_size);
 
+	if (extra_data != NULL) {
+		*extra_data = &r->function + 1;
+	}
 	return (ovs_expr){ OVS_FUNCTION, .p=r };
 }
 
