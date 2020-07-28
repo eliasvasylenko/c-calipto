@@ -121,7 +121,8 @@ ovs_expr ovs_cons(ovs_table* t, ovs_expr car, ovs_expr cdr);
 ovs_expr ovs_character(UChar32 c);
 ovs_expr ovs_string(uint32_t l, UChar* s);
 ovs_expr ovs_cstring(UConverter* c, char* s);
-ovs_expr ovs_function(ovs_context* c, ovs_function_type* t, uint32_t data_size, void* data);
+ovs_expr ovs_function(ovs_context* c, ovs_function_type* t, uint32_t extra_data_size);
+void* ovs_function_extra_data(ovs_function_data* d);
 
 ovs_expr ovs_list(ovs_table* t, int32_t count, ovs_expr* e);
 ovs_expr ovs_list_of(ovs_table* t, int32_t count, void** e, ovs_expr (*map)(const void* elem));
