@@ -71,9 +71,9 @@ struct ovs_function_data;
 typedef struct ovs_function_type {
 	UChar* name;
 	ovs_expr (*represent)(const struct ovs_function_data* d);
-	ovs_function_info (*inspect)(const void* d);
+	ovs_function_info (*inspect)(const struct ovs_function_data* d);
 	int32_t (*apply)(ovs_instruction* result,  ovs_expr* args, const struct ovs_function_data* d);
-	void (*free) (const void* data);
+	void (*free) (const void* extra_data);
 } ovs_function_type;
 
 typedef struct ovs_function_data {
@@ -122,6 +122,7 @@ ovs_expr ovs_character(UChar32 c);
 ovs_expr ovs_string(uint32_t l, UChar* s);
 ovs_expr ovs_cstring(UConverter* c, char* s);
 ovs_expr ovs_function(ovs_context* c, ovs_function_type* t, uint32_t extra_data_size, void** extra_data);
+void* ovs_function_extra_data(const ovs_function_data* d);
 
 ovs_expr ovs_list(ovs_table* t, int32_t count, ovs_expr* e);
 ovs_expr ovs_list_of(ovs_table* t, int32_t count, void** e, ovs_expr (*map)(const void* elem));

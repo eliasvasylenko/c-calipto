@@ -28,7 +28,7 @@ int32_t exit_apply(ovs_instruction* r, ovs_expr* args, const ovs_function_data* 
 	return OVRU_SUCCESS;
 }
 
-ovs_function_info exit_inspect(const void* d) {
+ovs_function_info exit_inspect(const ovs_function_data* d) {
 	return (ovs_function_info){ 0, 0 };
 }
 
@@ -59,7 +59,7 @@ ovs_expr scanner_represent(const ovs_function_data* d) {
 	assert(false);
 }
 
-ovs_function_info scanner_inspect(const void* d) {
+ovs_function_info scanner_inspect(const ovs_function_data* d) {
 	return (ovs_function_info){ 2, 2 };
 }
 
@@ -121,7 +121,7 @@ ovs_expr printer_represent(const ovs_function_data* d) {
 	assert(false);
 }
 
-ovs_function_info printer_inspect(const void* d) {
+ovs_function_info printer_inspect(const ovs_function_data* d) {
 	return (ovs_function_info){ 3, 1 };
 }
 
@@ -130,7 +130,7 @@ int32_t printer_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_dat
 	ovs_expr fail = args[1];
 	ovs_expr cont = args[2];
 	
-	printer_data* data = (printer_data*)(d + 1);
+	printer_data* data = ovs_function_extra_data(d);
 
 	if (string.type != OVS_STRING) {
 		i->size = 1;
@@ -202,12 +202,12 @@ ovs_expr cons_represent(const ovs_function_data* d) {
 	assert(false);
 }
 
-ovs_function_info cons_inspect(const void* d) {
+ovs_function_info cons_inspect(const ovs_function_data* d) {
 	return (ovs_function_info){ 3, 2 };
 }
 
 int32_t cons_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
-	ovs_table* t = *(ovs_table**)(d + 1);
+	ovs_table* t = ovs_function_extra_data(d);
 
 	ovs_expr car = args[0];
 	ovs_expr cdr = args[1];
@@ -253,12 +253,12 @@ ovs_expr des_represent(const ovs_function_data* d) {
 	assert(false);
 }
 
-ovs_function_info des_inspect(const void* d) {
+ovs_function_info des_inspect(const ovs_function_data* d) {
 	return (ovs_function_info){ 3, 3 };
 }
 
 int32_t des_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
-	ovs_table* t = *(ovs_table**)(d + 1);
+	ovs_table* t = ovs_function_extra_data(d);
 
 	ovs_expr e = args[0];
 	ovs_expr fail = args[1];
@@ -307,7 +307,7 @@ ovs_expr ovru_des(ovs_context* c, ovs_table* t) {
  * eq
  */
 
-ovs_function_info eq_inspect(const void* d) {
+ovs_function_info eq_inspect(const ovs_function_data* d) {
 	return (ovs_function_info){ 4, 1 };
 }
 

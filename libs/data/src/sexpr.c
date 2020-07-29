@@ -37,6 +37,10 @@ ovs_expr ovs_function(ovs_context* c, ovs_function_type* t, uint32_t extra_data_
 	return (ovs_expr){ OVS_FUNCTION, .p=r };
 }
 
+void* ovs_function_extra_data(const ovs_function_data* d) {
+	return (void*)(d + 1);
+}
+
 static ovs_root_symbol_data root_symbols[] = {
 	{ -1, u"data", OVS_UNQUALIFIED, { ATOMIC_VAR_INIT(0), .symbol={ NULL, .offset=OVS_DATA } } },
 	{ -1, u"nil", OVS_DATA, { ATOMIC_VAR_INIT(0), .symbol={ NULL, .offset=OVS_DATA_NIL } } },
