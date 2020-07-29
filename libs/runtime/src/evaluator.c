@@ -92,8 +92,8 @@ ovs_expr bound_lambda_represent(const ovs_function_data* d) {
 	return r;
 }
 
-ovs_function_info bound_lambda_inspect(const void* d) {
-	const ovru_bound_lambda* l = d;
+ovs_function_info bound_lambda_inspect(const ovs_function_data* d) {
+	const ovru_bound_lambda* l = ovs_function_extra_data(d);
 
 	return (ovs_function_info){ l->lambda->param_count, l->lambda->body.term_count };
 }
@@ -101,7 +101,7 @@ ovs_function_info bound_lambda_inspect(const void* d) {
 void eval_statement(ovs_context* c, ovs_instruction* result, ovru_statement s, const ovs_expr* args, const ovs_expr* closure);
 
 int32_t bound_lambda_apply(ovs_instruction* result, ovs_expr* args, const ovs_function_data* d) {
-	const ovru_bound_lambda* l = (ovru_bound_lambda*)(d + 1);
+	const ovru_bound_lambda* l = ovs_function_extra_data(d);
 
 	eval_statement(d->context, result, l->lambda->body, args + 1, l->closure);
 
@@ -145,7 +145,6 @@ void eval_expression(ovs_context* context, ovs_expr* result, ovru_term e, const 
 		case OVRU_LAMBDA:
 			;
 			ovs_expr* c = malloc(sizeof(ovs_expr) * e.lambda->capture_count);
-			ovru_bound_lambda l = { ref_lambda(e.lambda), c };
 
 			for (int i = 0; i < e.lambda->capture_count; i++) {
 				ovru_variable capture = e.lambda->captures[i];
@@ -163,7 +162,9 @@ void eval_expression(ovs_context* context, ovs_expr* result, ovru_term e, const 
 						assert(false);
 				}
 			}
-			*result = ovs_function(context, &lambda_function, sizeof(ovru_bound_lambda), &l);
+			ovru_bound_lambda* l;
+			*result = ovs_function(context, &lambda_function, sizeof(ovru_bound_lambda), (void**)&l);
+			*l = (ovru_bound_lambda){ ref_lambda(e.lambda), c };
 			break;
 
 		default:

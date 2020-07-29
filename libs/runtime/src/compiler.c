@@ -241,11 +241,11 @@ ovs_expr parameters_function(parameters_data* d, ovs_context* c, ovs_function_ty
 	return e;
 }
 
-void statement_with(ovs_instruction* i, statement_data* e, ovs_expr cont, ovru_term t) {
+void statement_with(ovs_instruction* i, ovs_expr r, statement_data* e, ovs_expr cont, ovru_term t) {
 	statement_data* d = malloc(sizeof(statement_data));
 	d->counter = ATOMIC_VAR_INIT(4);
 	d->context = e->context;
-	d->previous_term = ; // TODO args[0] 
+	d->previous_term = ovs_ref(r.p);
 	d->term = t;
 	d->cont = e->cont;
 
@@ -291,6 +291,7 @@ int32_t statement_with_lambda_apply(ovs_instruction* i, ovs_expr* args, const ov
 int32_t statement_with_variable_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* f) {
 	statement_data* e = ovs_function_extra_data(f);
 
+	ovs_expr receiver = args[0];
 	ovs_expr variable = args[1];
 	ovs_expr cont = args[2];
 
@@ -299,7 +300,7 @@ int32_t statement_with_variable_apply(ovs_instruction* i, ovs_expr* args, const 
 	ovru_result r = find_variable(&t.variable, e->context, variable.p);
 
 	if (r == OVRU_SUCCESS) {
-		statement_with(i, e, cont, t);
+		statement_with(i, receiver, e, cont, t);
 	}
 	return r;
 }
@@ -307,12 +308,13 @@ int32_t statement_with_variable_apply(ovs_instruction* i, ovs_expr* args, const 
 int32_t statement_with_quote_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* f) {
 	statement_data* e = ovs_function_extra_data(f);
 
+	ovs_expr receiver = args[0];
 	ovs_expr data = args[1];
 	ovs_expr cont = args[2];
 
 	ovru_term t = { .quote=data };
 
-	statement_with(i, e, cont, t);
+	statement_with(i, receiver, e, cont, t);
 	return OVRU_SUCCESS;
 }
 
@@ -345,17 +347,15 @@ int32_t parameters_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_funct
 	statement_data* d = malloc(sizeof(statement_data));
 	d->counter = ATOMIC_VAR_INIT(2);
 	d->context = malloc(sizeof(compile_context));
-	d->statement.term_count = 0;
-	d->statement.terms = NULL;
+	d->previous_term = NULL;
 	d->cont = e->cont;
 
 	const ovs_expr_ref** param_list;
 	int32_t param_count = ovs_delist_of(&f->context->root_tables[OVS_UNQUALIFIED], e->params, (void***)&param_list, get_ref);
-	d->context = (compile_context){
-		e->context,
-		f->context,
-		make_variable_bindings(param_count, param_list)
-	};
+	d->context = malloc(sizeof(compile_context));
+	d->context->parent = e->context;
+	d->context->ovs_context = f->context;
+	d->context->bindings = make_variable_bindings(param_count, param_list);
 
 	i->size = 3;
 	i->values[0] = ovs_alias(cont);
