@@ -53,8 +53,9 @@ typedef struct compile_context {
 typedef struct statement_data {
 	_Atomic(int32_t) counter;
 	compile_context* context;
-	ovru_statement statement;
-	const ovs_expr_ref* parent;
+	const ovs_expr_ref* previous_term;
+	ovru_term term;
+	const ovs_expr_ref* cont;
 } statement_data;
 
 ovs_expr statement_represent(const ovs_function_data* d) {
@@ -65,7 +66,7 @@ void statement_free(const void* d) {
 	statement_data* data = *(statement_data**)d;
 
 	if (atomic_fetch_add(&data->counter, -1) == 0) {
-		ovs_free(OVS_FUNCTION, data->parent);
+		ovs_free(OVS_FUNCTION, data->cont);
 		free(data);
 	}
 }
@@ -132,6 +133,7 @@ ovs_function_info statement_inspect(const ovs_function_data* d) {
 typedef struct parameters_data {
 	_Atomic(int32_t) counter;
 	ovs_expr params;
+	compile_context* context;
 	const ovs_expr_ref* statement_cont;
 	const ovs_expr_ref* cont;
 } parameters_data;
@@ -144,7 +146,8 @@ void parameters_free(const void* d) {
 	parameters_data* data = *(parameters_data**)d;
 
 	if (atomic_fetch_add(&data->counter, -1) == 0) {
-		ovs_free(OVS_FUNCTION, data->parent);
+		ovs_free(OVS_FUNCTION, data->statement_cont);
+		ovs_free(OVS_FUNCTION, data->cont);
 		free(data);
 	}
 }

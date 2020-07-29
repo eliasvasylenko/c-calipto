@@ -64,8 +64,8 @@ ovs_function_info scanner_inspect(const ovs_function_data* d) {
 }
 
 int32_t scanner_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
-	ovs_expr fail = args[0];
-	ovs_expr cont = args[1];
+	ovs_expr fail = args[1];
+	ovs_expr cont = args[2];
 
 	i->size = 1;
 	i->values[0] = ovs_alias(fail);
@@ -126,9 +126,9 @@ ovs_function_info printer_inspect(const ovs_function_data* d) {
 }
 
 int32_t printer_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
-	ovs_expr string = args[0];
-	ovs_expr fail = args[1];
-	ovs_expr cont = args[2];
+	ovs_expr string = args[1];
+	ovs_expr fail = args[2];
+	ovs_expr cont = args[3];
 	
 	printer_data* data = ovs_function_extra_data(d);
 
@@ -209,9 +209,9 @@ ovs_function_info cons_inspect(const ovs_function_data* d) {
 int32_t cons_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
 	ovs_table* t = ovs_function_extra_data(d);
 
-	ovs_expr car = args[0];
-	ovs_expr cdr = args[1];
-	ovs_expr cont = args[2];
+	ovs_expr car = args[1];
+	ovs_expr cdr = args[2];
+	ovs_expr cont = args[3];
 
 	i->size = 2;
 	i->values[0] = ovs_alias(cont);
@@ -260,9 +260,9 @@ ovs_function_info des_inspect(const ovs_function_data* d) {
 int32_t des_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
 	ovs_table* t = ovs_function_extra_data(d);
 
-	ovs_expr e = args[0];
-	ovs_expr fail = args[1];
-	ovs_expr cont = args[2];
+	ovs_expr e = args[1];
+	ovs_expr fail = args[2];
+	ovs_expr cont = args[3];
 
 	if (ovs_is_atom(t, e)) {
 		i->size = 1;
@@ -312,10 +312,10 @@ ovs_function_info eq_inspect(const ovs_function_data* d) {
 }
 
 int32_t eq_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d) {
-	ovs_expr e_a = args[0];
-	ovs_expr e_b = args[1];
-	ovs_expr f = args[2];
-	ovs_expr t = args[3];
+	ovs_expr e_a = args[1];
+	ovs_expr e_b = args[2];
+	ovs_expr f = args[3];
+	ovs_expr t = args[4];
 
 	i->size = 1;
 	i->values[0] = ovs_alias(ovs_is_eq(e_a, e_b) ? t : f);

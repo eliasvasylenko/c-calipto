@@ -103,7 +103,7 @@ void eval_statement(ovs_context* c, ovs_instruction* result, ovru_statement s, c
 int32_t bound_lambda_apply(ovs_instruction* result, ovs_expr* args, const ovs_function_data* d) {
 	const ovru_bound_lambda* l = (ovru_bound_lambda*)(d + 1);
 
-	eval_statement(d->context, result, l->lambda->body, args, l->closure);
+	eval_statement(d->context, result, l->lambda->body, args + 1, l->closure);
 
 	return OVRU_SUCCESS;
 }
@@ -197,7 +197,7 @@ ovru_result execute_instruction(instruction_slot* next, instruction_slot* curren
 		return OVRU_ARGUMENT_COUNT_MISMATCH;
 	}
 
-	ovru_result r = f->type->apply(&next->instruction, current->instruction.values + 1, f);
+	ovru_result r = f->type->apply(&next->instruction, current->instruction.values, f);
 
 	clear_instruction_slot(current);
 
