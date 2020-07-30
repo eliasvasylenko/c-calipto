@@ -14,6 +14,57 @@
 #include "c-ohvu/runtime/compiler.h"
 #include "compilerapi.h"
 
+void* get_variable_binding(uint32_t key_size, const void* key_data, const void* value_data, bdtrie_node* owner) {
+	ovru_variable* value = malloc(sizeof(ovru_variable*));
+	*value = *((ovru_variable*)value_data);
+	return value;
+}
+
+void update_variable_binding(void* value, bdtrie_node* owner) {}
+
+void free_variable_binding(void* value) {
+	free(value);
+}
+
+/*
+ *
+ *
+ *
+ * TODO the story for variable bindings is broken!
+ *
+ * currently the bdtrie containing var bindings for a context is shared between all builder
+ * functions which can add captures to that context.
+ *
+ * this is fine for the normal path where we use builder functions linearly... but what if
+ * two builder functions are used in parallelto add different lambda terms to the same
+ * context? (this is not thread safe either)
+ *
+ * All the copying is probably slower overall if we're doing lots of parallel building ... but
+ * that's super unlikely, mostly we shouldn't need to copy.
+ *
+ *
+ * TODO TODO
+ * Alternative
+ * instead of mutating the bdtrie we can have each term make its own context and point back to
+ * the one for the last term. This means we don't have to copy bdtries, but it changes the
+ * search back through contexts from being linear with `depth` of the lambda embedding to being
+ * `depth * width` which is not good. Or maybe it's just `depth + capturable-vars` since that's
+ * the greatest number of extra tables which need to be created? Still essentially linear.
+ *
+ *
+ * TODO whichever option we choose:
+ *
+ * perhaps we can lazily copy the context / create a new context every time a capture is added 
+ * (and thus the context mutated). we can then avoid copying when there is only 1 ref to the
+ * context. (must test that actually works and there aren't spurious refs hanging around
+ * preventing us from this. It's an important class of optimisation which can apply in other
+ * places too.
+ *
+ *
+ *
+ *
+ */
+
 ovru_result find_variable(ovru_variable* result, compile_context* c, const ovs_expr_ref* symbol) {
 	ovru_variable v = { OVRU_CAPTURE, c->bindings.capture_count };
 	ovru_variable w = *(ovru_variable*)bdtrie_find_or_insert(&c->bindings.variables, sizeof(ovs_expr_ref*), &symbol, &v).data;
@@ -47,6 +98,41 @@ ovru_result find_variable(ovru_variable* result, compile_context* c, const ovs_e
 	return OVRU_SUCCESS;
 }
 
+compile_context* make_compile_context(compile_context* parent, ovs_context* oc, ovs_expr params) {
+	compile_context* c = malloc(sizeof(compile_context));
+	c->counter = ATOMIC_VAR_INIT(0);
+
+	c->parent = parent;
+	c->ovs_context = oc;
+	c->bindings.capture_count = 0;
+	c->bindings.captures = NULL;
+	c->bindings.params = params;
+	c->bindings.variables = (bdtrie){
+		NULL,
+		get_variable_binding,
+		update_variable_binding,
+		free_variable_binding
+	};
+
+	c->bindings.param_count = 0;
+	ovs_alias(params);
+	while (!ovs_is_symbol(params)) {
+		ovs_expr head = ovs_car(params);
+		ovs_expr tail = ovs_cdr(params);
+		ovs_dealias(params);
+		params = tail;
+
+		ovru_variable v = { OVRU_PARAMETER, c->bindings.param_count };
+		bdtrie_insert(&c->bindings.variables, sizeof(ovs_expr_ref*), head.p, &v);
+		ovs_dealias(head);
+
+		c->bindings.param_count++;
+	}
+	ovs_dealias(params);
+
+	return c;
+}
+
 /*
  * API
  */
@@ -67,7 +153,6 @@ ovs_expr parameters_function(parameters_data* d, ovs_context* c, ovs_function_ty
 
 void statement_with(ovs_instruction* i, ovs_expr r, statement_data* e, ovs_expr cont, ovru_term t) {
 	statement_data* d = malloc(sizeof(statement_data));
-	d->counter = ATOMIC_VAR_INIT(4);
 	d->context = e->context;
 	d->term_origin = ovs_ref(r.p);
 	d->term = t;
@@ -99,7 +184,6 @@ int32_t statement_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_functi
 	ovru_statement s = unroll_statement(data, 0);
 
 	ovru_lambda* l = malloc(sizeof(ovru_lambda));
-	l->ref_count = ATOMIC_VAR_INIT(1);
 	l->param_count = param_count;
 	l->params = params;
 	l->capture_count = lambda_context.bindings.capture_count;

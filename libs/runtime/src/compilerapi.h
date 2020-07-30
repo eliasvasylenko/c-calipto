@@ -6,40 +6,9 @@ typedef struct variable_bindings {
 	uint32_t capture_count;
 	ovru_variable* captures;
 	uint32_t param_count;
-	ovs_expr_ref* params;
+	ovs_expr params;
 	bdtrie variables;
 } variable_bindings;
-
-void* get_variable_binding(uint32_t key_size, const void* key_data, const void* value_data, bdtrie_node* owner) {
-	ovru_variable* value = malloc(sizeof(ovru_variable*));
-	*value = *((ovru_variable*)value_data);
-	return value;
-}
-
-void update_variable_binding(void* value, bdtrie_node* owner) {}
-
-void free_variable_binding(void* value) {
-	free(value);
-}
-
-variable_bindings make_variable_bindings(uint64_t param_count, const ovs_expr_ref** params) {
-	variable_bindings b = {
-		0,
-		param_count,
-		NULL,
-		{
-			NULL,
-			get_variable_binding,
-			update_variable_binding,
-			free_variable_binding
-		}
-	};
-	for (int i = 0; i < param_count; i++) {
-		ovru_variable v = { OVRU_PARAMETER, i };
-		bdtrie_insert(&b.variables, sizeof(ovs_expr_ref*), params + i, &v);
-	}
-	return b;
-}
 
 typedef struct compile_context {
 	_Atomic(int32_t) counter;
@@ -47,6 +16,15 @@ typedef struct compile_context {
 	ovs_context* ovs_context;
 	variable_bindings bindings;
 } compile_context;
+
+void compile_context_free(compile_context* c) {
+	if (atomic_fetch_add(&c->counter, -1) == 1) {
+		compile_context_free(c->parent);
+		free(c->bindings.captures);
+		ovs_dealias(c->bindings.params);
+		bdtrie_clear(&c->bindings.variables);
+	}
+}
 
 /*
  * Statement Function
@@ -65,10 +43,9 @@ ovs_expr statement_represent(const ovs_function_data* d) {
 void statement_free(const void* d) {
 	statement_data* data = *(statement_data**)d;
 
-	if (atomic_fetch_add(&data->counter, -1) == 0) {
-		ovs_free(OVS_FUNCTION, data->cont);
-		free(data);
-	}
+	compile_context_free(data->context);
+	ovs_free(OVS_FUNCTION, data->cont);
+	free(data);
 }
 
 ovs_function_info statement_inspect(const ovs_function_data* d);
@@ -144,11 +121,10 @@ ovs_expr parameters_represent(const ovs_function_data* d) {
 void parameters_free(const void* d) {
 	parameters_data* data = *(parameters_data**)d;
 
-	if (atomic_fetch_add(&data->counter, -1) == 0) {
-		ovs_free(OVS_FUNCTION, data->statement_cont);
-		ovs_free(OVS_FUNCTION, data->cont);
-		free(data);
-	}
+	compile_context_free(data->context);
+	ovs_free(OVS_FUNCTION, data->statement_cont);
+	ovs_free(OVS_FUNCTION, data->cont);
+	free(data);
 }
 
 ovs_function_info parameters_inspect(const ovs_function_data* d);
