@@ -4,8 +4,9 @@
 
 typedef struct variable_bindings {
 	uint32_t capture_count;
-	uint32_t param_count;
 	ovru_variable* captures;
+	uint32_t param_count;
+	ovs_expr_ref* params;
 	bdtrie variables;
 } variable_bindings;
 
@@ -41,6 +42,7 @@ variable_bindings make_variable_bindings(uint64_t param_count, const ovs_expr_re
 }
 
 typedef struct compile_context {
+	_Atomic(int32_t) counter;
 	struct compile_context* parent;
 	ovs_context* ovs_context;
 	variable_bindings bindings;
@@ -51,10 +53,8 @@ typedef struct compile_context {
  */
 
 typedef struct statement_data {
-	_Atomic(int32_t) counter;
 	compile_context* context;
-	const ovs_expr_ref* previous_term;
-	ovru_term term;
+	ovru_statement statement;
 	const ovs_expr_ref* cont;
 } statement_data;
 
@@ -131,9 +131,8 @@ ovs_function_info statement_inspect(const ovs_function_data* d) {
  */
 
 typedef struct parameters_data {
-	_Atomic(int32_t) counter;
-	ovs_expr params;
 	compile_context* context;
+	ovs_expr params;
 	const ovs_expr_ref* statement_cont;
 	const ovs_expr_ref* cont;
 } parameters_data;
