@@ -32,24 +32,33 @@ void free_variable_binding(void* value) {
  *
  * TODO the story for variable bindings is broken!
  *
- * currently the bdtrie containing var bindings for a context is shared between all builder
+ * We have a stack of compile_contexts, starting with the root lambda we create a new one
+ * to process each term in the body of the lambda which is also a lambda. The context
+ * contains the parameters of the lambda, so we can search up through the stack to see
+ * what's in the lexical scope.
+ *
+ * When we encounter a variable at the top of the stack which isn't in the top context, we
+ * search up, then when we find it we add it as a capture in each descendent scope until
+ * we make our way back to the top. This can mutate any number of contexts in the stack.
+ *
+ * Currently the bdtrie containing var bindings for a context is shared between all builder
  * functions which can add captures to that context.
  *
- * this is fine for the normal path where we use builder functions linearly... but what if
+ * This is fine for the normal path where we use builder functions linearly... but what if
  * two builder functions are used in parallelto add different lambda terms to the same
  * context? (this is not thread safe either)
  *
- * All the copying is probably slower overall if we're doing lots of parallel building ... but
- * that's super unlikely, mostly we shouldn't need to copy.
+ * TODO Option 1)
+ * TODO rather than reach down into the stack of contexts and mutating them all to bubble the
+ * capture back up... we only track captures at the TOP of the stack, then propagate them down
+ * as we complete lambdas. We can still keep the results of our search at the top of the stack
+ * (e.g. capture made from lambda at depth -3 parameter index 5) so that we don't have to
+ * repeat the work of bdtrie lookup.
  *
  *
- * TODO TODO
- * Alternative
- * instead of mutating the bdtrie we can have each term make its own context and point back to
- * the one for the last term. This means we don't have to copy bdtries, but it changes the
- * search back through contexts from being linear with `depth` of the lambda embedding to being
- * `depth * width` which is not good. Or maybe it's just `depth + capturable-vars` since that's
- * the greatest number of extra tables which need to be created? Still essentially linear.
+ * TODO Option 2)
+ * TODO alternatively we can use an entirely different data structure. A persistent immutable
+ * trie, with cheap copying and ref counted nodes.
  *
  *
  * TODO whichever option we choose:
@@ -60,6 +69,13 @@ void free_variable_binding(void* value) {
  * preventing us from this. It's an important class of optimisation which can apply in other
  * places too.
  *
+ *
+ *
+ *
+ *
+ *
+ * Perhaps Option 1) is simpler for the moment. Though we probably need something like 2) at
+ * some point anyway to support scoped records in the language.
  *
  *
  *
