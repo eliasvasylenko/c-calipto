@@ -118,29 +118,50 @@ void statement_with(
 	i->values[4] = statement_function(s, &statement_end_function);
 }
 
-ovru_statement unroll_statement(statement_data* d, int32_t size) {
-	if (d->term_origin == NULL) {
-		return (ovru_statement){ 0, malloc(sizeof(ovru_term) * size) };
+ovru_lambda* flatten_compiler_state(compile_state* s, int32_t term_count, int32_t capture_count) {
+	term_count += s->body.term_count;
+	capture_count += s->capture_count;
+
+	ovru_lambda* l;
+
+	if (s->param_count >= 0) {
+		l = malloc(sizeof(ovru_lambda));
+
+		l->param_count = s->param_count;
+		l->params = malloc(sizeof(ovs_expr) * l->param_count);
+
+		l->capture_count = capture_count;
+		l->captures = malloc(sizeof(ovru_variable) * l->capture_count);
+
+		l->body.term_count = term_count;
+		l->body.terms = malloc(sizeof(ovru_term) * l->body.term_count);
+
+	} else {
+		l = flatten_compiler_state(s->parent, term_count, capture_count);
 	}
 
-	statement_data* p = ovs_function_extra_data(&d->term_origin->function);
-	ovru_statement s = unroll_statement(p, size + 1);
-	s.terms[s.term_count] = d->term;
-	s.term_count++;
-	return s;
+	ovru_variable* captures = l->captures + l->capture_count - capture_count;
+	for (int i = 0; i < s->capture_count; i++) {
+		/*
+		 * TODO only put captures with depth 0 here?
+		 *
+		 * TODO propagate the rest down?
+		 */
+		captures[i] = s->captures[i];
+	}
+
+	ovru_term* terms = l->terms + l->term_count - term_count;
+	for (int i = 0; i < s->term_count; i++) {
+		term[i] = s->term[i];
+	}
+
+	return l;
 }
 
 int32_t statement_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* f) {
 	statement_data* data = ovs_function_extra_data(f);
 
-	ovru_statement s = unroll_statement(data, 0);
-
-	ovru_lambda* l = malloc(sizeof(ovru_lambda));
-	l->param_count = param_count;
-	l->params = params;
-	l->capture_count = lambda_context.bindings.capture_count;
-	l->captures = lambda_context.bindings.captures;
-	l->body = body;
+	ovru_lambda* l = flatten_compiler_state(data->state, 0, 0);
 
 	ovru_term t = (ovru_term){ .type=OVRU_LAMBDA, .lambda=l };
 
@@ -163,6 +184,9 @@ int32_t statement_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_functi
 
 	} else {
 		// TODO statament_with on parent continue
+		ovru_term t; // = lambda
+
+		statement_with(i, data, data_cont, t, propagated_capture_count, propagated_captures);
 	}
 
 	return 91546;
