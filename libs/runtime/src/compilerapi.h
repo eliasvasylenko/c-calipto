@@ -2,27 +2,61 @@
  * Compiler State
  */
 
-typedef struct variable_bindings {
+typedef struct variable_capture {
+	ovru_variable variable;
+	uint32_t depth;
+} variable_capture;
+
+typedef struct compile_state {
+	_Atomic(int32_t) counter;
+	struct compile_state* parent;
+	ovs_context* context;
+
+	bdtrie variables;
 	uint32_t capture_count;
-	ovru_variable* captures;
+	variable_capture* captures;
 	uint32_t param_count;
 	ovs_expr params;
-	bdtrie variables;
-} variable_bindings;
 
-typedef struct compile_context {
-	_Atomic(int32_t) counter;
-	struct compile_context* parent;
-	ovs_context* ovs_context;
-	variable_bindings bindings;
-} compile_context;
+	ovru_statement body;
+} compile_state;
 
-void compile_context_free(compile_context* c) {
+void compile_state_free(compile_state* c) {
 	if (atomic_fetch_add(&c->counter, -1) == 1) {
-		compile_context_free(c->parent);
-		free(c->bindings.captures);
-		ovs_dealias(c->bindings.params);
-		bdtrie_clear(&c->bindings.variables);
+		compile_state_free(c->parent);
+
+		if (body.capture_count > 0)
+			free(c->captures);
+		ovs_dealias(c->params);
+		bdtrie_clear(&c->variables);
+
+		if (body.term_count > 0)
+			free(body.terms);
+	}
+}
+
+/*
+ * Find the variable in the current lexical scope by traversing down the stack of enclosing
+ * lambdas.
+ *
+ * If the variable was found, returns its depth and sets `result` to the variable's location
+ * at that depth.
+ *
+ * If the variable was not found, returns -1;
+ */
+uint32_t find_variable(ovru_variable* result, compile_state* c, const ovs_expr_ref* symbol) {
+	bdtrie_value v = bdtrie_find(&c->bindings.variables, sizeof(ovs_expr_ref*), &symbol);
+
+	if (bdtrie_is_present(v)) {
+		*result = *(ovru_variable*)v.data;
+		return true;
+
+	} else {
+		if (c->parent == NULL) {
+			return -1;
+		}
+		int32_t r = find_variable(result, c->parent, symbol);
+		return (r < 0) ? r : r + 1;
 	}
 }
 
@@ -31,19 +65,18 @@ void compile_context_free(compile_context* c) {
  */
 
 typedef struct statement_data {
-	compile_context* context;
-	ovru_statement statement;
+	compile_state* state;
 	const ovs_expr_ref* cont;
 } statement_data;
 
 ovs_expr statement_represent(const ovs_function_data* d) {
-	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
+	return ovs_symbol(d->state->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
 }
 
 void statement_free(const void* d) {
 	statement_data* data = *(statement_data**)d;
 
-	compile_context_free(data->context);
+	compile_state_free(data->state);
 	ovs_free(OVS_FUNCTION, data->cont);
 	free(data);
 }
@@ -108,20 +141,20 @@ ovs_function_info statement_inspect(const ovs_function_data* d) {
  */
 
 typedef struct parameters_data {
-	compile_context* context;
+	compile_state* state;
 	ovs_expr params;
 	const ovs_expr_ref* statement_cont;
 	const ovs_expr_ref* cont;
 } parameters_data;
 
 ovs_expr parameters_represent(const ovs_function_data* d) {
-	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
+	return ovs_symbol(d->state->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
 }
 
 void parameters_free(const void* d) {
 	parameters_data* data = *(parameters_data**)d;
 
-	compile_context_free(data->context);
+	compile_state_free(data->state);
 	ovs_free(OVS_FUNCTION, data->statement_cont);
 	ovs_free(OVS_FUNCTION, data->cont);
 	free(data);
@@ -163,7 +196,7 @@ ovs_function_info parameters_inspect(const ovs_function_data* d) {
  */
 
 ovs_expr compile_represent(const ovs_function_data* d) {
-	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
+	return ovs_symbol(d->state->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
 }
 
 ovs_function_info compile_inspect(const ovs_function_data* d) {
