@@ -19,19 +19,22 @@ typedef struct compile_state {
 	ovs_expr params;
 
 	ovru_statement body;
+	const ovs_expr_ref* cont;
 } compile_state;
 
 void compile_state_free(compile_state* c) {
 	if (atomic_fetch_add(&c->counter, -1) == 1) {
 		compile_state_free(c->parent);
 
-		if (body.capture_count > 0)
+		if (c->capture_count > 0)
 			free(c->captures);
 		ovs_dealias(c->params);
 		bdtrie_clear(&c->variables);
 
-		if (body.term_count > 0)
-			free(body.terms);
+		if (c->body.term_count > 0)
+			free(c->body.terms);
+		
+		ovs_free(OVS_FUNCTION, c->cont);
 	}
 }
 
@@ -45,7 +48,7 @@ void compile_state_free(compile_state* c) {
  * If the variable was not found, returns -1;
  */
 uint32_t find_variable(ovru_variable* result, compile_state* c, const ovs_expr_ref* symbol) {
-	bdtrie_value v = bdtrie_find(&c->bindings.variables, sizeof(ovs_expr_ref*), &symbol);
+	bdtrie_value v = bdtrie_find(&c->variables, sizeof(ovs_expr_ref*), &symbol);
 
 	if (bdtrie_is_present(v)) {
 		*result = *(ovru_variable*)v.data;
@@ -66,18 +69,16 @@ uint32_t find_variable(ovru_variable* result, compile_state* c, const ovs_expr_r
 
 typedef struct statement_data {
 	compile_state* state;
-	const ovs_expr_ref* cont;
 } statement_data;
 
 ovs_expr statement_represent(const ovs_function_data* d) {
-	return ovs_symbol(d->state->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
+	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
 }
 
 void statement_free(const void* d) {
 	statement_data* data = *(statement_data**)d;
 
 	compile_state_free(data->state);
-	ovs_free(OVS_FUNCTION, data->cont);
 	free(data);
 }
 
@@ -141,22 +142,20 @@ ovs_function_info statement_inspect(const ovs_function_data* d) {
  */
 
 typedef struct parameters_data {
-	compile_state* state;
+	compile_state* enclosing_state;
 	ovs_expr params;
 	const ovs_expr_ref* statement_cont;
-	const ovs_expr_ref* cont;
 } parameters_data;
 
 ovs_expr parameters_represent(const ovs_function_data* d) {
-	return ovs_symbol(d->state->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
+	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
 }
 
 void parameters_free(const void* d) {
 	parameters_data* data = *(parameters_data**)d;
 
-	compile_state_free(data->state);
+	compile_state_free(data->enclosing_state);
 	ovs_free(OVS_FUNCTION, data->statement_cont);
-	ovs_free(OVS_FUNCTION, data->cont);
 	free(data);
 }
 
@@ -196,7 +195,7 @@ ovs_function_info parameters_inspect(const ovs_function_data* d) {
  */
 
 ovs_expr compile_represent(const ovs_function_data* d) {
-	return ovs_symbol(d->state->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
+	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
 }
 
 ovs_function_info compile_inspect(const ovs_function_data* d) {

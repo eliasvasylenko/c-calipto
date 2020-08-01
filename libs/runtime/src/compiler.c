@@ -26,104 +26,55 @@ void free_variable_binding(void* value) {
 	free(value);
 }
 
-/*
- *
- *
- *
- * TODO the story for variable bindings is broken!
- *
- * We have a stack of compile_states, starting with the root lambda we create a new one
- * to process each term in the body of the lambda which is also a lambda. The context
- * contains the parameters of the lambda, so we can search up through the stack to see
- * what's in the lexical scope.
- *
- * When we encounter a variable at the top of the stack which isn't in the top context, we
- * search up, then when we find it we add it as a capture in each descendent scope until
- * we make our way back to the top. This can mutate any number of contexts in the stack.
- *
- * Currently the bdtrie containing var bindings for a context is shared between all builder
- * functions which can add captures to that context.
- *
- * This is fine for the normal path where we use builder functions linearly... but what if
- * two builder functions are used in parallelto add different lambda terms to the same
- * context? (this is not thread safe either)
- *
- * TODO Option 1)
- * TODO rather than reach down into the stack of contexts and mutating them all to bubble the
- * capture back up... we only track captures at the TOP of the stack, then propagate them down
- * as we complete terms. We can still keep the results of our search at the top of the stack
- * (e.g. capture made from lambda at depth -3 parameter index 5) so that we don't have to
- * repeat the work of bdtrie lookup.
- *
- *
- * TODO Option 2)
- * TODO alternatively we can use an entirely different data structure. A persistent immutable
- * trie, with cheap copying and ref counted nodes.
- *
- *
- * TODO whichever option we choose:
- *
- * perhaps we can lazily copy the context / create a new context every time a capture is added 
- * (and thus the context mutated). we can then avoid copying when there is only 1 ref to the
- * context. (must test that actually works and there aren't spurious refs hanging around
- * preventing us from this. It's an important class of optimisation which can apply in other
- * places too.
- *
- *
- *
- *
- *
- *
- * Perhaps Option 1) is simpler for the moment. Though we probably need something like 2) at
- * some point anyway to support scoped records in the language.
- *
- *
- *
- */
+compile_state* make_compile_state(compile_state* parent, ovs_context* oc, const ovs_expr_ref* r) {
+	compile_state* s = malloc(sizeof(compile_state));
+	s->counter = ATOMIC_VAR_INIT(0);
 
-compile_state* make_compile_state(compile_state* parent, ovs_context* oc, ovs_expr params) {
-	compile_state* c = malloc(sizeof(compile_state));
-	c->counter = ATOMIC_VAR_INIT(0);
+	s->parent = parent;
+	s->context = oc;
 
-	c->parent = parent;
-	c->ovs_context = oc;
-
-	c->variables = (bdtrie){
+	s->variables = (bdtrie){
 		NULL,
 		get_variable_binding,
 		update_variable_binding,
 		free_variable_binding
 	};
-	c->capture_count = 0;
-	c->param_count = 0;
-	c->params = ovs_alias(params);
+	s->capture_count = 0;
+	s->param_count = -1;
+
+	s->body.term_count = 0;
+
+	s->cont = ovs_ref(r);
+
+	return s;
+}
+
+void add_parameters(compile_state* s, ovs_expr params) {
+	s->param_count = 0;
+	s->params = ovs_alias(params);
 	while (!ovs_is_symbol(params)) {
 		ovs_expr head = ovs_car(params);
 		ovs_expr tail = ovs_cdr(params);
 		ovs_dealias(params);
 		params = tail;
 
-		ovru_variable v = { OVRU_PARAMETER, c->bindings.param_count };
-		bdtrie_insert(&c->bindings.variables, sizeof(ovs_expr_ref*), head.p, &v);
+		ovru_variable v = { OVRU_PARAMETER, s->param_count };
+		bdtrie_insert(&s->variables, sizeof(ovs_expr_ref*), head.p, &v);
 		ovs_dealias(head);
 
-		c->bindings.param_count++;
+		s->param_count++;
 	}
 	ovs_dealias(params);
-
-	c->body.term_count = 0;
-
-	return c;
 }
 
 /*
  * API
  */
 
-ovs_expr statement_function(statement_data* d, ovs_function_type* t) {
-	statement_data** s;
-	ovs_expr e = ovs_function(d->context->ovs_context, t, sizeof(statement_data*), (void**)&s);
-	*s = d;
+ovs_expr statement_function(compile_state* s, ovs_function_type* t) {
+	statement_data* d;
+	ovs_expr e = ovs_function(s->context, t, sizeof(statement_data*), (void**)&d);
+	d->state = s;
 	return e;
 }
 
@@ -134,19 +85,37 @@ ovs_expr parameters_function(parameters_data* d, ovs_context* c, ovs_function_ty
 	return e;
 }
 
-void statement_with(ovs_instruction* i, ovs_expr r, statement_data* e, ovs_expr cont, ovru_term t) {
-	statement_data* d = malloc(sizeof(statement_data));
-	d->context = e->context;
-	d->term_origin = ovs_ref(r.p);
-	d->term = t;
-	d->cont = e->cont;
+void statement_with(
+		ovs_instruction* i,
+		statement_data* e,
+		ovs_expr cont,
+		ovru_term t,
+		int32_t capture_count, variable_capture* captures) {
+	compile_state* s = e->state;
+	if (atomic_load(&s->counter) > 1) {
+		s = make_compile_state(e->state, e->state->context, e->state->cont);
+	}
+	ovru_statement b = s->body;
+	s->body.term_count++;
+	s->body.terms = malloc(sizeof(ovru_term) * s->body.term_count);
+	if (b.term_count > 0) {
+		for (int i = 0; i < b.term_count; i++) {
+			s->body.terms[i] = b.terms[i];
+		}
+		free(b.terms);
+	}
+	s->body.terms[b.term_count] = t;
+
+	/*
+	 * TODO add captures from new term
+	 */
 
 	i->size = 5;
 	i->values[0] = ovs_alias(cont);
-	i->values[1] = statement_function(d, &statement_with_lambda_function);
-	i->values[2] = statement_function(d, &statement_with_variable_function);
-	i->values[3] = statement_function(d, &statement_with_quote_function);
-	i->values[4] = statement_function(d, &statement_end_function);
+	i->values[1] = statement_function(s, &statement_with_lambda_function);
+	i->values[2] = statement_function(s, &statement_with_variable_function);
+	i->values[3] = statement_function(s, &statement_with_quote_function);
+	i->values[4] = statement_function(s, &statement_end_function);
 }
 
 ovru_statement unroll_statement(statement_data* d, int32_t size) {
@@ -228,11 +197,18 @@ int32_t statement_with_variable_apply(ovs_instruction* i, ovs_expr* args, const 
 
 	ovru_term t;
 	t.type = OVRU_VARIABLE;
-	ovru_result r = find_variable(&t.variable, e->context, variable.p);
+	uint32_t depth = variable.type = SYMBOL
+		? find_variable(&t.variable, e->context, variable.p)
+		: -1;
 
-	if (r == OVRU_SUCCESS) {
-		statement_with(i, receiver, e, cont, t);
+	if (depth >= 0) {
+		variable_capture captures[] = { { t.variable, depth } };
+		statement_with(i, e, cont, t, 1, captures);
+
+	} else {
+		// TODO how to deal with errors???
 	}
+
 	return r;
 }
 
@@ -245,7 +221,7 @@ int32_t statement_with_quote_apply(ovs_instruction* i, ovs_expr* args, const ovs
 
 	ovru_term t = { .quote=data };
 
-	statement_with(i, receiver, e, cont, t);
+	statement_with(i, e, cont, t, 0, NULL);
 	return OVRU_SUCCESS;
 }
 
@@ -281,12 +257,8 @@ int32_t parameters_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_funct
 	d->term_origin = NULL;
 	d->cont = e->cont;
 
-	const ovs_expr_ref** param_list;
-	int32_t param_count = ovs_delist_of(&f->context->root_tables[OVS_UNQUALIFIED], e->params, (void***)&param_list, get_ref);
-	d->context = malloc(sizeof(compile_state));
-	d->context->parent = e->context;
-	d->context->ovs_context = f->context;
-	d->context->bindings = make_variable_bindings(param_count, param_list);
+	d->state = make_compile_state(NULL, f->context);
+	add_parameters(d->state, e->params);
 
 	i->size = 3;
 	i->values[0] = ovs_alias(cont);
@@ -302,9 +274,8 @@ int32_t compile_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_dat
 	ovs_expr cont = args[3];
 
 	parameters_data* d = malloc(sizeof(parameters_data));
-	d->counter = ATOMIC_VAR_INIT(2);
 	d->params = ovs_root_symbol(OVS_DATA_NIL)->expr;
-	d->context = NULL;
+	d->state = NULL;
 	d->statement_cont = body.p;
 	d->cont = cont.p;
 
