@@ -143,64 +143,51 @@ compile_state* statement_with(ovs_instruction* i, statement_data* e, ovs_expr co
 	return s;
 }
 
-ovru_lambda* flatten_compiler_state(compile_state* s, int32_t term_count, int32_t capture_count,
-		uint32_t* propagated_capture_index, uint32_t* propagated_capture_count, variable_capture** propagated_captures) {
+compile_state* flatten_compile_state(compile_state* s, int32_t term_count, int32_t capture_count) {
 	term_count += s->body.term_count;
 	capture_count += s->capture_count;
 
-	ovru_lambda* l;
+	compile_state* f;
 
 	if (s->param_count >= 0) {
-		l = malloc(sizeof(ovru_lambda));
+		f = make_compile_state(s->parent, s->context, s->cont);
 
-		l->param_count = s->param_count;
-		if (l->param_count > 0)
-			l->params = malloc(sizeof(ovs_expr) * l->param_count);
+		f->param_count = s->param_count;
+		f->params = ovs_alias(s->params);
 
-		l->capture_count = capture_count;
-		if (l->capture_count > 0) {
-			l->captures = malloc(sizeof(ovru_variable) * l->capture_count);
+		f->capture_count = capture_count;
+		if (f->capture_count > 0)
+			f->captures = malloc(sizeof(ovru_variable) * f->capture_count);
 
-			if (s->parent != NULL) {
-				*propagated_capture_index = s->parent->total_capture_count;
-				*propagated_capture_count = 0;
-				*propagated_captures = malloc(sizeof(variable_capture) * l->capture_count);
-			}
-		}
-
-		l->body.term_count = term_count;
-		if (l->body.term_count > 0)
-			l->body.terms = malloc(sizeof(ovru_term) * l->body.term_count);
+		f->body.term_count = term_count;
+		if (f->body.term_count > 0)
+			f->body.terms = malloc(sizeof(ovru_term) * f->body.term_count);
 
 
 	} else {
-		l = flatten_compiler_state(s->parent, term_count, capture_count);
+		f = flatten_compile_state(s->parent, term_count, capture_count);
 	}
 
-	ovru_variable* captures = l->captures + l->capture_count - capture_count;
+	variable_capture* captures = f->captures + f->capture_count - capture_count;
 	for (int i = 0; i < s->capture_count; i++) {
-		if (s->captures[i].depth == 0) {
-			captures[i] = s->captures[i].variable;
-		} else {
-			captures[i] = (ovru_variable) { OVRU_CAPTURE, *propagated_capture_index + *propagated_capture_count };
-			propagated_captures[*propagated_capture_count] = s->captures[i];
-			propagated_captures[*propagated_capture_count].depth--;
-			*propagated_capture_count++;
-		}
+		f->captures[i] = s->captures[i];
 	}
 
-	ovru_term* terms = l->terms + l->term_count - term_count;
-	for (int i = 0; i < s->term_count; i++) {
-		term[i] = s->term[i];
+	ovru_term* terms = s->body.terms + f->body.term_count - term_count;
+	for (int i = 0; i < s->body.term_count; i++) {
+		f->body.terms[i] = s->body.terms[i];
 	}
 
-	return l;
+	return f;
 }
 
 int32_t statement_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* f) {
 	statement_data* data = ovs_function_extra_data(f);
 
-	ovru_lambda* l = flatten_compiler_state(data->state, 0, 0);
+	compile_state* s = data->state;
+	if (s->param_count < 0) {
+		s = flatten_compile_state(s, 0, 0);
+	}
 
 	ovru_term t = (ovru_term){ .type=OVRU_LAMBDA, .lambda=l };
 
