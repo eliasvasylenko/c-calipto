@@ -19,6 +19,8 @@ typedef struct compile_state {
 	uint32_t param_count;
 	ovs_expr params;
 
+	uint32_t total_capture_count;
+
 	ovru_statement body;
 	const ovs_expr_ref* cont;
 } compile_state;
@@ -40,13 +42,13 @@ void compile_state_free(compile_state* c) {
 }
 
 /*
- * Find the variable in the current lexical scope by traversing down the stack of enclosing
- * lambdas.
+ * Find the variable in the enclosing lexical scope of the current expression by traversing
+ * down the stack of enclosing lambdas.
  *
- * If the variable was found, returns its depth and sets `result` to the variable's location
+ * If the variable is found, return its depth and set `result` to the variable's location
  * at that depth.
  *
- * If the variable was not found, returns -1;
+ * If the variable is not found, return -1;
  */
 uint32_t find_variable(ovru_variable* result, compile_state* c, const ovs_expr_ref* symbol) {
 	bdtrie_value v = bdtrie_find(&c->variables, sizeof(ovs_expr_ref*), &symbol);

@@ -26,7 +26,7 @@ void free_variable_binding(void* value) {
 	free(value);
 }
 
-compile_state* make_compile_state(compile_state* parent, ovs_context* oc, const ovs_expr_ref* r) {
+compile_state* make_compile_state(compile_state* parent, ovs_context* oc, const ovs_expr_ref* cont) {
 	compile_state* s = malloc(sizeof(compile_state));
 	s->counter = ATOMIC_VAR_INIT(0);
 
@@ -40,16 +40,23 @@ compile_state* make_compile_state(compile_state* parent, ovs_context* oc, const 
 		free_variable_binding
 	};
 	s->capture_count = 0;
-	s->param_count = -1;
 
 	s->body.term_count = 0;
 
-	s->cont = ovs_ref(r);
+	s->cont = ovs_ref(cont);
 
 	return s;
 }
 
-void add_parameters(compile_state* s, ovs_expr params) {
+void without_parameters(compile_state* s) {
+	s->total_capture_count = s->parent->total_capture_count;
+
+	s->param_count = -1;
+}
+
+void with_parameters(compile_state* s, ovs_expr params) {
+	s->total_capture_count = 0;
+
 	s->param_count = 0;
 	s->params = ovs_alias(params);
 	while (!ovs_is_symbol(params)) {
@@ -67,10 +74,11 @@ void add_parameters(compile_state* s, ovs_expr params) {
 	ovs_dealias(params);
 }
 
-void add_captures(compile_state* s, uint32_t capture_count, variable_capture* captures) {
+void with_captures(compile_state* s, uint32_t capture_count, variable_capture* captures) {
 	uint32_t previous_capture_count = s->capture_count;
 	variable_capture* previous_captures = s->captures;
 
+	s->total_capture_count += capture_count;
 	s->capture_count += capture_count;
 	s->captures = malloc(sizeof(ovru_term) * s->capture_count);
 	if (previous_capture_count > 0) {
@@ -84,7 +92,7 @@ void add_captures(compile_state* s, uint32_t capture_count, variable_capture* ca
 	}
 }
 
-void add_term(compile_state* s, ovru_term t) {
+void with_term(compile_state* s, ovru_term t) {
 	ovru_statement b = s->body;
 
 	s->body.term_count++;
@@ -120,9 +128,10 @@ compile_state* statement_with(ovs_instruction* i, statement_data* e, ovs_expr co
 	compile_state* s = e->state;
 	if (atomic_load(&s->counter) > 1) {
 		s = make_compile_state(e->state, e->state->context, e->state->cont);
+		without_parameters(s);
 	}
 
-	add_term(s, t);
+	with_term(s, t);
 
 	i->size = 5;
 	i->values[0] = ovs_alias(cont);
@@ -134,7 +143,8 @@ compile_state* statement_with(ovs_instruction* i, statement_data* e, ovs_expr co
 	return s;
 }
 
-ovru_lambda* flatten_compiler_state(compile_state* s, int32_t term_count, int32_t capture_count) {
+ovru_lambda* flatten_compiler_state(compile_state* s, int32_t term_count, int32_t capture_count,
+		uint32_t* propagated_capture_index, uint32_t* propagated_capture_count, variable_capture** propagated_captures) {
 	term_count += s->body.term_count;
 	capture_count += s->capture_count;
 
@@ -144,13 +154,24 @@ ovru_lambda* flatten_compiler_state(compile_state* s, int32_t term_count, int32_
 		l = malloc(sizeof(ovru_lambda));
 
 		l->param_count = s->param_count;
-		l->params = malloc(sizeof(ovs_expr) * l->param_count);
+		if (l->param_count > 0)
+			l->params = malloc(sizeof(ovs_expr) * l->param_count);
 
 		l->capture_count = capture_count;
-		l->captures = malloc(sizeof(ovru_variable) * l->capture_count);
+		if (l->capture_count > 0) {
+			l->captures = malloc(sizeof(ovru_variable) * l->capture_count);
+
+			if (s->parent != NULL) {
+				*propagated_capture_index = s->parent->total_capture_count;
+				*propagated_capture_count = 0;
+				*propagated_captures = malloc(sizeof(variable_capture) * l->capture_count);
+			}
+		}
 
 		l->body.term_count = term_count;
-		l->body.terms = malloc(sizeof(ovru_term) * l->body.term_count);
+		if (l->body.term_count > 0)
+			l->body.terms = malloc(sizeof(ovru_term) * l->body.term_count);
+
 
 	} else {
 		l = flatten_compiler_state(s->parent, term_count, capture_count);
@@ -158,13 +179,14 @@ ovru_lambda* flatten_compiler_state(compile_state* s, int32_t term_count, int32_
 
 	ovru_variable* captures = l->captures + l->capture_count - capture_count;
 	for (int i = 0; i < s->capture_count; i++) {
-		/*
-		 * TODO only put captures with depth 0 here unmodified.
-		 *
-		 * rest must be added as fresh captures on *enclosing* state.
-		 * and are added on *this* state as captures of those captures.
-		 */
-		captures[i] = s->captures[i];
+		if (s->captures[i].depth == 0) {
+			captures[i] = s->captures[i].variable;
+		} else {
+			captures[i] = (ovru_variable) { OVRU_CAPTURE, *propagated_capture_index + *propagated_capture_count };
+			propagated_captures[*propagated_capture_count] = s->captures[i];
+			propagated_captures[*propagated_capture_count].depth--;
+			*propagated_capture_count++;
+		}
 	}
 
 	ovru_term* terms = l->terms + l->term_count - term_count;
@@ -257,11 +279,11 @@ int32_t statement_with_variable_apply(ovs_instruction* i, ovs_expr* args, const 
 		compile_state* s = statement_with(i, e, cont, t);
 
 	} else {
-		t.variable = (ovru_variable){ OVRU_CAPTURE, e->capture_count };
+		t.variable = (ovru_variable){ OVRU_CAPTURE, e->total_capture_count };
 		compile_state* s = statement_with(i, e, cont, t);
 
 		variable_capture c[] = { { variable, v, depth } };
-		add_captures(s, 1, c);
+		with_captures(s, 1, c);
 	}
 
 	return r;
@@ -307,13 +329,8 @@ int32_t parameters_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_funct
 	ovs_expr cont = (ovs_expr){ OVS_FUNCTION, .p=e->statement_cont };
 
 	statement_data* d = malloc(sizeof(statement_data));
-	d->counter = ATOMIC_VAR_INIT(2);
-	d->context = malloc(sizeof(compile_state));
-	d->term_origin = NULL;
-	d->cont = e->cont;
-
-	d->state = make_compile_state(NULL, f->context);
-	add_parameters(d->state, e->params);
+	d->state = make_compile_state(NULL, f->context, e->cont);
+	with_parameters(d->state, e->params);
 
 	i->size = 3;
 	i->values[0] = ovs_alias(cont);
