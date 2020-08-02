@@ -67,6 +67,37 @@ void add_parameters(compile_state* s, ovs_expr params) {
 	ovs_dealias(params);
 }
 
+void add_captures(compile_state* s, uint32_t capture_count, variable_capture* captures) {
+	uint32_t previous_capture_count = s->capture_count;
+	variable_capture* previous_captures = s->captures;
+
+	s->capture_count += capture_count;
+	s->captures = malloc(sizeof(ovru_term) * s->capture_count);
+	if (previous_capture_count > 0) {
+		for (int i = 0; i < previous_capture_count; i++) {
+			s->captures[i] = captures[i];
+		}
+		free(captures);
+	}
+	for (int i = 0; i < capture_count; i++) {
+		s->captures[i + previous_capture_count] = captures[i];
+	}
+}
+
+void add_term(compile_state* s, ovru_term t) {
+	ovru_statement b = s->body;
+
+	s->body.term_count++;
+	s->body.terms = malloc(sizeof(ovru_term) * s->body.term_count);
+	if (b.term_count > 0) {
+		for (int i = 0; i < b.term_count; i++) {
+			s->body.terms[i] = b.terms[i];
+		}
+		free(b.terms);
+	}
+	s->body.terms[b.term_count] = t;
+}
+
 /*
  * API
  */
@@ -85,30 +116,13 @@ ovs_expr parameters_function(parameters_data* d, ovs_context* c, ovs_function_ty
 	return e;
 }
 
-void statement_with(
-		ovs_instruction* i,
-		statement_data* e,
-		ovs_expr cont,
-		ovru_term t,
-		int32_t capture_count, variable_capture* captures) {
+compile_state* statement_with(ovs_instruction* i, statement_data* e, ovs_expr cont, ovru_term t) {
 	compile_state* s = e->state;
 	if (atomic_load(&s->counter) > 1) {
 		s = make_compile_state(e->state, e->state->context, e->state->cont);
 	}
-	ovru_statement b = s->body;
-	s->body.term_count++;
-	s->body.terms = malloc(sizeof(ovru_term) * s->body.term_count);
-	if (b.term_count > 0) {
-		for (int i = 0; i < b.term_count; i++) {
-			s->body.terms[i] = b.terms[i];
-		}
-		free(b.terms);
-	}
-	s->body.terms[b.term_count] = t;
 
-	/*
-	 * TODO add captures from new term
-	 */
+	add_term(s, t);
 
 	i->size = 5;
 	i->values[0] = ovs_alias(cont);
@@ -116,6 +130,8 @@ void statement_with(
 	i->values[2] = statement_function(s, &statement_with_variable_function);
 	i->values[3] = statement_function(s, &statement_with_quote_function);
 	i->values[4] = statement_function(s, &statement_end_function);
+
+	return s;
 }
 
 ovru_lambda* flatten_compiler_state(compile_state* s, int32_t term_count, int32_t capture_count) {
@@ -143,9 +159,10 @@ ovru_lambda* flatten_compiler_state(compile_state* s, int32_t term_count, int32_
 	ovru_variable* captures = l->captures + l->capture_count - capture_count;
 	for (int i = 0; i < s->capture_count; i++) {
 		/*
-		 * TODO only put captures with depth 0 here?
+		 * TODO only put captures with depth 0 here unmodified.
 		 *
-		 * TODO propagate the rest down?
+		 * rest must be added as fresh captures on *enclosing* state.
+		 * and are added on *this* state as captures of those captures.
 		 */
 		captures[i] = s->captures[i];
 	}
@@ -186,7 +203,14 @@ int32_t statement_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_functi
 		// TODO statament_with on parent continue
 		ovru_term t; // = lambda
 
-		statement_with(i, data, data_cont, t, propagated_capture_count, propagated_captures);
+		compile_state* s = statement_with(i, data, data_cont, t);
+
+		s->capture_count = capture_count;
+		s->captures = malloc(sizeof(variable_capture) * capture_count);
+		for (int i = 0; i < capture_count; i++) {
+			s->captures[i] = captures[i];
+			s->captures[i].depth--;
+		}
 	}
 
 	return 91546;
@@ -219,18 +243,25 @@ int32_t statement_with_variable_apply(ovs_instruction* i, ovs_expr* args, const 
 	ovs_expr variable = args[1];
 	ovs_expr cont = args[2];
 
+	ovru_variable v;
+	uint32_t depth = variable.type = SYMBOL ? find_variable(&v, e->context, variable.p) : -1;
+
+	if (depth < 0) {
+		// TODO how to deal with errors???
+	}
+
 	ovru_term t;
 	t.type = OVRU_VARIABLE;
-	uint32_t depth = variable.type = SYMBOL
-		? find_variable(&t.variable, e->context, variable.p)
-		: -1;
-
-	if (depth >= 0) {
-		variable_capture captures[] = { { t.variable, depth } };
-		statement_with(i, e, cont, t, 1, captures);
+	if (depth == 0) {
+		t.variable = v;
+		compile_state* s = statement_with(i, e, cont, t);
 
 	} else {
-		// TODO how to deal with errors???
+		t.variable = (ovru_variable){ OVRU_CAPTURE, e->capture_count };
+		compile_state* s = statement_with(i, e, cont, t);
+
+		variable_capture c[] = { { variable, v, depth } };
+		add_captures(s, 1, c);
 	}
 
 	return r;
@@ -245,7 +276,7 @@ int32_t statement_with_quote_apply(ovs_instruction* i, ovs_expr* args, const ovs
 
 	ovru_term t = { .quote=data };
 
-	statement_with(i, e, cont, t, 0, NULL);
+	statement_with(i, e, cont, t);
 	return OVRU_SUCCESS;
 }
 

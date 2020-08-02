@@ -3,6 +3,7 @@
  */
 
 typedef struct variable_capture {
+	ovs_expr_ref* symbol;
 	ovru_variable variable;
 	uint32_t depth;
 } variable_capture;
@@ -52,14 +53,14 @@ uint32_t find_variable(ovru_variable* result, compile_state* c, const ovs_expr_r
 
 	if (bdtrie_is_present(v)) {
 		*result = *(ovru_variable*)v.data;
-		return true;
+		return 0;
+
+	} else if (c->parent == NULL) {
+		return -1;
 
 	} else {
-		if (c->parent == NULL) {
-			return -1;
-		}
 		int32_t r = find_variable(result, c->parent, symbol);
-		return (r < 0) ? r : r + 1;
+		return (c->param_count < 0 || r < 0) ? r : r + 1;
 	}
 }
 
