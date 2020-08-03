@@ -41,6 +41,7 @@ compile_state* make_compile_state(compile_state* parent, ovs_context* oc, const 
 		free_variable_binding
 	};
 	s->capture_count = 0;
+	s->propagated_capture_count = 0;
 
 	s->body.term_count = 0;
 
@@ -51,12 +52,14 @@ compile_state* make_compile_state(compile_state* parent, ovs_context* oc, const 
 
 void without_parameters(compile_state* s) {
 	s->total_capture_count = s->parent->total_capture_count;
+	s->propagated_capture_count = s->parent->propagated_capture_count;
 
 	s->param_count = -1;
 }
 
 void with_parameters(compile_state* s, ovs_expr params) {
 	s->total_capture_count = 0;
+	s->propagated_capture_count = 0;
 
 	s->param_count = 0;
 	s->params = ovs_alias(params);
@@ -90,6 +93,9 @@ void with_captures(compile_state* s, uint32_t capture_count, variable_capture* c
 	}
 	for (int i = 0; i < capture_count; i++) {
 		s->captures[i + previous_capture_count] = captures[i];
+		if (captures[i].depth == 1) {
+			s->propagated_capture_count++;
+		}
 	}
 }
 
@@ -118,10 +124,11 @@ ovs_expr statement_function(compile_state* s, ovs_function_type* t) {
 	return e;
 }
 
-ovs_expr parameters_function(compile_state* s, ovs_context* c, ovs_function_type* t) {
+ovs_expr parameters_function(compile_state* s, ovs_expr params, ovs_function_type* t) {
 	parameters_data* p;
-	ovs_expr e = ovs_function(c, t, sizeof(parameters_data*), (void**)&p);
+	ovs_expr e = ovs_function(s->context, t, sizeof(parameters_data*), (void**)&p);
 	p->enclosing_state = ref_compile_state(s);
+	p->params = ovs_alias(params);
 	return e;
 }
 
@@ -231,17 +238,37 @@ int32_t statement_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_functi
 		i->values[1] = f;
 
 	} else {
+		uint32_t propagated_count = 0;
+		variable_capture* propagated_captures;
 		l->capture_count = s->capture_count;
-		if (l->capture_count > 0) {
-			;
+		if (s->capture_count > 0) {
+			l->captures = malloc(sizeof(ovru_variable) * l->capture_count);
+
+			if (s->propagated_capture_count > 0) {
+				propagated_captures = malloc(sizeof(variable_capture) * s->propagated_capture_count);
+			}
+
+			for (int i = 0; i < s->capture_count; i++) {
+				if (s->captures[i].depth > 1) {
+					variable_capture* propagated = &propagated_captures[propagated_count];
+					*propagated = s->captures[i];
+					propagated->depth--;
+					l->captures[i] = (ovru_variable){ OVRU_CAPTURE, propagated_count + p->total_capture_count };
+					propagated_count++;
+				} else {
+					l->captures[i] = s->captures[i].variable;
+				}
+			}
+
+			assert(propagated_count == s->propagated_capture_count);
 		}
 
 		s = statement_with(i, data, cont, t);
 
-		with_captures(s, propagated_count, propagated);
+		with_captures(s, propagated_count, propagated_captures);
 	}
 
-	return 91546;
+	return OVRU_SUCCESS;
 }
 
 int32_t statement_with_lambda_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* f) {
@@ -251,17 +278,12 @@ int32_t statement_with_lambda_apply(ovs_instruction* i, ovs_expr* args, const ov
 	ovs_expr body = args[2];
 	ovs_expr cont = args[3];
 
-	parameters_data* d = malloc(sizeof(parameters_data));
-	d->counter = ATOMIC_VAR_INIT(2);
-	d->params = ovs_root_symbol(OVS_DATA_NIL)->expr;
-	d->context = data->context;
-	d->statement_cont = body.p;
-	d->cont = cont.p;
+	ovs_expr lambda_params = ovs_root_symbol(OVS_DATA_NIL)->expr;
 
 	i->size = 3;
 	i->values[0] = ovs_alias(params);
-	i->values[1] = parameters_function(d, f->context, &parameters_with_function);
-	i->values[2] = parameters_function(d, f->context, &parameters_end_function);
+	i->values[1] = parameters_function(data->state, lambda_params, &parameters_with_function);
+	i->values[2] = parameters_function(data->state, lambda_params, &parameters_end_function);
 }
 
 int32_t statement_with_variable_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* f) {
@@ -272,7 +294,7 @@ int32_t statement_with_variable_apply(ovs_instruction* i, ovs_expr* args, const 
 	ovs_expr cont = args[2];
 
 	ovru_variable v;
-	uint32_t depth = variable.type = SYMBOL ? find_variable(&v, e->context, variable.p) : -1;
+	uint32_t depth = variable.type = OVS_SYMBOL ? find_variable(&v, e->state, variable.p) : -1;
 
 	if (depth < 0) {
 		// TODO how to deal with errors???
@@ -285,7 +307,7 @@ int32_t statement_with_variable_apply(ovs_instruction* i, ovs_expr* args, const 
 		compile_state* s = statement_with(i, e, cont, t);
 
 	} else {
-		t.variable = (ovru_variable){ OVRU_CAPTURE, e->total_capture_count };
+		t.variable = (ovru_variable){ OVRU_CAPTURE, e->state->total_capture_count };
 		compile_state* s = statement_with(i, e, cont, t);
 
 		variable_capture c[] = { { variable, v, depth } };

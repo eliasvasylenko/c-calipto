@@ -19,6 +19,7 @@ typedef struct compile_state {
 	uint32_t param_count;
 	ovs_expr params;
 
+	uint32_t propagated_capture_count;
 	uint32_t total_capture_count;
 
 	ovru_statement body;
@@ -160,7 +161,6 @@ ovs_function_info statement_inspect(const ovs_function_data* d) {
 typedef struct parameters_data {
 	compile_state* enclosing_state;
 	ovs_expr params;
-	const ovs_expr_ref* statement_cont;
 } parameters_data;
 
 ovs_expr parameters_represent(const ovs_function_data* d) {
@@ -171,7 +171,6 @@ void parameters_free(const void* d) {
 	parameters_data* data = *(parameters_data**)d;
 
 	free_compile_state(data->enclosing_state);
-	ovs_free(OVS_FUNCTION, data->statement_cont);
 	free(data);
 }
 
