@@ -231,7 +231,7 @@ int32_t statement_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_functi
 		assert(s->capture_count == 0);
 		l->capture_count = 0;
 
-		ovs_expr f = bind_lambda(l, NULL);
+		ovs_expr f = ovru_bind_lambda(t, NULL);
 
 		i->size = 2;
 		i->values[0] = ovs_alias(cont);
@@ -268,7 +268,7 @@ int32_t statement_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_functi
 		with_captures(s, propagated_count, propagated_captures);
 	}
 
-	return OVRU_SUCCESS;
+	return 0;
 }
 
 int32_t statement_with_lambda_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* f) {
@@ -317,7 +317,7 @@ int32_t statement_with_variable_apply(ovs_instruction* i, ovs_expr* args, const 
 		with_captures(s, 1, c);
 	}
 
-	return OVRU_SUCCESS;
+	return 0;
 }
 
 int32_t statement_with_quote_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* f) {
@@ -330,7 +330,7 @@ int32_t statement_with_quote_apply(ovs_instruction* i, ovs_expr* args, const ovs
 	ovru_term t = { .quote=data };
 
 	statement_with(i, e, cont, t);
-	return OVRU_SUCCESS;
+	return 0;
 }
 
 int32_t parameters_with_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* f) {
@@ -348,7 +348,7 @@ int32_t parameters_with_apply(ovs_instruction* i, ovs_expr* args, const ovs_func
 
 	ovs_dealias(params);
 
-	return OVRU_SUCCESS;
+	return 0;
 }
 
 int32_t parameters_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* f) {
@@ -364,7 +364,7 @@ int32_t parameters_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_funct
 	i->values[1] = statement_function(s, &statement_with_lambda_function);
 	i->values[2] = statement_function(s, &statement_with_variable_function);
 
-	return OVRU_SUCCESS;
+	return 0;
 }
 
 int32_t compile_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* f) {
@@ -380,7 +380,7 @@ int32_t compile_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_dat
 	i->values[1] = parameters_function(s, empty, body.p, &parameters_with_function);
 	i->values[2] = parameters_function(s, empty, body.p, &parameters_end_function);
 
-	return OVRU_SUCCESS;
+	return 0;
 }
 
 ovs_expr ovru_compiler(ovs_context* c) {

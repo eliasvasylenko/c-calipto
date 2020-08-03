@@ -1,18 +1,3 @@
-typedef enum ovru_result {
-	OVRU_SUCCESS,
-	OVRU_ATTEMPT_TO_CALL_NON_FUNCTION,
-	OVRU_ARGUMENT_COUNT_MISMATCH,
-	OVRU_EMPTY_STATEMENT,
-	OVRU_INVALID_STATEMENT_TERMINATOR,
-	OVRU_EMPTY_EXPRESSION,
-	OVRU_INVALID_EXPRESSION_TERMINATOR,
-	OVRU_INVALID_EXPRESSION_TYPE,
-	OVRU_INVALID_QUOTE_LENGTH,
-	OVRU_INVALID_LAMBDA_LENGTH,
-	OVRU_INVALID_PARAMETER_TERMINATOR,
-	OVRU_VARIABLE_NOT_IN_SCOPE
-} ovru_result;
-
 typedef enum ovru_variable_type {
 	OVRU_PARAMETER,
 	OVRU_CAPTURE
@@ -56,12 +41,7 @@ typedef struct ovru_lambda {
 	ovru_statement body;
 } ovru_lambda;
 
-typedef struct ovru_bound_lambda {
-	ovru_lambda* lambda;
-	ovs_expr* closure;
-} ovru_bound_lambda;
-
-ovs_expr bind_lambda(ovru_lambda* l, ovs_expr* closure);
+ovs_expr ovru_bind_lambda(ovru_term l, ovs_expr* closure);
 
 ovs_expr ovru_compile();
 

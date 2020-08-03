@@ -1,9 +1,15 @@
+typedef struct bound_lambda_data {
+	ovru_lambda* lambda;
+	ovs_expr* closure;
+} bound_lambda_data;
+
+
 ovs_expr represent_param(const void* p) {
 	return (ovs_expr){ OVS_SYMBOL, .p=*(ovs_expr_ref**)p };
 }
 
 ovs_expr bound_lambda_represent(const ovs_function_data* d) {
-	const ovru_bound_lambda* l = (ovru_bound_lambda*)(d + 1);
+	const bound_lambda_data* l = (bound_lambda_data*)(d + 1);
 
 	ovs_table* t = d->context->root_tables + OVS_DATA_LAMBDA;
 	ovs_expr form[] = {
@@ -22,7 +28,7 @@ ovs_expr bound_lambda_represent(const ovs_function_data* d) {
 }
 
 ovs_function_info bound_lambda_inspect(const ovs_function_data* d) {
-	const ovru_bound_lambda* l = ovs_function_extra_data(d);
+	const bound_lambda_data* l = ovs_function_extra_data(d);
 
 	return (ovs_function_info){ l->lambda->param_count, l->lambda->body.term_count };
 }
@@ -30,7 +36,7 @@ ovs_function_info bound_lambda_inspect(const ovs_function_data* d) {
 void eval_statement(ovs_context* c, ovs_instruction* result, ovru_statement s, const ovs_expr* args, const ovs_expr* closure);
 
 int32_t bound_lambda_apply(ovs_instruction* result, ovs_expr* args, const ovs_function_data* d) {
-	const ovru_bound_lambda* l = ovs_function_extra_data(d);
+	const bound_lambda_data* l = ovs_function_extra_data(d);
 
 	eval_statement(d->context, result, l->lambda->body, args + 1, l->closure);
 
@@ -38,7 +44,7 @@ int32_t bound_lambda_apply(ovs_instruction* result, ovs_expr* args, const ovs_fu
 }
 
 void bound_lambda_free(const void* d) {
-	const ovru_bound_lambda* l = d;
+	const bound_lambda_data* l = d;
 	for (int i = 0; i < l->lambda->capture_count; i++) {
 		ovs_dealias(l->closure[i]);
 	}
@@ -54,12 +60,12 @@ static ovs_function_type bound_lambda_function = {
 	bound_lambda_free
 };
 
-ovs_expr bind_lambda(ovru_term l, ovs_expr* closure) {
-		ovru_bound_lambda* b;
+ovs_expr ovru_bind_lambda(ovru_term l, ovs_expr* closure) {
+		bound_lambda_data* b;
 		ovs_expr f = ovs_function(
 				s->context,
 				&bound_lambda_function,
-				sizeof(ovru_bound_lambda),
+				sizeof(bound_lambda_data),
 				(void**)&b);
 		b->lambda = ovru_alias_term(l).lambda;
 		b->closure = closure;

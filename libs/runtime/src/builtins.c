@@ -25,7 +25,7 @@ void no_free(const void* d) {}
 
 int32_t exit_apply(ovs_instruction* r, ovs_expr* args, const ovs_function_data* d) {
 	r->size = 0;
-	return OVRU_SUCCESS;
+	return 0;
 }
 
 ovs_function_info exit_inspect(const ovs_function_data* d) {
@@ -70,7 +70,7 @@ int32_t scanner_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_dat
 	i->size = 1;
 	i->values[0] = ovs_alias(fail);
 
-	return OVRU_SUCCESS;
+	return 0;
 }
 
 void scanner_free(const void* d) {
@@ -155,7 +155,7 @@ int32_t printer_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_dat
 
 	}
 
-	return OVRU_SUCCESS;
+	return 0;
 }
 
 void printer_free(const void* d) {
@@ -217,7 +217,7 @@ int32_t cons_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* 
 	i->values[0] = ovs_alias(cont);
 	i->values[1] = ovs_cons(t, car, cdr);
 
-	return OVRU_SUCCESS;
+	return 0;
 }
 
 void cons_free(const void* d) {
@@ -275,7 +275,7 @@ int32_t des_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d
 		i->values[2] = ovs_cdr(e);
 	}
 
-	return OVRU_SUCCESS;
+	return 0;
 }
 
 void des_free(const void* d) {
@@ -320,7 +320,7 @@ int32_t eq_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d)
 	i->size = 1;
 	i->values[0] = ovs_alias(ovs_is_eq(e_a, e_b) ? t : f);
 
-	return OVRU_SUCCESS;
+	return 0;
 }
 
 static ovs_function_type eq_function = {

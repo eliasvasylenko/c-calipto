@@ -56,16 +56,13 @@ void free_lambda(ovru_lambda* l) {
 	if (atomic_fetch_add(&l->ref_count, -1) > 1) {
 		return;
 	}
-	if (l->param_count > 0) {
-		for (int i = 0; i < l->param_count; i++) {
-			ovs_free(OVS_SYMBOL, l->params[i]);
-		}
-		free(l->params);
-	}
+	ovs_dealias(l->params);
 	if (l->capture_count > 0) {
 		free(l->captures);
 	}
-	ovru_free(l->body);
+	for (int i = 0; i < l->body.term_count; i++) {
+		ovru_dealias_term(l->body.terms[i]);
+	}
 	free(l);
 }
 
