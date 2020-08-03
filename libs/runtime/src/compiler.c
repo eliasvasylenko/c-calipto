@@ -12,7 +12,6 @@
 #include "c-ohvu/data/bdtrie.h"
 #include "c-ohvu/data/sexpr.h"
 #include "c-ohvu/runtime/compiler.h"
-#include "lambda.h"
 #include "compilerapi.h"
 
 void* get_variable_binding(uint32_t key_size, const void* key_data, const void* value_data, bdtrie_node* owner) {

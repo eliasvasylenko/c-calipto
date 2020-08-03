@@ -1,8 +1,3 @@
-typedef struct bound_lambda {
-	ovru_lambda* lambda;
-	ovs_expr* closure;
-} ovru_bound_lambda;
-
 ovs_expr represent_param(const void* p) {
 	return (ovs_expr){ OVS_SYMBOL, .p=*(ovs_expr_ref**)p };
 }
@@ -59,16 +54,16 @@ static ovs_function_type bound_lambda_function = {
 	bound_lambda_free
 };
 
-ovs_expr bind_lambda(ovru_lambda* l, ovs_expr* closure) {
+ovs_expr bind_lambda(ovru_term l, ovs_expr* closure) {
 		ovru_bound_lambda* b;
 		ovs_expr f = ovs_function(
 				s->context,
 				&bound_lambda_function,
-				sizeof(bound_lambda),
+				sizeof(ovru_bound_lambda),
 				(void**)&b);
-		b->lambda = ref_lambda(l);
+		b->lambda = ovru_alias_term(l).lambda;
 		b->closure = closure;
-		for (int i = 0; i < l->capture_count; i++) {
+		for (int i = 0; i < l.lambda->capture_count; i++) {
 			ovs_alias(b->closure[i]);
 		}
 		return f;

@@ -56,10 +56,14 @@ typedef struct ovru_lambda {
 	ovru_statement body;
 } ovru_lambda;
 
-ovru_result ovru_compile(
-		ovru_statement* s, 
-		ovs_context* c, const ovs_expr e,
-		const uint32_t param_count, const ovs_expr_ref** params);
+typedef struct ovru_bound_lambda {
+	ovru_lambda* lambda;
+	ovs_expr* closure;
+} ovru_bound_lambda;
+
+ovs_expr bind_lambda(ovru_lambda* l, ovs_expr* closure);
+
+ovs_expr ovru_compile();
 
 ovru_term ovru_alias_term(ovru_term t);
 void ovru_dealias_term(ovru_term t);
