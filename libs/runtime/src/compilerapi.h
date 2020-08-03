@@ -25,20 +25,33 @@ typedef struct compile_state {
 	const ovs_expr_ref* cont;
 } compile_state;
 
-void compile_state_free(compile_state* c) {
+compile_state* ref_compile_state(compile_state* s) {
+	atomic_fetch_add(&s->counter, 1);
+	return s;
+}
+
+void free_compile_state(compile_state* c) {
 	if (atomic_fetch_add(&c->counter, -1) == 1) {
-		compile_state_free(c->parent);
+		free_compile_state(c->parent);
 
 		if (c->capture_count > 0)
 			free(c->captures);
 		ovs_dealias(c->params);
 		bdtrie_clear(&c->variables);
 
-		if (c->body.term_count > 0)
+		if (c->body.term_count > 0) {
+			for (int i = 0; i < c->body.term_count; i++) {
+				ovru_dealias_term(c->body.terms[i]);
+			}
 			free(c->body.terms);
+		}
 		
 		ovs_free(OVS_FUNCTION, c->cont);
 	}
+}
+
+bool is_unique_compile_state(compile_state* s) {
+	return atomic_load(&s->counter) == 1;
 }
 
 /*
@@ -81,7 +94,7 @@ ovs_expr statement_represent(const ovs_function_data* d) {
 void statement_free(const void* d) {
 	statement_data* data = *(statement_data**)d;
 
-	compile_state_free(data->state);
+	free_compile_state(data->state);
 	free(data);
 }
 
@@ -157,7 +170,7 @@ ovs_expr parameters_represent(const ovs_function_data* d) {
 void parameters_free(const void* d) {
 	parameters_data* data = *(parameters_data**)d;
 
-	compile_state_free(data->enclosing_state);
+	free_compile_state(data->enclosing_state);
 	ovs_free(OVS_FUNCTION, data->statement_cont);
 	free(data);
 }

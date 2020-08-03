@@ -50,7 +50,7 @@ typedef struct ovru_statement {
 typedef struct ovru_lambda {
 	_Atomic(uint32_t) ref_count;
 	uint32_t param_count;
-	ovs_expr_ref** params; // always SYMBOL
+	ovs_expr params; // as linked list
 	uint32_t capture_count;
 	ovru_variable* captures; // indices into vars of lexical context
 	ovru_statement body;
@@ -61,5 +61,6 @@ ovru_result ovru_compile(
 		ovs_context* c, const ovs_expr e,
 		const uint32_t param_count, const ovs_expr_ref** params);
 
-void ovru_free(ovru_statement s);
+ovru_term ovru_alias_term(ovru_term t);
+void ovru_dealias_term(ovru_term t);
 

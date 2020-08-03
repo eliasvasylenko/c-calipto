@@ -12,6 +12,7 @@
 #include "c-ohvu/data/bdtrie.h"
 #include "c-ohvu/data/sexpr.h"
 #include "c-ohvu/runtime/compiler.h"
+#include "lambda.h"
 #include "compilerapi.h"
 
 void* get_variable_binding(uint32_t key_size, const void* key_data, const void* value_data, bdtrie_node* owner) {
@@ -30,7 +31,7 @@ compile_state* make_compile_state(compile_state* parent, ovs_context* oc, const 
 	compile_state* s = malloc(sizeof(compile_state));
 	s->counter = ATOMIC_VAR_INIT(0);
 
-	s->parent = parent;
+	s->parent = ref_compile_state(parent);
 	s->context = oc;
 
 	s->variables = (bdtrie){
@@ -103,7 +104,7 @@ void with_term(compile_state* s, ovru_term t) {
 		}
 		free(b.terms);
 	}
-	s->body.terms[b.term_count] = t;
+	s->body.terms[b.term_count] = ovru_alias_term(t);
 }
 
 /*
@@ -113,21 +114,21 @@ void with_term(compile_state* s, ovru_term t) {
 ovs_expr statement_function(compile_state* s, ovs_function_type* t) {
 	statement_data* d;
 	ovs_expr e = ovs_function(s->context, t, sizeof(statement_data*), (void**)&d);
-	d->state = s;
+	d->state = ref_compile_state(s);
 	return e;
 }
 
-ovs_expr parameters_function(parameters_data* d, ovs_context* c, ovs_function_type* t) {
-	parameters_data** p;
+ovs_expr parameters_function(compile_state* s, ovs_context* c, ovs_function_type* t) {
+	parameters_data* p;
 	ovs_expr e = ovs_function(c, t, sizeof(parameters_data*), (void**)&p);
-	*p = d;
+	p->enclosing_state = ref_compile_state(s);
 	return e;
 }
 
 compile_state* statement_with(ovs_instruction* i, statement_data* e, ovs_expr cont, ovru_term t) {
 	compile_state* s = e->state;
-	if (atomic_load(&s->counter) > 1) {
-		s = make_compile_state(e->state, e->state->context, e->state->cont);
+	if (!is_unique_compile_state(s)) {
+		s = make_compile_state(s, s->context, s->cont);
 		without_parameters(s);
 	}
 
@@ -143,6 +144,15 @@ compile_state* statement_with(ovs_instruction* i, statement_data* e, ovs_expr co
 	return s;
 }
 
+/**
+ * Flatten a stack of compile_states down to the nearest enclosing lambda.
+ *
+ * Flattening here means concatenating all the partial lists of captures and terms
+ *
+ * This is deferred until the enclosing lambda is completed for two reasons:
+ * - to avoid redundant allocation and copying when concatenating capture and term lists,
+ * - so that we don't need to populate the lookup table for parameters and captures.
+ */
 compile_state* flatten_compile_state(compile_state* s, int32_t term_count, int32_t capture_count) {
 	term_count += s->body.term_count;
 	capture_count += s->capture_count;
@@ -151,11 +161,13 @@ compile_state* flatten_compile_state(compile_state* s, int32_t term_count, int32
 
 	if (s->param_count >= 0) {
 		f = make_compile_state(s->parent, s->context, s->cont);
+		ref_compile_state(f);
 
 		f->param_count = s->param_count;
 		f->params = ovs_alias(s->params);
 
 		f->capture_count = capture_count;
+		f->total_capture_count = capture_count;
 		if (f->capture_count > 0)
 			f->captures = malloc(sizeof(ovru_variable) * f->capture_count);
 
@@ -178,48 +190,55 @@ compile_state* flatten_compile_state(compile_state* s, int32_t term_count, int32
 		f->body.terms[i] = s->body.terms[i];
 	}
 
+	free_compile_state(s);
+
 	return f;
 }
 
 int32_t statement_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* f) {
 	statement_data* data = ovs_function_extra_data(f);
-
 	compile_state* s = data->state;
+	compile_state* p = s->parent;
+	ovs_expr cont = { OVS_FUNCTION, .p=s->cont };
+
 	if (s->param_count < 0) {
 		s = flatten_compile_state(s, 0, 0);
 	}
 
+	ovru_lambda* l = malloc(sizeof(ovru_lambda));
 	ovru_term t = (ovru_term){ .type=OVRU_LAMBDA, .lambda=l };
 
-	if (data->context->parent == NULL) {
-		// TODO make function from lambda
-		ovs_function f;
+	l->ref_count = ATOMIC_VAR_INIT(1);
+	l->param_count = s->param_count;
+	l->params = ovs_alias(s->params);
 
-		ovru_bound_lambda* b;
+	l->body.term_count = s->body.term_count;
+	if (l->body.term_count > 0) {
+		l->body.terms = malloc(sizeof(ovru_term) * l->body.term_count);
+		for (int i = 0; i < l->body.term_count; i++) {
+			l->body.terms[i] = ovru_alias_term(s->body.terms[i]);
+		}
+	}
+
+	if (p == NULL) {
+		assert(s->capture_count == 0);
+		l->capture_count = 0;
+
+		ovs_expr f = bind_lambda(l, NULL);
 
 		i->size = 2;
-		i->values[0] = ovs_alias(data->cont);
-		i->values[1] = ovs_function(
-				data->context->ovs_context,
-				&lambda_function,
-				sizeof(ovru_bound_lambda),
-				(void**)&b);
-
-		b->lambda = l;
-		b->closure = NULL;
+		i->values[0] = ovs_alias(cont);
+		i->values[1] = f;
 
 	} else {
-		// TODO statament_with on parent continue
-		ovru_term t; // = lambda
-
-		compile_state* s = statement_with(i, data, data_cont, t);
-
-		s->capture_count = capture_count;
-		s->captures = malloc(sizeof(variable_capture) * capture_count);
-		for (int i = 0; i < capture_count; i++) {
-			s->captures[i] = captures[i];
-			s->captures[i].depth--;
+		l->capture_count = s->capture_count;
+		if (l->capture_count > 0) {
+			;
 		}
+
+		s = statement_with(i, data, cont, t);
+
+		with_captures(s, propagated_count, propagated);
 	}
 
 	return 91546;
