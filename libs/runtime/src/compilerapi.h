@@ -3,7 +3,7 @@
  */
 
 typedef struct variable_capture {
-	ovs_expr_ref* symbol;
+	const ovs_expr_ref* symbol;
 	ovru_variable variable;
 	uint32_t depth;
 } variable_capture;
@@ -159,8 +159,9 @@ ovs_function_info statement_inspect(const ovs_function_data* d) {
  */
 
 typedef struct parameters_data {
-	compile_state* enclosing_state;
+	compile_state* state;
 	ovs_expr params;
+	const ovs_expr_ref* cont;
 } parameters_data;
 
 ovs_expr parameters_represent(const ovs_function_data* d) {
@@ -170,7 +171,7 @@ ovs_expr parameters_represent(const ovs_function_data* d) {
 void parameters_free(const void* d) {
 	parameters_data* data = *(parameters_data**)d;
 
-	free_compile_state(data->enclosing_state);
+	free_compile_state(data->state);
 	free(data);
 }
 

@@ -124,11 +124,12 @@ ovs_expr statement_function(compile_state* s, ovs_function_type* t) {
 	return e;
 }
 
-ovs_expr parameters_function(compile_state* s, ovs_expr params, ovs_function_type* t) {
+ovs_expr parameters_function(compile_state* s, ovs_expr params, const ovs_expr_ref* cont, ovs_function_type* t) {
 	parameters_data* p;
 	ovs_expr e = ovs_function(s->context, t, sizeof(parameters_data*), (void**)&p);
-	p->enclosing_state = ref_compile_state(s);
+	p->state = ref_compile_state(s);
 	p->params = ovs_alias(params);
+	p->cont = ovs_ref(cont);
 	return e;
 }
 
@@ -279,11 +280,14 @@ int32_t statement_with_lambda_apply(ovs_instruction* i, ovs_expr* args, const ov
 	ovs_expr cont = args[3];
 
 	ovs_expr lambda_params = ovs_root_symbol(OVS_DATA_NIL)->expr;
+	compile_state* s = make_compile_state(data->state, data->state->context, cont.p);
 
 	i->size = 3;
 	i->values[0] = ovs_alias(params);
-	i->values[1] = parameters_function(data->state, lambda_params, &parameters_with_function);
-	i->values[2] = parameters_function(data->state, lambda_params, &parameters_end_function);
+	i->values[1] = parameters_function(s, lambda_params, body.p, &parameters_with_function);
+	i->values[2] = parameters_function(s, lambda_params, body.p, &parameters_end_function);
+
+	ovs_dealias(lambda_params);
 }
 
 int32_t statement_with_variable_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* f) {
@@ -310,11 +314,11 @@ int32_t statement_with_variable_apply(ovs_instruction* i, ovs_expr* args, const 
 		t.variable = (ovru_variable){ OVRU_CAPTURE, e->state->total_capture_count };
 		compile_state* s = statement_with(i, e, cont, t);
 
-		variable_capture c[] = { { variable, v, depth } };
+		variable_capture c[] = { { variable.p, v, depth } };
 		with_captures(s, 1, c);
 	}
 
-	return r;
+	return OVRU_SUCCESS;
 }
 
 int32_t statement_with_quote_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* f) {
@@ -336,17 +340,14 @@ int32_t parameters_with_apply(ovs_instruction* i, ovs_expr* args, const ovs_func
 	ovs_expr param = args[1];
 	ovs_expr cont = args[2];
 
-	parameters_data* d = malloc(sizeof(parameters_data));
-	d->counter = ATOMIC_VAR_INIT(2);
-	d->params = ovs_cons(&f->context->root_tables[OVS_UNQUALIFIED], param, e->params);
-	d->context = e->context;
-	d->statement_cont = e->statement_cont;
-	d->cont = e->cont;
+	ovs_expr params = ovs_cons(&f->context->root_tables[OVS_UNQUALIFIED], param, e->params);
 
 	i->size = 3;
 	i->values[0] = ovs_alias(cont);
-	i->values[1] = parameters_function(d, f->context, &parameters_with_function);
-	i->values[2] = parameters_function(d, f->context, &parameters_end_function);
+	i->values[1] = parameters_function(e->state, params, e->cont, &parameters_with_function);
+	i->values[2] = parameters_function(e->state, params, e->cont, &parameters_end_function);
+
+	ovs_dealias(params);
 
 	return OVRU_SUCCESS;
 }
@@ -354,16 +355,15 @@ int32_t parameters_with_apply(ovs_instruction* i, ovs_expr* args, const ovs_func
 int32_t parameters_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* f) {
 	parameters_data* e = ovs_function_extra_data(f);
 
-	ovs_expr cont = (ovs_expr){ OVS_FUNCTION, .p=e->statement_cont };
+	ovs_expr cont = (ovs_expr){ OVS_FUNCTION, .p=e->cont };
 
-	statement_data* d = malloc(sizeof(statement_data));
-	d->state = make_compile_state(NULL, f->context, e->cont);
-	with_parameters(d->state, e->params);
+	compile_state* s;
+	with_parameters(e->state, e->params);
 
 	i->size = 3;
 	i->values[0] = ovs_alias(cont);
-	i->values[1] = statement_function(d, &statement_with_lambda_function);
-	i->values[2] = statement_function(d, &statement_with_variable_function);
+	i->values[1] = statement_function(s, &statement_with_lambda_function);
+	i->values[2] = statement_function(s, &statement_with_variable_function);
 
 	return OVRU_SUCCESS;
 }
@@ -373,16 +373,13 @@ int32_t compile_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_dat
 	ovs_expr body = args[2];
 	ovs_expr cont = args[3];
 
-	parameters_data* d = malloc(sizeof(parameters_data));
-	d->params = ovs_root_symbol(OVS_DATA_NIL)->expr;
-	d->state = NULL;
-	d->statement_cont = body.p;
-	d->cont = cont.p;
+	compile_state* s = make_compile_state(NULL, f->context, cont.p);
+	ovs_expr empty = ovs_root_symbol(OVS_DATA_NIL)->expr;
 
 	i->size = 3;
 	i->values[0] = ovs_alias(params);
-	i->values[1] = parameters_function(d, f->context, &parameters_with_function);
-	i->values[2] = parameters_function(d, f->context, &parameters_end_function);
+	i->values[1] = parameters_function(s, empty, body.p, &parameters_with_function);
+	i->values[2] = parameters_function(s, empty, body.p, &parameters_end_function);
 
 	return OVRU_SUCCESS;
 }
