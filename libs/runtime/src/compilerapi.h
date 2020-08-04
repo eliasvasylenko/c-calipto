@@ -1,4 +1,135 @@
 /*
+ * Lambda
+ */
+
+typedef enum ovru_variable_type {
+	OVRU_PARAMETER,
+	OVRU_CAPTURE
+} ovru_variable_type;
+
+typedef struct ovru_variable {
+	ovru_variable_type type : 1;
+	uint32_t index : 31;
+} ovru_variable;
+
+typedef enum ovru_term_type {
+	OVRU_LAMBDA = -1,
+	OVRU_VARIABLE = -2
+	// anything else is an ovs_expr_type and represents a QUOTE
+} ovru_term_type;
+
+struct ovru_lambda;
+
+typedef union ovru_term {
+	struct {
+		ovru_term_type type;
+		union {
+			ovru_variable variable;
+			struct ovru_lambda* lambda;
+		};
+	};
+	ovs_expr quote;
+} ovru_term;
+
+typedef struct ovru_statement {
+	uint32_t term_count;
+	ovru_term* terms; // borrowed, always QUOTE | LAMBDA | VARIABLE
+} ovru_statement;
+
+typedef struct ovru_lambda {
+	_Atomic(uint32_t) ref_count;
+	uint32_t param_count;
+	ovs_expr params; // as linked list
+	uint32_t capture_count;
+	ovru_variable* captures; // indices into vars of lexical context
+	ovru_statement body;
+} ovru_lambda;
+
+ovru_term ovru_alias_term(ovru_term t);
+void ovru_dealias_term(ovru_term t);
+
+ovru_lambda* ref_lambda(ovru_lambda* l) {
+	atomic_fetch_add(&l->ref_count, 1);
+	return l;
+}
+
+void free_lambda(ovru_lambda* l) {
+	if (atomic_fetch_add(&l->ref_count, -1) > 1) {
+		return;
+	}
+	ovs_dealias(l->params);
+	if (l->capture_count > 0) {
+		free(l->captures);
+	}
+	for (int i = 0; i < l->body.term_count; i++) {
+		ovru_dealias_term(l->body.terms[i]);
+	}
+	free(l);
+}
+
+ovru_term ovru_alias_term(ovru_term t) {
+	if (t.type == OVRU_LAMBDA) {
+		ref_lambda(t.lambda);
+	}
+	return t;
+}
+
+void ovru_dealias_term(ovru_term t) {
+	if (t.type == OVRU_LAMBDA) {
+		free_lambda(t.lambda);
+	}
+}
+
+typedef struct bound_lambda_data {
+	ovru_lambda* lambda;
+	ovs_expr* closure;
+} bound_lambda_data;
+
+ovs_expr bound_lambda_represent(const ovs_function_data* d) {
+	const bound_lambda_data* l = (bound_lambda_data*)(d + 1);
+
+	ovs_table* t = d->context->root_tables + OVS_DATA_LAMBDA;
+	ovs_expr form[] = {
+		l->lambda->params,
+		ovs_list(t, 0, NULL) // TODO
+	};
+	uint32_t size = sizeof(form) / sizeof(ovs_expr);
+
+	ovs_expr r = ovs_list(t, 2, form);
+
+	for (int i = 0; i < size; i++) {
+		ovs_dealias(form[i]);
+	}
+
+	return r;
+}
+
+ovs_function_info bound_lambda_inspect(const ovs_function_data* d) {
+	const bound_lambda_data* l = ovs_function_extra_data(d);
+
+	return (ovs_function_info){ l->lambda->param_count, l->lambda->body.term_count };
+}
+
+int32_t bound_lambda_apply(ovs_instruction* result, ovs_expr* args, const ovs_function_data* d);
+
+void bound_lambda_free(const void* d) {
+	const bound_lambda_data* l = d;
+	for (int i = 0; i < l->lambda->capture_count; i++) {
+		ovs_dealias(l->closure[i]);
+	}
+	free(l->closure);
+	free_lambda(l->lambda);
+}
+
+static ovs_function_type bound_lambda_function = {
+	u"lambda",
+	bound_lambda_represent,
+	bound_lambda_inspect,
+	bound_lambda_apply,
+	bound_lambda_free
+};
+
+/*
  * Compiler State
  */
 
@@ -26,207 +157,29 @@ typedef struct compile_state {
 	const ovs_expr_ref* cont;
 } compile_state;
 
-compile_state* ref_compile_state(compile_state* s) {
-	atomic_fetch_add(&s->counter, 1);
-	return s;
-}
+compile_state* make_compile_state(compile_state* parent, ovs_context* oc, const ovs_expr_ref* cont);
 
-void free_compile_state(compile_state* c) {
-	if (atomic_fetch_add(&c->counter, -1) == 1) {
-		free_compile_state(c->parent);
+compile_state* ref_compile_state(compile_state* s);
 
-		if (c->capture_count > 0)
-			free(c->captures);
-		ovs_dealias(c->params);
-		bdtrie_clear(&c->variables);
+void free_compile_state(compile_state* c);
 
-		if (c->body.term_count > 0) {
-			for (int i = 0; i < c->body.term_count; i++) {
-				ovru_dealias_term(c->body.terms[i]);
-			}
-			free(c->body.terms);
-		}
-		
-		ovs_free(OVS_FUNCTION, c->cont);
-	}
-}
+bool is_unique_compile_state(compile_state* s);
 
-bool is_unique_compile_state(compile_state* s) {
-	return atomic_load(&s->counter) == 1;
-}
-
-/*
- * Find the variable in the enclosing lexical scope of the current expression by traversing
- * down the stack of enclosing lambdas.
- *
- * If the variable is found, return its depth and set `result` to the variable's location
- * at that depth.
- *
- * If the variable is not found, return -1;
- */
-uint32_t find_variable(ovru_variable* result, compile_state* c, const ovs_expr_ref* symbol) {
-	bdtrie_value v = bdtrie_find(&c->variables, sizeof(ovs_expr_ref*), &symbol);
-
-	if (bdtrie_is_present(v)) {
-		*result = *(ovru_variable*)v.data;
-		return 0;
-
-	} else if (c->parent == NULL) {
-		return -1;
-
-	} else {
-		int32_t r = find_variable(result, c->parent, symbol);
-		return (c->param_count < 0 || r < 0) ? r : r + 1;
-	}
-}
+uint32_t find_variable(ovru_variable* result, compile_state* c, const ovs_expr_ref* symbol);
 
 /*
  * Statement Function
  */
 
-typedef struct statement_data {
-	compile_state* state;
-} statement_data;
-
-ovs_expr statement_represent(const ovs_function_data* d) {
-	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
-}
-
-void statement_free(const void* d) {
-	statement_data* data = *(statement_data**)d;
-
-	free_compile_state(data->state);
-	free(data);
-}
-
-ovs_function_info statement_inspect(const ovs_function_data* d);
-
-int32_t statement_with_lambda_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d);
-int32_t statement_with_variable_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d);
-int32_t statement_with_quote_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d);
-int32_t statement_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d);
-
-static ovs_function_type statement_with_lambda_function = {
-	u"statement-with-lambda",
-	statement_represent,
-	statement_inspect,
-	statement_with_lambda_apply,
-	statement_free
-};
-
-static ovs_function_type statement_with_variable_function = {
-	u"statement-with-variable",
-	statement_represent,
-	statement_inspect,
-	statement_with_variable_apply,
-	statement_free
-};
-
-static ovs_function_type statement_with_quote_function = {
-	u"statement-with-quote",
-	statement_represent,
-	statement_inspect,
-	statement_with_quote_apply,
-	statement_free
-};
-
-static ovs_function_type statement_end_function = {
-	u"statement-end",
-	statement_represent,
-	statement_inspect,
-	statement_end_apply,
-	statement_free
-};
-
-ovs_function_info statement_inspect(const ovs_function_data* d) {
-	if (d->type == &statement_with_lambda_function)
-		return (ovs_function_info){ 3, 2 };
-
-	else if (d->type == &statement_with_lambda_function)
-		return (ovs_function_info){ 2, 2 };
-
-	else if (d->type == &statement_with_quote_function)
-		return (ovs_function_info){ 2, 2 };
-
-	else if (d->type == &statement_end_function)
-		return (ovs_function_info){ 1, 2 };
-
-	assert(false);
-}
+ovs_expr statement_function(compile_state* s, ovs_function_type* t);
 
 /*
  * Parameters Function
  */
 
-typedef struct parameters_data {
-	compile_state* state;
-	ovs_expr params;
-	const ovs_expr_ref* cont;
-} parameters_data;
-
-ovs_expr parameters_represent(const ovs_function_data* d) {
-	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
-}
-
-void parameters_free(const void* d) {
-	parameters_data* data = *(parameters_data**)d;
-
-	free_compile_state(data->state);
-	free(data);
-}
-
-ovs_function_info parameters_inspect(const ovs_function_data* d);
-
-int32_t parameters_with_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d);
-int32_t parameters_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d);
-
-static ovs_function_type parameters_with_function = {
-	u"parameters-with",
-	parameters_represent,
-	parameters_inspect,
-	parameters_with_apply,
-	parameters_free
-};
-
-static ovs_function_type parameters_end_function = {
-	u"parameters-end",
-	parameters_represent,
-	parameters_inspect,
-	parameters_end_apply,
-	parameters_free
-};
-
-ovs_function_info parameters_inspect(const ovs_function_data* d) {
-	if (d->type == &parameters_with_function)
-		return (ovs_function_info){ 2, 3 };
-
-	else if (d->type == &parameters_end_function)
-		return (ovs_function_info){ 1, 3 };
-
-	assert(false);
-}
+ovs_expr parameters_function(compile_state* s, ovs_expr params, const ovs_expr_ref* cont, ovs_function_type* t);
 
 /*
  * Compile
  */
-
-ovs_expr compile_represent(const ovs_function_data* d) {
-	return ovs_symbol(d->context->root_tables + OVS_SYSTEM_BUILTIN, u_strlen(d->type->name), d->type->name);
-}
-
-ovs_function_info compile_inspect(const ovs_function_data* d) {
-	return (ovs_function_info){ 3, 3 };
-}
-
-void compile_free(const void* d) {}
-
-int32_t compile_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_data* d);
-
-static ovs_function_type compile_function = {
-	u"compile",
-	compile_represent,
-	compile_inspect,
-	compile_apply,
-	compile_free
-};
 
