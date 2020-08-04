@@ -44,8 +44,8 @@ int32_t compile_apply(ovs_instruction* i, ovs_expr* args, const ovs_function_dat
 
 	i->size = 3;
 	i->values[0] = ovs_alias(params);
-	i->values[1] = parameters_function(s, empty, body.p, &parameters_with_function);
-	i->values[2] = parameters_function(s, empty, body.p, &parameters_end_function);
+	i->values[1] = parameters_function(s, empty, body.p, PARAMETERS_WITH);
+	i->values[2] = parameters_function(s, empty, body.p, PARAMETERS_END);
 
 	return 0;
 }

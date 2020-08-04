@@ -1,3 +1,15 @@
+#include <stdbool.h>
+#include <stdatomic.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <assert.h>
+
+#include <unicode/utypes.h>
+#include <unicode/ucnv.h>
+
+#include "c-ohvu/io/stringref.h"
+#include "c-ohvu/data/bdtrie.h"
 #include "c-ohvu/data/sexpr.h"
 #include "c-ohvu/runtime/evaluator.h"
 #include "c-ohvu/runtime/compiler.h"
@@ -73,9 +85,27 @@ ovs_function_info statement_inspect(const ovs_function_data* d) {
 	assert(false);
 }
 
-ovs_expr statement_function(compile_state* s, ovs_function_type* t) {
+ovs_expr statement_function(compile_state* s, statement_function_type t) {
+	ovs_function_type* f;
+	switch (t) {
+		case STATEMENT_WITH_LAMBDA:
+			f = &statement_with_lambda_function;
+			break;
+
+		case STATEMENT_WITH_VARIABLE:
+			f = &statement_with_variable_function;
+			break;
+
+		case STATEMENT_WITH_QUOTE:
+			f = &statement_with_quote_function;
+			break;
+
+		case STATEMENT_END:
+			f = &statement_end_function;
+			break;
+	}
 	statement_data* d;
-	ovs_expr e = ovs_function(s->context, t, sizeof(statement_data*), (void**)&d);
+	ovs_expr e = ovs_function(s->context, f, sizeof(statement_data*), (void**)&d);
 	d->state = ref_compile_state(s);
 	return e;
 }
@@ -84,17 +114,17 @@ compile_state* statement_with(ovs_instruction* i, statement_data* e, ovs_expr co
 	compile_state* s = e->state;
 	if (!is_unique_compile_state(s)) {
 		s = make_compile_state(s, s->context, s->cont);
-		without_parameters(s);
+		compile_state_without_parameters(s);
 	}
 
-	with_term(s, t);
+	compile_state_with_term(s, t);
 
 	i->size = 5;
 	i->values[0] = ovs_alias(cont);
-	i->values[1] = statement_function(s, &statement_with_lambda_function);
-	i->values[2] = statement_function(s, &statement_with_variable_function);
-	i->values[3] = statement_function(s, &statement_with_quote_function);
-	i->values[4] = statement_function(s, &statement_end_function);
+	i->values[1] = statement_function(s, STATEMENT_WITH_LAMBDA);
+	i->values[2] = statement_function(s, STATEMENT_WITH_VARIABLE);
+	i->values[3] = statement_function(s, STATEMENT_WITH_QUOTE);
+	i->values[4] = statement_function(s, STATEMENT_END);
 
 	return s;
 }
@@ -179,9 +209,7 @@ int32_t statement_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_functi
 		assert(s->capture_count == 0);
 		l->capture_count = 0;
 
-		bound_lambda_data* l;
-		ovs_expr f = ovs_function(s->context, &bound_lambda_function, sizeof(bound_lambda_data), (void**)&l);
-		*l = (bound_lambda_data){ ref_lambda(t.lambda), NULL };
+		ovs_expr f = ovru_bind_lambda(s->context, t.lambda);
 
 		i->size = 2;
 		i->values[0] = ovs_alias(cont);
@@ -215,7 +243,7 @@ int32_t statement_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_functi
 
 		s = statement_with(i, data, cont, t);
 
-		with_captures(s, propagated_count, propagated_captures);
+		compile_state_with_captures(s, propagated_count, propagated_captures);
 	}
 
 	return 0;
@@ -233,8 +261,8 @@ int32_t statement_with_lambda_apply(ovs_instruction* i, ovs_expr* args, const ov
 
 	i->size = 3;
 	i->values[0] = ovs_alias(params);
-	i->values[1] = parameters_function(s, lambda_params, body.p, &parameters_with_function);
-	i->values[2] = parameters_function(s, lambda_params, body.p, &parameters_end_function);
+	i->values[1] = parameters_function(s, lambda_params, body.p, PARAMETERS_WITH);
+	i->values[2] = parameters_function(s, lambda_params, body.p, PARAMETERS_END);
 
 	ovs_dealias(lambda_params);
 }
@@ -264,7 +292,7 @@ int32_t statement_with_variable_apply(ovs_instruction* i, ovs_expr* args, const 
 		compile_state* s = statement_with(i, e, cont, t);
 
 		variable_capture c[] = { { variable.p, v, depth } };
-		with_captures(s, 1, c);
+		compile_state_with_captures(s, 1, c);
 	}
 
 	return 0;

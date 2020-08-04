@@ -16,72 +16,6 @@
 #include "compilerapi.h"
 
 /*
- * Eval Lambda
- */
-
-void eval_expression(ovs_context* context, ovs_expr* result, ovru_term e, const ovs_expr* args, const ovs_expr* closure) {
-	switch (e.type) {
-		case OVRU_VARIABLE:
-			switch (e.variable.type) {
-				case OVRU_PARAMETER:
-					*result = ovs_alias(args[e.variable.index]);
-					break;
-
-				case OVRU_CAPTURE:
-					*result = ovs_alias(closure[e.variable.index]);
-					break;
-
-				default:
-					assert(false);
-			}
-			break;
-
-		case OVRU_LAMBDA:
-			;
-			ovs_expr* c = malloc(sizeof(ovs_expr) * e.lambda->capture_count);
-
-			for (int i = 0; i < e.lambda->capture_count; i++) {
-				ovru_variable capture = e.lambda->captures[i];
-
-				switch (capture.type) {
-					case OVRU_PARAMETER:
-						c[i] = ovs_alias(args[capture.index]);
-						break;
-
-					case OVRU_CAPTURE:
-						c[i] = ovs_alias(closure[capture.index]);
-						break;
-
-					default:
-						assert(false);
-				}
-			}
-			bound_lambda_data* l;
-			*result = ovs_function(context, &bound_lambda_function, sizeof(bound_lambda_data), (void**)&l);
-			*l = (bound_lambda_data){ ref_lambda(e.lambda), c };
-			break;
-
-		default:
-			*result = ovs_alias(e.quote);
-			break;
-	}
-}
-
-void eval_statement(ovs_context* c, ovs_instruction* result, ovru_statement s, const ovs_expr* args, const ovs_expr* closure) {
-	for (int i = 0; i < s.term_count; i++) {
-		eval_expression(c, result->values + i, s.terms[i], args, closure);
-	}
-}
-
-int32_t bound_lambda_apply(ovs_instruction* result, ovs_expr* args, const ovs_function_data* d) {
-	const bound_lambda_data* l = ovs_function_extra_data(d);
-
-	eval_statement(d->context, result, l->lambda->body, args + 1, l->closure);
-
-	return OVRU_SUCCESS;
-}
-
-/*
  * Compile State
  */
 
@@ -174,14 +108,14 @@ compile_state* make_compile_state(compile_state* parent, ovs_context* oc, const 
 	return s;
 }
 
-void without_parameters(compile_state* s) {
+void compile_state_without_parameters(compile_state* s) {
 	s->total_capture_count = s->parent->total_capture_count;
 	s->propagated_capture_count = s->parent->propagated_capture_count;
 
 	s->param_count = -1;
 }
 
-void with_parameters(compile_state* s, ovs_expr params) {
+void compile_state_with_parameters(compile_state* s, ovs_expr params) {
 	s->total_capture_count = 0;
 	s->propagated_capture_count = 0;
 
@@ -202,7 +136,7 @@ void with_parameters(compile_state* s, ovs_expr params) {
 	ovs_dealias(params);
 }
 
-void with_captures(compile_state* s, uint32_t capture_count, variable_capture* captures) {
+void compile_state_with_captures(compile_state* s, uint32_t capture_count, variable_capture* captures) {
 	uint32_t previous_capture_count = s->capture_count;
 	variable_capture* previous_captures = s->captures;
 
@@ -223,7 +157,7 @@ void with_captures(compile_state* s, uint32_t capture_count, variable_capture* c
 	}
 }
 
-void with_term(compile_state* s, ovru_term t) {
+void compile_state_with_term(compile_state* s, ovru_term t) {
 	ovru_statement b = s->body;
 
 	s->body.term_count++;

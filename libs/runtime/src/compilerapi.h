@@ -48,86 +48,7 @@ typedef struct ovru_lambda {
 ovru_term ovru_alias_term(ovru_term t);
 void ovru_dealias_term(ovru_term t);
 
-ovru_lambda* ref_lambda(ovru_lambda* l) {
-	atomic_fetch_add(&l->ref_count, 1);
-	return l;
-}
-
-void free_lambda(ovru_lambda* l) {
-	if (atomic_fetch_add(&l->ref_count, -1) > 1) {
-		return;
-	}
-	ovs_dealias(l->params);
-	if (l->capture_count > 0) {
-		free(l->captures);
-	}
-	for (int i = 0; i < l->body.term_count; i++) {
-		ovru_dealias_term(l->body.terms[i]);
-	}
-	free(l);
-}
-
-ovru_term ovru_alias_term(ovru_term t) {
-	if (t.type == OVRU_LAMBDA) {
-		ref_lambda(t.lambda);
-	}
-	return t;
-}
-
-void ovru_dealias_term(ovru_term t) {
-	if (t.type == OVRU_LAMBDA) {
-		free_lambda(t.lambda);
-	}
-}
-
-typedef struct bound_lambda_data {
-	ovru_lambda* lambda;
-	ovs_expr* closure;
-} bound_lambda_data;
-
-ovs_expr bound_lambda_represent(const ovs_function_data* d) {
-	const bound_lambda_data* l = (bound_lambda_data*)(d + 1);
-
-	ovs_table* t = d->context->root_tables + OVS_DATA_LAMBDA;
-	ovs_expr form[] = {
-		l->lambda->params,
-		ovs_list(t, 0, NULL) // TODO
-	};
-	uint32_t size = sizeof(form) / sizeof(ovs_expr);
-
-	ovs_expr r = ovs_list(t, 2, form);
-
-	for (int i = 0; i < size; i++) {
-		ovs_dealias(form[i]);
-	}
-
-	return r;
-}
-
-ovs_function_info bound_lambda_inspect(const ovs_function_data* d) {
-	const bound_lambda_data* l = ovs_function_extra_data(d);
-
-	return (ovs_function_info){ l->lambda->param_count, l->lambda->body.term_count };
-}
-
-int32_t bound_lambda_apply(ovs_instruction* result, ovs_expr* args, const ovs_function_data* d);
-
-void bound_lambda_free(const void* d) {
-	const bound_lambda_data* l = d;
-	for (int i = 0; i < l->lambda->capture_count; i++) {
-		ovs_dealias(l->closure[i]);
-	}
-	free(l->closure);
-	free_lambda(l->lambda);
-}
-
-static ovs_function_type bound_lambda_function = {
-	u"lambda",
-	bound_lambda_represent,
-	bound_lambda_inspect,
-	bound_lambda_apply,
-	bound_lambda_free
-};
+ovs_expr ovru_bind_lambda(ovs_context* c, ovru_lambda* l);
 
 /*
  * Compiler State
@@ -158,6 +79,10 @@ typedef struct compile_state {
 } compile_state;
 
 compile_state* make_compile_state(compile_state* parent, ovs_context* oc, const ovs_expr_ref* cont);
+void compile_state_with_parameters(compile_state* s, ovs_expr params);
+void compile_state_without_parameters(compile_state* s);
+void compile_state_with_captures(compile_state* s, uint32_t capture_count, variable_capture* captures);
+void compile_state_with_term(compile_state* s, ovru_term t);
 
 compile_state* ref_compile_state(compile_state* s);
 
@@ -171,15 +96,23 @@ uint32_t find_variable(ovru_variable* result, compile_state* c, const ovs_expr_r
  * Statement Function
  */
 
-ovs_expr statement_function(compile_state* s, ovs_function_type* t);
+typedef enum statement_function_type {
+	STATEMENT_WITH_LAMBDA,
+	STATEMENT_WITH_VARIABLE,
+	STATEMENT_WITH_QUOTE,
+	STATEMENT_END
+} statement_function_type;
+
+ovs_expr statement_function(compile_state* s, statement_function_type t);
 
 /*
  * Parameters Function
  */
 
-ovs_expr parameters_function(compile_state* s, ovs_expr params, const ovs_expr_ref* cont, ovs_function_type* t);
+typedef enum parameters_function_type {
+	PARAMETERS_WITH,
+	PARAMETERS_END
+} parameters_function_type;
 
-/*
- * Compile
- */
+ovs_expr parameters_function(compile_state* s, ovs_expr params, const ovs_expr_ref* cont, parameters_function_type t);
 

@@ -1,6 +1,15 @@
+#include <stdbool.h>
+#include <stdatomic.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <assert.h>
+
+#include <unicode/utypes.h>
+#include <unicode/ucnv.h>
+
+#include "c-ohvu/data/bdtrie.h"
 #include "c-ohvu/data/sexpr.h"
-#include "c-ohvu/runtime/evaluator.h"
-#include "c-ohvu/runtime/compiler.h"
 #include "compilerapi.h"
 
 typedef struct parameters_data {
@@ -51,9 +60,19 @@ ovs_function_info parameters_inspect(const ovs_function_data* d) {
 	assert(false);
 }
 
-ovs_expr parameters_function(compile_state* s, ovs_expr params, const ovs_expr_ref* cont, ovs_function_type* t) {
+ovs_expr parameters_function(compile_state* s, ovs_expr params, const ovs_expr_ref* cont, parameters_function_type t) {
+	ovs_function_type* f;
+	switch (t) {
+		case PARAMETERS_WITH:
+			f = &parameters_with_function;
+			break;
+
+		case PARAMETERS_END:
+			f = &parameters_end_function;
+			break;
+	}
 	parameters_data* p;
-	ovs_expr e = ovs_function(s->context, t, sizeof(parameters_data*), (void**)&p);
+	ovs_expr e = ovs_function(s->context, f, sizeof(parameters_data*), (void**)&p);
 	p->state = ref_compile_state(s);
 	p->params = ovs_alias(params);
 	p->cont = ovs_ref(cont);
@@ -70,8 +89,8 @@ int32_t parameters_with_apply(ovs_instruction* i, ovs_expr* args, const ovs_func
 
 	i->size = 3;
 	i->values[0] = ovs_alias(cont);
-	i->values[1] = parameters_function(e->state, params, e->cont, &parameters_with_function);
-	i->values[2] = parameters_function(e->state, params, e->cont, &parameters_end_function);
+	i->values[1] = parameters_function(e->state, params, e->cont, PARAMETERS_WITH);
+	i->values[2] = parameters_function(e->state, params, e->cont, PARAMETERS_END);
 
 	ovs_dealias(params);
 
@@ -84,12 +103,12 @@ int32_t parameters_end_apply(ovs_instruction* i, ovs_expr* args, const ovs_funct
 	ovs_expr cont = (ovs_expr){ OVS_FUNCTION, .p=e->cont };
 
 	compile_state* s;
-	with_parameters(e->state, e->params);
+	compile_state_with_parameters(e->state, e->params);
 
 	i->size = 3;
 	i->values[0] = ovs_alias(cont);
-	i->values[1] = statement_function(s, &statement_with_lambda_function);
-	i->values[2] = statement_function(s, &statement_with_variable_function);
+	i->values[1] = statement_function(s, STATEMENT_WITH_LAMBDA);
+	i->values[2] = statement_function(s, STATEMENT_WITH_VARIABLE);
 
 	return 0;
 }
