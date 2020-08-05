@@ -76,7 +76,7 @@ ovru_result execute_instruction(instruction_slot* next, instruction_slot* curren
 	return r;
 }
 
-ovru_result ovru_eval(uint32_t arg_count, const ovs_expr* args) {
+ovru_result ovru_eval(ovs_instruction ins) {
 	/*
 	 * We have two instruction slots, the current instruction which is
 	 * executing, and the next instruction which is being written. We
@@ -91,10 +91,10 @@ ovru_result ovru_eval(uint32_t arg_count, const ovs_expr* args) {
 	b.next = &a;
 
 	instruction_slot* current = &a;
-	prepare_instruction_slot(current, arg_count);
-	current->instruction.size = arg_count;
-	for (int i = 0; i < arg_count; i++) {
-		current->instruction.values[i] = ovs_alias(args[i]);
+	prepare_instruction_slot(current, ins.size);
+	current->instruction.size = ins.size;
+	for (int i = 0; i < ins.size; i++) {
+		current->instruction.values[i] = ovs_alias(ins.values[i]);
 	}
 
 	ovru_result r = OVRU_SUCCESS;

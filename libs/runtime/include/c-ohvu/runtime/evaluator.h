@@ -4,5 +4,5 @@ typedef enum ovru_result {
 	OVRU_ARGUMENT_COUNT_MISMATCH
 } ovru_result;
 
-ovru_result ovru_eval(uint32_t arg_count, const ovs_expr* args);
+ovru_result ovru_eval(ovs_instruction i);
 

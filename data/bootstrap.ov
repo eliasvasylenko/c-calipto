@@ -34,35 +34,7 @@
 
 
 
-
-
-; make it a goal that so long as something will compile (i.e. macro expand) it will run.
-; even builtin functions can be guarded by macros to make sure lambdas of the correct
-; arity are passed as continuations...
-
-
-(compile-lambda (lambda (with-param compile-statement)
-  (with-param 'a (lambda (with-param compile-statement)
-    (with-param 'b (lambda (with-param compile-statement)
-      (compile-statement (lambda (with-lambda with-variable)
-        (with-variable 'a (lambda (with-lambda with-variable with-quote end-statement)
-          (with variable 'b (lambda (with-l with-v with-q end-statement)
-            (end-statement ; signature of end-statement depends on whether we're nested
-                           ; does it more onto adding another expression to an enclosing
-                           ; statement, or are we in the outermost statement and
-                           ; it instantiates the complete source tree?
-
-
-(compile-lambda 'params/(a b c)
-  (lambda (with-lambda with-var)
-    (with-lambda 'params/()
-      (lambda (with-lambda with-var) (...))
-      (lambda (with-lambda with-var with-quote end-statement) (...))))
-  (lambda (function)
-    (function a b c)))
-
-
-(compile-lambda
+(compile
   (lambda (with-param end-params)
     (with-param 'a (lambda (with-param end-params)
       (with-param 'b (lambda (with-param end-params)
@@ -76,30 +48,35 @@
   (lambda (function)
     (function a b c)))
 
-source
 
-(statement
-  (lambda (lambda-parameters lambda-body statement-tail)
-    (statement-tail
-      (lambda (lambda-parameters lambda-body statement-tail) (...))
-      (lambda (quote-data statement-tail) (...))
-      (lambda (variable-symbol statement-tail) (...))
-      (lambda (compiled-function) (...done...)))
-  (lambda (variable-symbol statement-tail) (...)))
+
+(scanner (lambda (pos buffer advance advance-if advance-while close)
+  (advance-if (lambda (c f t) (eq c '(' f t))
+    exit
+    (lambda (scanner c) 
+
+
+with compile
+  with (scan-file "blah")
+    cond
+
+      -advance-if %(eq `(`)
+        -skip-whitespace
+        let l -with-lambda
+          \ while (next-parameter) ()
+          \ while (next-term) ()
+        if (-advance-if %(eq `)`))
+          'return l
+        'error
+
+      -advance-if %(eq `'`)
+        ...
 
 
 
 
 compiler -> scanner 
 scanner -> position buffer advance advance-if advance-while close
-
-
-; macro
-(data/lambda (scanner fail cont)
-  (cont 
-    
-    ; next
-    (data/lambda (
 
 
 
