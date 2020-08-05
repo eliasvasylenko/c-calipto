@@ -50,27 +50,38 @@
 
 
 
+
+
+
 (scanner (lambda (pos buffer advance advance-if advance-while close)
   (advance-if (lambda (c f t) (eq c '(' f t))
     exit
     (lambda (scanner c) 
 
 
+
+
+
+
 with compile
   with (scan-file "blah")
     cond
 
-      -advance-if %(eq `(`)
+      (-advance-if %(eq `(`))
         -skip-whitespace
         let l -with-lambda
-          \ while (next-parameter) ()
-          \ while (next-term) ()
+          \ => while (next-parameter) ()
+          \ => while (next-term) ()
         if (-advance-if %(eq `)`))
           'return l
         'error
 
-      -advance-if %(eq `'`)
+      (-advance-if %(eq `'`))
         ...
+
+      ()
+        ...
+
 
 
 
