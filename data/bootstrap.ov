@@ -27,12 +27,35 @@
 
 
 
+;
+; Some variations on the construction of (lambda (a b c) ((lambda () (b a))))
+;
 
+compile
+  \with-param with-body -> with-param 'a
+    \with-param with-body -> with-param 'b
+      \with-param with-body -> with-param 'c
+        \with-param with-body -> with-body
+          \with-lambda with-var -> with-lambda
+            \with-param with-body -> with-body
+              \with-lambda with-var -> with-var 'b
+                \with-lambda with-var with-quote end-lambda -> with-var 'a
+                  \with-lambda with-var with-quote end-lambda -> end-lambda
+                    \with-lambda with-var with-quote end-lambda -> end-lambda
+                      \function -> ?
 
-
-
-
-
+(compile
+  (lambda (with-param with-body)
+    (with-param 'a (lambda (with-param with-body)
+      (with-param 'b (lambda (with-param with-body)
+        (with-param 'c (lambda (with-param with-body)
+          (with-body (lambda (with-lambda with-var)
+            (with-lambda (lambda (with-param with-body)
+              (with-body (lambda (with-lambda with-var)
+                (with-var 'b (lambda (with-lambda with-var with-quote end-lambda)
+                  (with-var 'a (lambda (with-lambda with-var with-quote end-lambda)
+                    (end-lambda (lambda (with-lambda with-var with-quote end-lambda)
+                      (end-lambda (lambda (function) (...)))))))))))))))))))))))
 
 (compile
   (lambda (with-param end-params)
@@ -52,11 +75,28 @@
 
 
 
+(lambda (reader compiler cont)
+  ((lambda (read-lambda) (read-lambda read-lambda reader compiler cont))
 
-(scanner (lambda (pos buffer advance advance-if advance-while close)
-  (advance-if (lambda (c f t) (eq c '(' f t))
-    exit
-    (lambda (scanner c) 
+    ; read-lambda
+    (lambda (read-lambda reader compiler cont)
+      ((lambda (next-param next-term)
+         (next-param next-param reader compiler (lambda (reader compiler)
+           (next-term next-term reader compiler (lambda (reader compiler)
+             (compiler (lambda (wl wv wq end) (end cont)))
+
+        ; next-param
+        (lambda (next-param reader compiler cont)
+          (reader (next next-symbol step-in step-out)
+            (next-symbol
+              (lambda () (cont reader compiler))
+              (lambda (symbol reader)
+                (next-param next-param reader
+                  (lambda (cont)
+                    (compiler (lambda (with-param with-body)
+                      (with-param symbol cont))))
+                  cont))))))))))
+
 
 
 
