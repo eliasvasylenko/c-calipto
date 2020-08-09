@@ -31,18 +31,18 @@
 ; Some variations on the construction of (lambda (a b c) ((lambda () (b a))))
 ;
 
-compile
-  \with-param with-body -> with-param 'a
-    \with-param with-body -> with-param 'b
-      \with-param with-body -> with-param 'c
-        \with-param with-body -> with-body
-          \with-lambda with-var -> with-lambda
-            \with-param with-body -> with-body
-              \with-lambda with-var -> with-var 'b
-                \with-lambda with-var with-quote end-lambda -> with-var 'a
-                  \with-lambda with-var with-quote end-lambda -> end-lambda
-                    \with-lambda with-var with-quote end-lambda -> end-lambda
-                      \function -> ?
+compile \with-param with-body ->
+  with-param 'a \with-param with-body ->
+  with-param 'b \with-param with-body ->
+  with-param 'c \with-param with-body ->
+  with-body \with-lambda with-var ->
+  with-lambda \with-param with-body ->
+  with-body \with-lambda with-var ->
+  with-var 'b \with-lambda with-var with-quote end-lambda ->
+  with-var 'a \with-lambda with-var with-quote end-lambda ->
+  end-lambda \with-lambda with-var with-quote end-lambda ->
+  end-lambda \function ->
+  ?
 
 (compile
   (lambda (with-param with-body)
@@ -73,7 +73,7 @@ compile
 
 
 
-
+; compile from reader, Lisp-style language
 
 (lambda (reader compiler cont)
   ((lambda (read-lambda) (read-lambda read-lambda reader compiler cont))
@@ -96,6 +96,43 @@ compile
                     (compiler (lambda (with-param with-body)
                       (with-param symbol cont))))
                   cont))))))))))
+
+
+
+
+
+
+
+; compile from scanner, functional-style language
+
+;reader
+\scanner compiler fail cont ->
+  (\reader -> reader reader scanner compiler \lambda params body -> lambda fail cont)
+    
+    ; reader
+    (\reader scanner compiler cont ->
+      cont
+      
+      ; read-lambda
+      (\fail cont ->
+        scanner \advance advance-if advance-while buffer ->
+        advance \c new-scanner ->
+        eq c `\` (\-> fail) \->
+        reader reader scanner compiler \lambda params body ->
+        params fail \scanner compiler ->
+        reader reader scanner compiler \lambda params body ->
+        body cont)
+
+      ; read-params
+      (\fail cont ->
+        scan-symbol (\-> cont scanner compiler) \symbol scanner ->
+        compiler \with-param with-body ->
+        with-param symbol \compiler ->
+        read-params read-params scanner compiler cont)
+
+      ; read-body
+      (\fail cont ->
+        ...))
 
 
 
