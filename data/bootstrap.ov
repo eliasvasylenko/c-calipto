@@ -101,9 +101,29 @@ compile \with-param with-body ->
 
 
 
-
-
-; compile from scanner, functional-style language
+; brackets are a function application like lisp. we could allow partial application in
+; our CPS-style base language so there would be four types of expression:
+; - lambda
+; - partially-applied lambda
+; - variable resolve
+; - quote
+;
+; A partially applied function is just an unevaluated function with any number of
+; its parameters front-loaded. We can simulate partial application with normal lambdas
+; most of the time. So can we justify including it as a core feature rather than just
+; another macro?
+;
+; Let's say that the only kind of partial application allowed in the base lang is
+; directly on lambdas:
+;
+; (\a b -> c)
+;
+; Because parsing a lambda is greedy, everything after the arrow is parsed as part of
+; the body rather than args of the partial application, so it just trivially evaluates
+; to the lambda itself. It seems a little silly to call this 'partial application' when
+; it's really just a syntactic way to delimit the lambda definition ... but it is neat
+; that if you implement partial application on other forms later, the syntax still
+; matches nicely.
 
 ;reader
 \scanner compiler fail cont ->
@@ -116,11 +136,11 @@ compile \with-param with-body ->
       ; read-lambda
       (\fail cont ->
         scanner \advance advance-if advance-while buffer ->
-        advance \c new-scanner ->
+        advance (\-> fail) \c new-scanner ->
         eq c `\` (\-> fail) \->
-        reader reader scanner compiler \lambda params body ->
+        reader reader new-scanner compiler \lambda params body var ->
         params fail \scanner compiler ->
-        reader reader scanner compiler \lambda params body ->
+        reader reader scanner compiler \lambda params body var ->
         body cont)
 
       ; read-params
@@ -128,11 +148,20 @@ compile \with-param with-body ->
         scan-symbol (\-> cont scanner compiler) \symbol scanner ->
         compiler \with-param with-body ->
         with-param symbol \compiler ->
-        read-params read-params scanner compiler cont)
+        reader reader scanner compiler \lambda params body var ->
+        params fail cont)
 
       ; read-body
       (\fail cont ->
-        ...))
+        scanner \advance advance-if advance-while buffer ->
+        advance \c new-scanner ->
+        eq c `\` (\-> fail) \->
+        
+        read-lambda (\->
+          read-quote (\->
+            read-var (\-> \symbol ->
+              
+            ))
 
 
 
