@@ -122,29 +122,30 @@ compile \with-param with-body ->
 ; the body rather than args of the partial application, so it just trivially evaluates
 ; to the lambda itself. It seems a little silly to call this 'partial application' when
 ; it's really just a syntactic way to delimit the lambda definition ... but it is neat
-; that if you implement partial application on other forms later, the syntax still
-; matches nicely.
+; that the same syntax can be *generalised* to partial application by allowing it to be
+; applied to other forms.
 
 ;reader
 \scanner compiler fail cont ->
   (\reader -> reader reader scanner compiler \lambda params body -> lambda fail cont)
     
     ; reader
-    (\reader scanner compiler cont ->
+    (\reader scanner cont ->
       cont
       
       ; read-lambda
-      (\fail cont ->
+      (\params-compiler cont fail ->
         scanner \advance advance-if advance-while buffer ->
         advance (\-> fail) \c new-scanner ->
-        eq c `\` (\-> fail) \->
-        reader reader new-scanner compiler \lambda params body var ->
-        params fail \scanner compiler ->
-        reader reader scanner compiler \lambda params body var ->
-        body cont)
+        eq c `\` (\->
+          reader reader new-scanner compiler \lambda params body var ->
+          params fail \scanner compiler ->
+          reader reader scanner compiler \lambda params body var ->
+          body cont) \->
+        fail
 
       ; read-params
-      (\fail cont ->
+      (\params-compiler cont fail ->
         scan-symbol (\-> cont scanner compiler) \symbol scanner ->
         compiler \with-param with-body ->
         with-param symbol \compiler ->
@@ -152,16 +153,27 @@ compile \with-param with-body ->
         params fail cont)
 
       ; read-body
-      (\fail cont ->
+      (\body-compiler cont fail ->
         scanner \advance advance-if advance-while buffer ->
-        advance \c new-scanner ->
-        eq c `\` (\-> fail) \->
-        
-        read-lambda (\->
-          read-quote (\->
-            read-var (\-> \symbol ->
-              
-            ))
+        advance \c scanner ->
+
+        reader reader scanner \lambda params body var quote ->
+        body-compiler \with-lambda with-quote with-var ->
+        lambda with-lambda (\scanner compiler ->
+          
+          ...) \->
+
+        quote with-quote (\->
+          ...) \->
+
+        var with-var (\->
+          ...) \->
+
+        fail
+
+      ; read-quote
+      (\body-compiler cont fail ->
+        )
 
 
 
